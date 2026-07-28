@@ -1,3 +1,1382 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Still baking</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6ede1;color:#8a7a68;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;text-align:center;padding:24px}a{color:#d98b5f}</style>
-</head><body><div><p style="font-size:34px;margin:0 0 12px">🐾</p><p><b style="color:#3d3229">Still being built</b></p><p>This one isn't finished yet — check back shortly.</p><p><a href="./">&larr; Back</a></p></div></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#1b1319">
+<title>Style B &mdash; Pixel art</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;width:100%;overflow:hidden;background:#181117}
+body{
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  -webkit-user-select:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;
+  touch-action:none;overscroll-behavior:none;
+  padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+}
+#stage{position:relative;line-height:0;flex:0 0 auto;touch-action:none}
+#cv{
+  display:block;
+  image-rendering:-moz-crisp-edges;
+  image-rendering:-webkit-optimize-contrast;
+  image-rendering:crisp-edges;
+  image-rendering:pixelated;
+  touch-action:none;background:#2a2028;
+}
+#cap{
+  flex:0 0 auto;width:100%;text-align:center;padding:8px 10px 10px;
+  font-size:10.5px;letter-spacing:.1em;line-height:1.6;color:#75594f;
+}
+#cap b{color:#c2a077;font-weight:600;letter-spacing:.14em}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="cap"><b>STYLE B &mdash; PIXEL ART</b><br>Stroke the puppy &middot; tap the room to call her</div>
+<script>
+"use strict";
+(function(){
+
+/* ==========================================================================
+   1. PALETTE  -  23 colours + transparent. Warm, limited, cohesive:
+   orange-tan dog, warm wood floor, dusty sage wall, rose rug, gold light.
+   ========================================================================== */
+var PAL = [
+  null,
+  '#241a20', /* 1  ink            */
+  '#4d3239', /* 2  ink soft       */
+  '#8a4a28', /* 3  coat dark      */
+  '#c9762f', /* 4  coat mid       */
+  '#eda255', /* 5  coat light     */
+  '#bd9a6d', /* 6  cream dark     */
+  '#e8cfa2', /* 7  cream mid      */
+  '#fdf6e6', /* 8  cream light    */
+  '#6b4a30', /* 9  wood dark      */
+  '#9a7045', /* 10 wood mid       */
+  '#bd8f5c', /* 11 wood light     */
+  '#6e404c', /* 12 rug dark       */
+  '#a35d66', /* 13 rug mid        */
+  '#cf8f86', /* 14 rug light      */
+  '#39554a', /* 15 leaf dark      */
+  '#5f8a58', /* 16 leaf mid       */
+  '#f6e2ac', /* 17 sun soft       */
+  '#fffdf2', /* 18 sun bright     */
+  '#5d7c94', /* 19 cool dark      */
+  '#a9c8d8', /* 20 cool light     */
+  '#e0566a', /* 21 pink deep      */
+  '#47615a', /* 22 wall dark      */
+  '#6b8a7c'  /* 23 wall mid       */
+];
+var I_INK=1,I_INK2=2,I_CD=3,I_CM=4,I_CL=5,I_KD=6,I_KM=7,I_KL=8,
+    I_WD=9,I_WM=10,I_WL=11,I_RD=12,I_RM=13,I_RL=14,I_LD=15,I_LM=16,
+    I_SS=17,I_SB=18,I_BD=19,I_BL=20,I_PK=21,I_VD=22,I_VM=23;
+
+var CH = {'.':0,' ':0,'K':1,'k':2,'D':3,'O':4,'o':5,'C':6,'c':7,'w':8,
+          '1':9,'2':10,'3':11,'R':12,'r':13,'q':14,'G':15,'g':16,
+          'S':17,'Y':18,'B':19,'b':20,'P':21,'V':22,'v':23};
+
+var PAL32 = new Uint32Array(PAL.length);
+for (var pi=1; pi<PAL.length; pi++){
+  var hh = PAL[pi];
+  PAL32[pi] = (255<<24) | (parseInt(hh.substr(5,2),16)<<16)
+                        | (parseInt(hh.substr(3,2),16)<<8)
+                        |  parseInt(hh.substr(1,2),16);
+}
+
+/* ==========================================================================
+   2. SPRITE PLUMBING
+   Every frame is authored as ASCII rows and right-padded automatically, so
+   only leading offsets have to be counted. Each sprite is kept twice: an
+   index buffer (to bake into the room) and a pre-rendered offscreen canvas
+   (so per-frame drawing is a plain 1:1 blit -- no pixel loops at runtime).
+   ========================================================================== */
+function mkcanvas(w,h){
+  var c=document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').imageSmoothingEnabled=false; return c;
+}
+function bake(s){
+  var cv=mkcanvas(s.w,s.h), cx=cv.getContext('2d');
+  var img=cx.createImageData(s.w,s.h), u32=new Uint32Array(img.data.buffer);
+  for (var i=0;i<s.idx.length;i++) u32[i]=PAL32[s.idx[i]];
+  cx.putImageData(img,0,0); s.cv=cv; return s;
+}
+function sprite(rows){
+  var h=rows.length,w=0,i,j;
+  for (i=0;i<h;i++) if (rows[i].length>w) w=rows[i].length;
+  var idx=new Uint8Array(w*h);
+  for (i=0;i<h;i++){
+    var r=rows[i];
+    for (j=0;j<r.length;j++){
+      var c=CH[r.charAt(j)];
+      if (c===undefined) throw new Error('bad char "'+r.charAt(j)+'" at row '+i);
+      idx[i*w+j]=c;
+    }
+  }
+  return bake({w:w,h:h,idx:idx});
+}
+function mirror(s){
+  var w=s.w,h=s.h,idx=new Uint8Array(w*h);
+  for (var y=0;y<h;y++) for (var x=0;x<w;x++) idx[y*w+x]=s.idx[y*w+(w-1-x)];
+  return bake({w:w,h:h,idx:idx});
+}
+
+var SP={};
+
+/* ==========================================================================
+   3. THE PUPPY  -  a layered rig, drawn back to front:
+        tail  <  body  <  ears  <  skull  <  eyes + mouth + blush
+   Faces are tiny overlay patches, so every expression is a combination
+   rather than a separately authored frame. ~60px tall all in.
+   ========================================================================== */
+
+/* ---- EARS: small upright triangles, sat on top of the skull and drawn
+        behind it so the base tucks under the crown. ---- */
+SP.earUp = sprite([
+  '..KKK',
+  '.KoooK',
+  '.KooDDK',
+  'KoooDDDK',
+  'KoOODDDkK',
+  'KoOOODDDK',
+  'KOOOODDDDK',
+  'KOOOOODDDD',
+  '.KOOOODDDD'
+]);
+SP.earFlick = sprite([
+  '',
+  '....KKKK',
+  '..KKoooK',
+  '.KooooDDK',
+  'KKoooDDDK',
+  'KoOOODDDkK',
+  'KoOOODDDDK',
+  'KOOOOODDDD',
+  '.KOOOODDDD'
+]);
+SP.earBack = sprite([
+  '',
+  '',
+  '',
+  '....KKKK',
+  '..KkkDDDK',
+  '.KkDDDDooK',
+  'KkDDDOOoooK',
+  'KDDDOOooooo',
+  '.KOOOOooooo'
+]);
+
+/* ---- SKULL, front view (28 x 22).  Wedge head, cream urajiro cheeks and
+        muzzle, cream brow dots, small dark nose. ---- */
+SP.headF = sprite([
+  '.........KKKKKKKKKKKKKK',
+  '.......KOOOOOOOOOOOOOOOOK',
+  '.....KOOOOOOOOOOOOOOOOOOOOK',
+  '....KOOOOooooooooooooooOOOOK',
+  '...KOOOOooooooooooooooooOOOOK',
+  '..KOOOOooooooooooooooooooOOOOK',
+  '..KOOOOOccoooooooooooccOOOOOOK',
+  '.KOOOooooooooooooooooooooooOOOK',
+  '.KOOOooooooooooooooooooooooOOOK',
+  '.KOOOooooooooooooooooooooooOOOK',
+  'KCOOOOooooooooooooooooooooOOOOCK',
+  'KcCOOOooooccccccccccccooooOOOCcK',
+  'KcCOOOooocccwwKKKKwwcccoooOOOCcK',
+  'KcCOOOoooccwwwKKKKwwwccoooOOOCcK',
+  'KcCOOOoooccwwwwKKwwwwccoooOOOCcK',
+  'KcCOOOoooccwwwwwwwwwwccoooOOOCcK',
+  'KccCOOoocccwwwwwwwwwwcccooOOCccK',
+  'KccCOOoocccwwwwwwwwwwcccooOOCccK',
+  '.KccCOOoocccwwwwwwwwcccooOOCccK',
+  '..KKccCoocccwwwwwwcccooOCccKK',
+  '....KKcccccccccccccccccccKK',
+  '......KKccccccccccccccccKK',
+  '........KKcccccccccccKK',
+  '..........KKKKKKKKKKKKKK'
+]);
+
+/* ---- SKULL, three-quarter, turned toward the viewer's right (32 x 24) ---- */
+SP.headQ = sprite([
+  '........KKKKKKKKKKKK',
+  '......KKOOOOOOOOOOOOOOK',
+  '....KOOOOOOOOOOOOOOOOOOK',
+  '...KOOOOooooooooooooOOOOK',
+  '..KOOOOoooooooooooooooOOOK',
+  '..KOOOoooooooooooooooooOOOK',
+  '.KOOOCCCoooooooooCCCoooOOOK',
+  '.KOOOooooooooooooooooooooOOK',
+  '.KOOOooooooooooooooooooooOOK',
+  'KCOOOoooooooooooooooooooooOK',
+  'KcCOOOoooooooooooooccccccOK',
+  'KcCOOOoooooooooocccwwwwwccK',
+  'KcCOOOooooooooccwwwwwwwwccK',
+  'KcCOOOoooooocccwwwKKKKwwwcK',
+  'KccCOOoooocccwwwwwKKwwwwwcK',
+  'KccCOOooocccwwwwwwwwwwwwwcK',
+  '.KccCOOoccwwwwwwwwwwwwwwwcK',
+  '..KccCOoccwwwwwwwwwwwwwwwcK',
+  '..KKccCoocccwwwwwwwwwwwwccK',
+  '....KKcccccccccccccccccccK',
+  '......KKcccccccccccccccKK',
+  '........KKcccccccccccKK',
+  '..........KKKKKKKKKKK',
+  ''
+]);
+
+/* ---- EYES (5 x 4 round dark puppy eyes with a glint; the cream brow dots
+        live in the skull itself so they never drift out of register) ---- */
+SP.eyeOpen   = sprite(['.KKK.','KKKKK','KwKKK','.KKK.']);
+SP.eyeHalf   = sprite(['.....','KKKKK','KwKKK','.KKK.']);
+SP.eyeShut   = sprite(['.....','KKKKK','.KKK.','.....']);
+SP.eyeHappy  = sprite(['..K..','.K.K.','K...K','.....']);
+SP.eyeWide   = sprite(['.KKK.','KKKKK','KwwKK','KKKKK','.KKK.']);
+SP.eyeSquash = sprite(['.....','KKKKK','.....','.....']);
+
+/* ---- MOUTHS ---- */
+SP.mNeutral = sprite(['..K..','.K.K.']);
+SP.mSmile   = sprite(['..K..','.K.K.','K...K']);
+SP.mGrin    = sprite(['..K..','KKKKK','K...K','.KKK.']);
+SP.mPant    = sprite(['..K..','.KKK.','KKKKK','KPPPK','.KPK.','..K..']);
+SP.mPantBig = sprite(['..K..','KKKKK','KPPPK','KPPPK','KPPPK','.KPK.','..K..']);
+SP.mYawn    = sprite(['..K..','.KKK.','KKKKK','KPPPK','KPPPK','KPPPK','KPPPK','.KPK.','..K..']);
+SP.mLick    = sprite(['..K..','.KPK.','KPPK.','.KPK.','..K..']);
+SP.blush    = sprite(['.qq.','qqqq','.qq.']);
+
+/* ---- BODIES ------------------------------------------------------------
+   Sitting: narrow shoulders, cream chest blaze, haunches flaring wide to
+   the floor, two cream front legs, cream socks all round. 34 x 34. */
+SP.bodySit = sprite([
+  '...........KKKKKKKKKKKK',
+  '........KKKOOOOOOOOOOOOKK',
+  '.......KOOOOOOOOOOOOOOOOK',
+  '......KOOOOOOOOOOOOOOOOOOK',
+  '.....KOOOOOOOCcccccCOOOOOOK',
+  '.....KOOOOOOCcwwwwwcCOOOOOOK',
+  '....KOOOOOOCcwwwwwwwcCOOOOOOK',
+  '....KOOOOOOcwwwwwwwwwcOOOOOOK',
+  '...KOOOOOOOcwwwwwwwwwcOOOOOOOK',
+  '...KOOOOOOOcwwwwwwwwwcOOOOOOOK',
+  '..KOOOOOOOOCcwwwwwwwccOOOOOOOOK',
+  '..KOOOOOOOOCcwwwwwwwccOOOOOOOOK',
+  '.KOOOOOOOOOOCcwwwwwccOOOOOOOOOK',
+  '.KOOOOOOOOOOOCcwwwccOOOOOOOOOOK',
+  'KOOOOOOOOOOOOCcwwwcCOOOOOOOOOOOK',
+  'KOOOOOOOOOOOOCcwwwcCOOOOOOOOOOOK',
+  'KOOOOOOOOOOOOOCcwcCOOOOOOOOOOOOK',
+  'KOOOOOOOOOOOOOCcccCOOOOOOOOOOOOK',
+  'KOOOOOOOOOOOOOCcccCOOOOOOOOOOOOK',
+  'KOOOOOOOOOOKCcccccCKOOOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKcwwwcKcwwwcKOOOOOOOOOK',
+  'KOOOOOOOOOKwwwwwKwwwwwKOOOOOOOOOK',
+  'KOOOOOOOOOKwwwwwwKwwwwwwKOOOOOOOK',
+  'KOOOOOOOOOKwwwwwwKwwwwwwKOOOOOOOK',
+  'KwwwwwwwwwKwwKwwwKwwwKwwKwwwwwwwwK',
+  'KwwwwwwwwwKwwKwwwKwwwKwwKwwwwwwwwK',
+  'KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK'
+]);
+
+/* Standing, seen from the front to match the front-facing skull: taller,
+   narrower, front legs extended, hind legs just showing behind. 26 x 30.
+   (A side-view body under a front-view head read as a cream saddle.) */
+SP.bodyStand = sprite([
+  '........KKKKKKKKKKKK',
+  '......KKOOOOOOOOOOOOKK',
+  '.....KOOOOOOOOOOOOOOOK',
+  '....KOOOOOOOOOOOOOOOOOK',
+  '....KOOOOOCcccccCOOOOOOK',
+  '...KOOOOOCccwwwccCOOOOOOK',
+  '...KOOOOCcwwwwwwwcCOOOOOK',
+  '..KOOOOOcwwwwwwwwwcOOOOOOK',
+  '..KOOOOOcwwwwwwwwwcOOOOOOK',
+  '..KOOOOOcwwwwwwwwwcOOOOOOK',
+  '..KOOOOOCcwwwwwwwccOOOOOOK',
+  '..KOOOOOOCcwwwwwccOOOOOOOK',
+  '..KOOOOOOOCcwwwccOOOOOOOOK',
+  '..KOOOOOOOOCcwwcCOOOOOOOOK',
+  '..KOOOOOOOOOCccCOOOOOOOOOK',
+  '..KOOOOOOOOOOCCOOOOOOOOOOK',
+  '..KOOOOOOOOOOOOOOOOOOOOOOK',
+  '..KOOOOOOOOOOOOOOOOOOOOOOK',
+  '..KOOOOOOOOOOOOOOOOOOOOOOK',
+  '..KOOOOOOOOOOOOOOOOOOOOOOK',
+  '..KKOOOOOOOOOOOOOOOOOOOKK',
+  '....KKOOOOOOOOOOOOOOOKK',
+  '.....KOOOKcwwwcKcwwwcKOOOK',
+  '.....KOOOKcwwwcKcwwwcKOOOK',
+  '.....KOOOKcwwwcKcwwwcKOOOK',
+  '.....KOOOKcwwwcKcwwwcKOOOK',
+  '.....KOOOKcwwwcKcwwwcKOOOK',
+  '.....KwwwKcwwwcKcwwwcKwwwK',
+  '.....KwwwKwwwwwKwwwwwKwwwK',
+  '.....KKKKKKKKKKKKKKKKKKKKK'
+]);
+
+/* Crouch: the in-between frame for sit <-> stand. 34 x 26 */
+SP.bodyCrouch = sprite([
+  '..........KKKKKKKKKKKK',
+  '........KKOOOOOOOOOOOOKK',
+  '.......KOOOOOOOOOOOOOOOOK',
+  '......KOOOOOOCcccccCOOOOOK',
+  '.....KOOOOOCcccwwwcccCOOOOK',
+  '.....KOOOOCcwwwwwwwwwcCOOOOK',
+  '....KOOOOOcwwwwwwwwwwwcOOOOOK',
+  '....KOOOOOcwwwwwwwwwwwcOOOOOK',
+  '...KOOOOOOcwwwwwwwwwwwcOOOOOOK',
+  '...KOOOOOOCcwwwwwwwwwccOOOOOOK',
+  '..KOOOOOOOOCcwwwwwwwccOOOOOOOOK',
+  '..KOOOOOOOOOCcwwwwwccOOOOOOOOOK',
+  '.KOOOOOOOOOOOCcwwwcCOOOOOOOOOOK',
+  '.KOOOOOOOOOOOKcwwwcKOOOOOOOOOOK',
+  'KOOOOOOOOOOOKcwwwcKcwwcKOOOOOOOK',
+  'KOOOOOOOOOOOKcwwwcKcwwcKOOOOOOOK',
+  'KOOOOOOOOOOOKcwwwcKcwwcKOOOOOOOK',
+  'KOOOOOOOOOOOKcwwwcKcwwcKOOOOOOOK',
+  '.KOOOOOOOOOOKwwwwwKwwwwKOOOOOOK',
+  '.KKOOOOOOOOOKwwwwwKwwwwKOOOOKK',
+  '..KwwwwwwwwwKwwwwwKwwwwKwwwwwK',
+  '..KwwwwwwwwwKwwwwwKwwwwKwwwwwK',
+  '..KKKKKKKKKKKKKKKKKKKKKKKKKKK'
+]);
+
+/* ---- TAIL: the shiba curl. A fluffy ring hooking over the rump, with the
+   hole left transparent -- that gap is what makes it read as a curl rather
+   than a plume. Three authored shapes (lean left / centre / lean right) and
+   the five wag positions are those three plus 1px offsets. 16 x 19 ---- */
+SP.tailShapes = [
+  sprite([                       /* leaning left  */
+    '..KKKKKKK',
+    '.KcccccOoK',
+    'KcccOOOOOoK',
+    'KccOKKKKOOoK',
+    'KcOK....KOOoK',
+    'KcOK.....KOoK',
+    'KcOK.....KOoK',
+    'KcOK.....KOoK',
+    'KcOOK....KOoK',
+    'KcOOKKKKKOOoK',
+    'KcOOOOOOOOOoK',
+    '.KoOOOOOOOOoK',
+    '.KoOOOOOOOoK',
+    '..KoOOOOOoK',
+    '..KOOOOOoK',
+    '...KOOOOK',
+    '...KOOOK',
+    '....KOOK',
+    '....KOK'
+  ]),
+  sprite([                       /* centred       */
+    '...KKKKKKK',
+    '..KcccccOoK',
+    '.KcccOOOOOoK',
+    '.KccOKKKKOOoK',
+    'KccOK....KOOoK',
+    'KcOOK.....KOoK',
+    'KcOOK.....KOoK',
+    'KcOOK.....KOoK',
+    'KcOOOK....KOoK',
+    'KcOOOKKKKKOOoK',
+    'KcOOOOOOOOOOoK',
+    '.KoOOOOOOOOOoK',
+    '..KoOOOOOOOOoK',
+    '..KoOOOOOOOoK',
+    '...KOOOOOOoK',
+    '...KOOOOOK',
+    '....KOOOOK',
+    '.....KOOK',
+    '.....KOK'
+  ]),
+  sprite([                       /* leaning right */
+    '.....KKKKKKK',
+    '....KcccccOoK',
+    '...KcccOOOOOoK',
+    '...KccOKKKKOOoK',
+    '..KccOK....KOOoK',
+    '..KcOOK.....KOoK',
+    '..KcOOK.....KOoK',
+    '..KcOOK.....KOoK',
+    '..KcOOOK....KOoK',
+    '..KcOOOKKKKKOOoK',
+    '..KcOOOOOOOOOOoK',
+    '...KoOOOOOOOOOoK',
+    '...KoOOOOOOOOoK',
+    '....KoOOOOOOoK',
+    '.....KOOOOOoK',
+    '.....KOOOOOK',
+    '......KOOOK',
+    '......KOOK',
+    '.......KOK'
+  ])
+];
+/* the five wag positions: shape index, plus a whole-pixel nudge */
+SP.tailWag = [[0,0,0],[0,1,-1],[1,0,0],[2,-1,-1],[2,0,0]];
+
+/* ---- PARTICLES + HUD ICONS ---- */
+SP.heartS = sprite(['.P.P.','PPPPP','.PPP.','..P..']);
+SP.heartM = sprite(['.KK.KK.','KPPKPPK','KPPPPPK','.KPPPK.','..KPK..','...K...']);
+SP.heartL = sprite(['.KK.KK.','KPPKPPK','KPPPPPK','KPPPPPK','.KPPPK.','..KPK..','...K...']);
+SP.heartOut = sprite(['.KK.KK.','K..K..K','K.....K','.K...K.','..K.K..','...K...']);
+SP.spark = [
+  sprite(['.Y.','YYY','.Y.']),
+  sprite(['..Y..','.YYY.','YYYYY','.YYY.','..Y..']),
+  sprite(['Y'])
+];
+
+/* ---- PROPS ---- */
+SP.bowl = sprite([
+  '..KKKKKKKKK',
+  '.KwwwwwwwwwK',
+  'Kw111111111wK',
+  'Kw122222221wK',
+  'KwwwwwwwwwwwK',
+  'KBBBBBBBBBBBK',
+  '.KwwwwwwwwwK',
+  '..KwwwwwwwK',
+  '...KKKKKKK'
+]);
+SP.ball = sprite([
+  '...KKK',
+  '.KKqqqKK',
+  'KqwqqqPPK',
+  'KqwqqqPPPK',
+  'KqqqqPPPPK',
+  'KqqqPPPPPK',
+  '.KqPPPPPK',
+  '..KKPPKK',
+  '....KK'
+]);
+SP.pot = sprite([
+  'KrrrrrrrrrrrK',
+  'Kr222222222rK',
+  'K1rrrrrrrrr1K',
+  '.K1rrrrrrr1K',
+  '.K1Rrrrrr1RK',
+  '..K1RRRRR1K',
+  '...KRRRRRK',
+  '....KKKKK'
+]);
+/* a leafy houseplant: five rounded leaves on stems, not a cactus */
+SP.leavesA = sprite([
+  '......GGG',
+  '.....GgggG',
+  '....GgggggG.GGG',
+  '...GggggggG.GggG',
+  '..GggggggGG.GgggG',
+  '..GgggggG..GgggggG',
+  '...GggggG.GgggggG',
+  '....GGggG.GggggG',
+  '.GGG..GggGGggggG',
+  'GgggG..GggGgggG',
+  'GggggG.GgggGgG',
+  'GgggggGGgggGgG',
+  '.GggggGGggGGgG',
+  '..GgggGGgGGGgG',
+  '...GGggGGG.GgG',
+  '.....GGG...GgG',
+  '...........GgG',
+  '...........GGG'
+]);
+SP.leavesB = sprite([
+  '.....GGG',
+  '....GgggG',
+  '...GgggggG..GGG',
+  '..GggggggG..GggG',
+  '..GgggggGG..GgggG',
+  '.GgggggG...GgggggG',
+  '..GggggG..GgggggG',
+  '...GGggG..GggggG',
+  '..GGG.GggGGggggG',
+  '.GgggG.GggGgggG',
+  'GggggG.GgggGgG',
+  'GgggggGGgggGgG',
+  'GggggGGGggGGgG',
+  '.GgggGGgGGGgG',
+  '..GGggGGG..GgG',
+  '....GGG....GgG',
+  '..........GgG',
+  '..........GGG'
+]);
+SP.picture = sprite([
+  'KKKKKKKKKKKKKK',
+  'K111111111111K',
+  'K1bbbbbbbbbb1K',
+  'K1bbYYbbbbbb1K',
+  'K1bbbbbbbbgg1K',
+  'K1bbbbbbggggg1',
+  'K1bggbbgggggg1K',
+  'K1gggggggggggK',
+  'K1111111111 1K',
+  'KKKKKKKKKKKKKK'
+]);
+SP.shelf = sprite([
+  '2222222222222222',
+  '1111111111111111'
+]);
+SP.jar = sprite([
+  '.KKK.',
+  'KbbbK',
+  'KbYbK',
+  'KbbbK',
+  'KbbbK',
+  '.KKK.'
+]);
+SP.books = sprite([
+  '.KK.KK',
+  'KrrKggK',
+  'KrrKggK',
+  'KrrKggK',
+  'KKKKKK'
+]);
+
+/* ==========================================================================
+   4. VIEWPORT.  The canvas backing store IS the low-res art grid; CSS then
+   blows it up by an exact whole number of device pixels, so one art pixel
+   always covers a solid square block of screen pixels.
+   ========================================================================== */
+var LW=104, LH=212, LH_MIN=168, LH_MAX=250;
+var S=4, DPR=1;
+var cv=document.getElementById('cv'), ctx=cv.getContext('2d',{alpha:false});
+var cap=document.getElementById('cap');
+var SHEET = location.search.indexOf('sheet')>=0;
+
+function layout(){
+  DPR = Math.max(1, Math.min(4, window.devicePixelRatio||1));
+  if (SHEET){
+    LW=232; LH=286; S=3;
+    cv.width=LW; cv.height=LH;
+    cv.style.width=(LW*S/DPR)+'px'; cv.style.height=(LH*S/DPR)+'px';
+    ctx.imageSmoothingEnabled=false;
+    buildShadows();
+    return;
+  }
+  LW = 104;
+  var capH = cap.offsetHeight||42;
+  var availW = Math.min(window.innerWidth, 560);
+  var availH = window.innerHeight - capH;
+  if (availH < 200) availH = 200;
+  S = Math.max(3, Math.floor(availW*DPR/LW));
+  var lh = Math.floor(availH*DPR/S);
+  while (lh < LH_MIN && S > 3){ S--; lh = Math.floor(availH*DPR/S); }
+  LH = Math.max(LH_MIN, Math.min(LH_MAX, lh));
+  cv.width=LW; cv.height=LH;
+  cv.style.width=(LW*S/DPR)+'px';
+  cv.style.height=(LH*S/DPR)+'px';
+  ctx.imageSmoothingEnabled=false;
+  buildRoom();
+  buildCurtains();
+  buildShadows();
+  placeDog();
+}
+
+/* ==========================================================================
+   5. THE ROOM  -  baked once into an index buffer, then one canvas.
+   ========================================================================== */
+var floorTop=0, groundY=0, rugCx=0, rugCy=0, rugRx=0, rugRy=0;
+var WIN_X=9, WIN_Y=20, WIN_W=42, WIN_H=42;
+var bgIdx=null, bgCv=null;
+var beamL=null, beamR=null;
+
+/* how each surface brightens where the sunbeam crosses it */
+var SUNLIFT={};
+SUNLIFT[I_VM]=I_SS; SUNLIFT[I_VD]=I_VM;
+SUNLIFT[I_WM]=I_WL; SUNLIFT[I_WL]=I_SS; SUNLIFT[I_WD]=I_WM;
+SUNLIFT[I_RM]=I_RL; SUNLIFT[I_RD]=I_RM; SUNLIFT[I_RL]=I_SS;
+SUNLIFT[I_INK]=I_INK2; SUNLIFT[I_LD]=I_LM;
+
+/* 4x4 ordered (Bayer) dither. A regular modulo pattern produces obvious
+   diagonal banding; this gives an even, filmic stipple instead. */
+var BAYER=[0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+function bayerHit(x,y,dens){ return dens*16 > BAYER[(y&3)*4+(x&3)]; }
+
+function bpx(x,y,c){ if(x<0||y<0||x>=LW||y>=LH)return; bgIdx[y*LW+x]=c; }
+function brect(x,y,w,h,c){
+  var x1=x+w,y1=y+h,i,j;
+  if(x<0)x=0; if(y<0)y=0; if(x1>LW)x1=LW; if(y1>LH)y1=LH;
+  for(j=y;j<y1;j++) for(i=x;i<x1;i++) bgIdx[j*LW+i]=c;
+}
+function bblit(s,ox,oy){
+  for(var y=0;y<s.h;y++){
+    var ty=oy+y; if(ty<0||ty>=LH)continue;
+    for(var x=0;x<s.w;x++){
+      var v=s.idx[y*s.w+x]; if(!v)continue;
+      var tx=ox+x; if(tx<0||tx>=LW)continue;
+      bgIdx[ty*LW+tx]=v;
+    }
+  }
+}
+function bellipse(cx,cy,rx,ry,c){
+  for(var y=-ry;y<=ry;y++){
+    var t=1-(y*y)/(ry*ry); if(t<0)continue;
+    var w=Math.round(rx*Math.sqrt(t));
+    for(var x=-w;x<=w;x++) bpx(cx+x,cy+y,c);
+  }
+}
+function bellipseRing(cx,cy,rx,ry,c){
+  for(var y=-ry;y<=ry;y++){
+    var t=1-(y*y)/(ry*ry); if(t<0)continue;
+    var w=Math.round(rx*Math.sqrt(t));
+    bpx(cx-w,cy+y,c); bpx(cx+w,cy+y,c);
+    if(y===-ry||y===ry) for(var x=-w;x<=w;x++) bpx(cx+x,cy+y,c);
+  }
+}
+
+function buildRoom(){
+  bgIdx = new Uint8Array(LW*LH);
+  floorTop = Math.round(LH*0.42);
+  groundY  = LH - 44;
+  rugCx=52; rugCy=groundY+16; rugRx=44; rugRy=17;
+  var x,y;
+
+  /* ---------- wall: plain sage, a darker frieze above a picture rail ---- */
+  brect(0,0,LW,floorTop,I_VM);
+  /* keep the frieze band above the window head, or the rail runs
+     straight through the window frame */
+  var rail = Math.round(floorTop*0.16);
+  brect(0,0,LW,rail,I_VD);
+  /* a crisp wooden picture rail; a dithered fade here just read as a
+     dotted line stretched across the room */
+  for(x=0;x<LW;x++){ bpx(x,rail,I_WM); bpx(x,rail+1,I_WD); bpx(x,rail+2,I_VD); }
+  /* solid corner shading (a dithered edge here just reads as dirt) */
+  brect(0,0,2,floorTop,I_VD);
+  brect(LW-2,0,2,floorTop,I_VD);
+  brect(0,0,LW,2,I_INK2);
+
+  /* ---------- window ---------- */
+  var wx=WIN_X, wy=WIN_Y, ww=WIN_W, wh=WIN_H;
+  brect(wx-3,wy-3,ww+6,wh+6,I_WM);
+  for(x=wx-3;x<wx+ww+3;x++) bpx(x,wy-3,I_WL);
+  for(y=wy-3;y<wy+wh+3;y++){ bpx(wx-3,y,I_WL); bpx(wx+ww+2,y,I_WD); }
+  /* sky: clean solid bands (dithered joins read as dotted lines) */
+  for(y=0;y<wh;y++){
+    var f=y/wh;
+    var c = f<0.20 ? I_SB : f<0.62 ? I_BL : I_BD;
+    for(x=0;x<ww;x++) bpx(wx+x,wy+y,c);
+  }
+  bellipse(wx+12,wy+10,8,3,I_SB);
+  bellipse(wx+17,wy+8,5,2,I_SB);
+  bellipse(wx+32,wy+16,6,2,I_SB);
+  /* distant hedgerow */
+  for(x=0;x<ww;x++){
+    var hgt=6+((Math.sin(x*0.55)*2.2+Math.sin(x*0.19)*2.8)|0);
+    for(y=0;y<hgt;y++)
+      bpx(wx+x, wy+wh-1-y, (y>hgt-2 && ((x+y)&1))?I_LM:I_LD);
+  }
+  /* mullions + sill */
+  brect(wx+(ww>>1)-1, wy, 2, wh, I_WM);
+  brect(wx, wy+(wh>>1)-1, ww, 2, I_WM);
+  bpx(wx+(ww>>1)-1, wy, I_WL);
+  brect(wx-5, wy+wh+3, ww+10, 3, I_WM);
+  for(x=wx-5;x<wx+ww+5;x++) bpx(x,wy+wh+3,I_WL);
+  for(x=wx-5;x<wx+ww+5;x++) bpx(x,wy+wh+6,I_WD);
+
+  /* ---------- picture + shelf on the right of the wall ---------- */
+  bblit(SP.picture, 72, rail+8);
+  bpx(78,rail+6,I_INK); bpx(79,rail+5,I_INK); bpx(80,rail+6,I_INK);
+  var shy = rail+28;
+  bblit(SP.shelf, 70, shy);
+  bblit(SP.jar,   73, shy-6);
+  bblit(SP.books, 81, shy-5);
+
+  /* ---------- skirting board: dark, so it reads as a separate plane
+       instead of merging into the top course of the floor ---------- */
+  brect(0,floorTop-7,LW,7,I_WD);
+  for(x=0;x<LW;x++){ bpx(x,floorTop-7,I_WM); bpx(x,floorTop-6,I_WM); }
+
+  /* ---------- floor: long low-contrast boards.
+     Alternating light/dark rows plus several joints each was what made this
+     read as a brick wall; boards want one tone, one seam, one joint. ------ */
+  brect(0,floorTop,LW,LH-floorTop,I_WM);
+  var yy=floorTop, bi=0;
+  while(yy<LH){
+    var hb = 8+((bi*3)>>2);              /* 8 .. 14px, taller toward viewer */
+    var y1 = Math.min(LH, yy+hb);
+    /* mostly one tone; the odd plank a shade lighter */
+    if(((bi*29)%5)===0) brect(0,yy,LW,y1-yy,I_WL);
+    /* ONE long unbroken seam per board. Staggered end-joints are exactly
+       what turned this into a brick wall -- floorboards have none here. */
+    for(x=0;x<LW;x++) bpx(x,yy,I_WD);
+    /* grain: short horizontal dashes read as wood; single dots read as grit */
+    var gsd=bi*17+3;
+    for(var gi=0;gi<4;gi++){
+      var gx=((gsd*(gi+2)*23)%(LW-18))+5;
+      var gy=yy+2+((gsd+gi*7)%Math.max(1,(y1-yy-3)));
+      var gl=4+((gsd+gi*3)%6);
+      for(x=gx;x<Math.min(LW,gx+gl);x++) bpx(x,gy,I_WD);
+    }
+    yy=y1; bi++;
+  }
+  /* contact shadow the skirting throws onto the floor */
+  for(x=0;x<LW;x++){ bpx(x,floorTop,I_WD); bpx(x,floorTop+1,I_WD); }
+  for(x=0;x<LW;x++) if(bayerHit(x,floorTop+2,0.5)) bpx(x,floorTop+2,I_WD);
+
+  /* ---------- rug ---------- */
+  bellipse(rugCx,rugCy,rugRx,rugRy,I_RD);
+  bellipse(rugCx,rugCy,rugRx-2,rugRy-1,I_RM);
+  bellipseRing(rugCx,rugCy,rugRx-5,rugRy-3,I_RL);
+  bellipse(rugCx,rugCy,rugRx-8,rugRy-5,I_RM);
+  bellipseRing(rugCx,rugCy,rugRx-8,rugRy-5,I_RD);
+  bellipse(rugCx,rugCy,rugRx-19,rugRy-10,I_RL);
+  bellipse(rugCx,rugCy,rugRx-22,rugRy-12,I_RM);
+  /* simple dash ring instead of a herringbone that just reads as noise */
+  for(x=-rugRx+11;x<=rugRx-11;x+=6){
+    var t2=1-((x*x)/((rugRx-9)*(rugRx-9))); if(t2<=0) continue;
+    var ry2=Math.round((rugRy-4)*Math.sqrt(t2));
+    bpx(rugCx+x,rugCy-ry2,I_RD); bpx(rugCx+x+1,rugCy-ry2,I_RD);
+    bpx(rugCx+x,rugCy+ry2,I_RD); bpx(rugCx+x+1,rugCy+ry2,I_RD);
+  }
+  /* fringe */
+  for(x=-rugRx;x<=rugRx;x+=3){
+    var t3=1-((x*x)/(rugRx*rugRx)); if(t3<=0)continue;
+    var ey=Math.round(rugRy*Math.sqrt(t3));
+    bpx(rugCx+x,rugCy+ey+1,I_RL);
+  }
+
+  /* ---------- props ---------- */
+  bblit(SP.pot,     3, groundY-4);
+  bblit(SP.bowl,   84, groundY-2);
+  bblit(SP.ball,   20, groundY+22);
+  bpx(88,groundY+1,I_WM); bpx(90,groundY,I_WL); bpx(92,groundY+1,I_WM);
+
+  /* ---------- sunbeam: a dithered wedge, denser on the floor ---------- */
+  beamL=new Int16Array(LH); beamR=new Int16Array(LH);
+  for(y=0;y<LH;y++){ beamL[y]=-1; beamR[y]=-2; }
+  var sx0=wx+5, sx1=wx+ww-7, ytop=wy+4;
+  var blen=(LH-ytop)*0.85;
+  for(y=ytop;y<LH;y++){
+    var d=y-ytop;
+    var l=Math.round(sx0+d*0.34), r=Math.round(sx1+d*0.58);
+    if(l>=LW) break;
+    beamL[y]=l; beamR[y]=r;
+    /* hold full strength, then fade over the last third */
+    var tail=1-Math.max(0,d-blen*0.62)/(blen*0.38);
+    if(tail<0) tail=0;
+    for(x=l;x<=r;x++){
+      if(x<0||x>=LW)continue;
+      /* A shaft of light must be SOLID through its middle and dithered only
+         at the edges. An evenly scattered dither reads as a polka-dot
+         screen, and a 50%-density Bayer field reads as a checkerboard --
+         so the floor pool is fully solid and only the airborne part above
+         the floor is left as a sparse 25% haze. */
+      var edge=Math.min(x-l,r-x);
+      var e = edge<3 ? (edge+1)/4 : 1;
+      var a = (y<floorTop ? 0.15 : 1.0)*e*tail;
+      if(!bayerHit(x,y,a*1.05)) continue;
+      var up=SUNLIFT[bgIdx[y*LW+x]];
+      if(up!==undefined) bgIdx[y*LW+x]=up;
+    }
+  }
+
+  bgCv=mkcanvas(LW,LH);
+  var bcx=bgCv.getContext('2d');
+  var img=bcx.createImageData(LW,LH), u32=new Uint32Array(img.data.buffer);
+  for(var i=0;i<bgIdx.length;i++) u32[i]=PAL32[bgIdx[i]];
+  bcx.putImageData(img,0,0);
+}
+
+/* ==========================================================================
+   6. DOG STATE
+   ========================================================================== */
+var dog = {
+  x:52, feet:0, pose:'sit', facing:0,
+  eyes:'open', mouth:'neutral', ears:'up',
+  headDX:0, headDY:0, tiltDir:0, bodyDY:0,
+  tailPhase:0, breath:0, blinkIn:2.4, blinkT:0,
+  aff:0.10, bliss:0, lookT:0
+};
+var HEAD_ANCHOR={ sit:{x:0,y:-17}, crouch:{x:0,y:-16}, stand:{x:0,y:-16} };
+var TAIL_ANCHOR={ sit:{x:22,y:2},  crouch:{x:22,y:1},  stand:{x:17,y:2} };
+
+function bodySprite(){
+  return dog.pose==='sit'?SP.bodySit : dog.pose==='crouch'?SP.bodyCrouch : SP.bodyStand;
+}
+function placeDog(){ dog.feet = groundY+18; dog.x = 52; }
+
+var geo={bx:0,by:0,bw:0,bh:0,hx:0,hy:0,hw:0,hh:0,tx:0,ty:0,tw:0,th:0};
+
+/* ==========================================================================
+   7. PARTICLES  -  fixed pools, no per-frame allocation
+   ========================================================================== */
+var PMAX=48;
+var pX=new Float32Array(PMAX),pY=new Float32Array(PMAX),
+    pVX=new Float32Array(PMAX),pVY=new Float32Array(PMAX),
+    pL=new Float32Array(PMAX),pT=new Float32Array(PMAX),
+    pK=new Uint8Array(PMAX),pA=new Uint8Array(PMAX);
+var pNext=0;
+function emit(kind,x,y,vx,vy,life){
+  var i=-1;
+  for(var n=0;n<PMAX;n++){ var j=(pNext+n)%PMAX; if(!pA[j]){i=j;break;} }
+  if(i<0) i=pNext;
+  pNext=(i+1)%PMAX;
+  pA[i]=1;pK[i]=kind;pX[i]=x;pY[i]=y;pVX[i]=vx;pVY[i]=vy;pL[i]=life;pT[i]=0;
+}
+
+var MMAX=28;
+var mX=new Float32Array(MMAX),mY=new Float32Array(MMAX),
+    mV=new Float32Array(MMAX),mP=new Float32Array(MMAX),mS=new Float32Array(MMAX);
+function clampY(y){ return y<0?0:(y>LH-1?LH-1:y); }
+function respawnMote(i,anywhere){
+  var y = anywhere ? (WIN_Y+Math.random()*(LH-WIN_Y-16)) : (WIN_Y+3+Math.random()*26);
+  var yi = clampY(y|0);
+  var l=beamL[yi], r=beamR[yi];
+  if(r<=l){ l=WIN_X; r=WIN_X+WIN_W; }
+  mX[i]=l+Math.random()*(r-l); mY[i]=y;
+  mV[i]=2.2+Math.random()*3.6; mP[i]=Math.random()*6.283;
+  mS[i]=0.5+Math.random()*0.9;
+}
+function initMotes(){ for(var i=0;i<MMAX;i++) respawnMote(i,true); }
+
+/* ==========================================================================
+   8. IDLE ACTIONS
+   [hold seconds, pose, eyes, mouth, ears, headDX, headDY, tilt]
+   Hold lengths are deliberately uneven -- that irregular timing is most of
+   what makes a 3-frame pixel animation feel like a living animal.
+   ========================================================================== */
+var ACT={
+  blink:[[0.05,null,'half',null,null,0,0,0],[0.08,null,'shut',null,null,0,0,0],[0.05,null,'half',null,null,0,0,0]],
+  doubleBlink:[[0.04,null,'half',null,null,0,0,0],[0.07,null,'shut',null,null,0,0,0],
+               [0.04,null,'half',null,null,0,0,0],[0.10,null,'open',null,null,0,0,0],
+               [0.04,null,'half',null,null,0,0,0],[0.09,null,'shut',null,null,0,0,0],
+               [0.05,null,'half',null,null,0,0,0]],
+  earFlick:[[0.06,null,null,null,'flick',0,0,0],[0.09,null,null,null,'up',0,0,0],
+            [0.05,null,null,null,'flick',0,0,0],[0.07,null,null,null,'up',0,0,0]],
+  tilt:[[0.09,null,null,null,null,1,0,1],[0.85,null,'open','smile',null,2,1,1],
+        [0.60,null,'open','smile',null,2,1,1],[0.11,null,null,null,null,1,0,0]],
+  tiltL:[[0.09,null,null,null,null,-1,0,-1],[0.80,null,'open','smile',null,-2,1,-1],
+         [0.55,null,'open','smile',null,-2,1,-1],[0.11,null,null,null,null,-1,0,0]],
+  yawn:[[0.15,null,'half','neutral',null,0,0,0],[0.12,null,'shut','smile',null,0,-1,0],
+        [0.09,null,'squash','pant',null,0,-1,0],[0.44,null,'squash','yawn',null,0,-2,0],
+        [0.24,null,'squash','yawn',null,0,-1,0],[0.12,null,'shut','pant',null,0,0,0],
+        [0.13,null,'half','smile',null,0,1,0],[0.28,null,'open','neutral',null,0,0,0]],
+  shake:[[0.10,null,'shut',null,'back',0,0,0],
+         [0.05,null,'shut','grin','flick',-2,0,-1],[0.05,null,'shut','grin','back',2,0,1],
+         [0.05,null,'shut','grin','flick',-2,1,-1],[0.05,null,'shut','grin','back',2,0,1],
+         [0.05,null,'shut','grin','flick',-2,0,-1],[0.05,null,'shut','grin','back',2,1,1],
+         [0.05,null,'half','grin','up',-1,0,0],[0.20,null,'open','smile','up',0,0,0]],
+  lookAround:[[0.28,null,'open',null,null,0,0,0],[0.75,null,'open',null,null,-2,0,0],
+              [0.20,null,'half',null,null,0,0,0],[0.80,null,'open',null,null,2,0,0],
+              [0.28,null,'open',null,null,0,0,0]],
+  sniff:[[0.13,null,'half','neutral',null,0,2,0],[0.09,null,'half','lick',null,0,3,0],
+         [0.09,null,'half','neutral',null,0,2,0],[0.09,null,'half','lick',null,0,3,0],
+         [0.13,null,'half','neutral',null,0,2,0],[0.22,null,'open','smile',null,0,1,0]],
+  lick:[[0.11,null,'half','lick',null,0,1,0],[0.13,null,'shut','lick',null,0,2,0],
+        [0.11,null,'half','pant',null,0,1,0],[0.18,null,'open','smile',null,0,0,0]],
+  scratch:[[0.09,'sit','half','grin','flick',2,1,1],[0.055,'sit','shut','grin','back',3,2,1],
+           [0.055,'sit','shut','grin','flick',2,1,1],[0.055,'sit','shut','grin','back',3,2,1],
+           [0.055,'sit','shut','grin','flick',2,1,1],[0.055,'sit','shut','grin','back',3,2,1],
+           [0.055,'sit','half','grin','flick',2,1,1],[0.22,'sit','open','smile','up',0,0,0]],
+  standUp:[[0.11,'crouch','open','neutral',null,0,-1,0],[0.13,'crouch','open','smile',null,1,-1,0],
+           [0.15,'stand','open','smile',null,0,0,0],[1.30,'stand','open','pant',null,0,0,0],
+           [0.60,'stand','open','pant',null,0,0,0]],
+  sitDown:[[0.13,'stand','open','smile',null,0,0,0],[0.15,'crouch','open','neutral',null,0,1,0],
+           [0.17,'sit','half','neutral',null,0,1,0],[0.28,'sit','open','neutral',null,0,0,0]],
+  hop:[[0.08,'crouch','wide','grin',null,0,1,0],[0.09,'stand','wide','grin',null,0,-2,0],
+       [0.11,'stand','happy','grin',null,0,-3,0],[0.08,'crouch','wide','grin',null,0,0,0],
+       [0.20,'sit','open','smile',null,0,0,0]]
+};
+
+var act=null, actStep=0, actT=0, actQueue=[];
+var nextIdle=2.4;
+var stepPose=null, stepEyes=null, stepMouth=null, stepEars=null;
+
+function applyStep(st){
+  stepPose=st[1]; stepEyes=st[2]; stepMouth=st[3]; stepEars=st[4];
+  dog.headDX=st[5]; dog.headDY=st[6]; dog.tiltDir=st[7];
+  if(stepPose) dog.pose=stepPose;
+}
+function play(n){ if(!ACT[n])return; act=ACT[n]; actStep=0; actT=0; applyStep(act[0]); }
+function queue(n){ if(actQueue.length<4) actQueue.push(n); }
+function updateAct(dt){
+  if(!act){ if(actQueue.length) play(actQueue.shift()); return; }
+  actT+=dt;
+  var dur=act[actStep][0];
+  while(act && actT>=dur){
+    actT-=dur; actStep++;
+    if(actStep>=act.length){
+      act=null; actStep=0; stepEyes=stepMouth=stepEars=null;
+      dog.headDX=0; dog.headDY=0; dog.tiltDir=0;
+      if(actQueue.length) play(actQueue.shift());
+      return;
+    }
+    applyStep(act[actStep]); dur=act[actStep][0];
+  }
+}
+var POOL_SIT=['blink','blink','earFlick','tilt','tiltL','lookAround','blink','yawn',
+              'shake','scratch','doubleBlink','sniff','lick','standUp','earFlick','blink'];
+var POOL_STAND=['blink','earFlick','shake','lookAround','sitDown','sitDown','hop','doubleBlink','tilt'];
+function scheduleIdle(){
+  var pool = dog.pose==='stand'?POOL_STAND:POOL_SIT;
+  var base = 1.0+Math.random()*3.2;
+  if(dog.aff>0.6) base*=0.7;
+  nextIdle=base;
+  queue(pool[(Math.random()*pool.length)|0]);
+}
+
+/* ==========================================================================
+   9. INPUT  /  PETTING  -  the core interaction
+   ========================================================================== */
+var ptrDown=false, ptrX=0, ptrY=0, lastX=0, lastY=0;
+var strokeDist=0, downX=0, downY=0, downT=0;
+var petEnergy=0, petZone=0, zoneHold=0, emitT=0;
+
+function toLogical(e){
+  var r=cv.getBoundingClientRect();
+  ptrX=(e.clientX-r.left)*LW/r.width;
+  ptrY=(e.clientY-r.top)*LH/r.height;
+}
+function zoneAt(x,y){
+  if(x>geo.hx-3 && x<geo.hx+geo.hw+3 && y>geo.hy-7 && y<geo.hy+geo.hh) return 1;
+  if(x>geo.tx-3 && x<geo.tx+geo.tw+3 && y>geo.ty-3 && y<geo.ty+geo.th) return 3;
+  if(x>geo.bx-2 && x<geo.bx+geo.bw+2 && y>geo.by-2 && y<geo.by+geo.bh) return 2;
+  return 0;
+}
+
+cv.addEventListener('pointerdown',function(e){
+  e.preventDefault();
+  try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+  toLogical(e);
+  ptrDown=true; lastX=ptrX; lastY=ptrY; downX=ptrX; downY=ptrY;
+  downT=0; strokeDist=0;
+  var z=zoneAt(ptrX,ptrY);
+  if(z){ petZone=z; zoneHold=0.35; act=null; actQueue.length=0; if(z===3) dog.lookT=0.9; }
+},{passive:false});
+
+cv.addEventListener('pointermove',function(e){
+  if(!ptrDown) return;
+  e.preventDefault();
+  toLogical(e);
+  var dx=ptrX-lastX, dy=ptrY-lastY, d=Math.sqrt(dx*dx+dy*dy);
+  lastX=ptrX; lastY=ptrY;
+  var z=zoneAt(ptrX,ptrY);
+  if(z){
+    petZone=z; zoneHold=0.30; strokeDist+=d;
+    petEnergy=Math.min(1,petEnergy+d*0.11);
+    dog.aff=Math.min(1,dog.aff+d*0.0032);
+    act=null;
+  }
+},{passive:false});
+
+function endPointer(){
+  if(!ptrDown) return;
+  ptrDown=false;
+  if(strokeDist<3 && downT<0.45){
+    var z=zoneAt(downX,downY);
+    if(!z){ lookToward(downX,downY); emit(1,downX,downY,0,-6,0.45); }
+    else if(z===1){
+      act=null; actQueue.length=0; queue('blink'); queue('lick');
+      dog.aff=Math.min(1,dog.aff+0.02);
+      emit(0,geo.hx+geo.hw*0.5,geo.hy-4,0,-9,0.95);
+    } else { act=null; queue('earFlick'); }
+  }
+  petZone=0;
+}
+cv.addEventListener('pointerup',endPointer,{passive:false});
+cv.addEventListener('pointercancel',endPointer,{passive:false});
+cv.addEventListener('contextmenu',function(e){e.preventDefault();});
+
+function lookToward(x){
+  var d=x-dog.x;
+  dog.facing = d<-8?-1 : d>8?1 : 0;
+  dog.lookT = 1.7+Math.random()*0.9;
+  act=null; actQueue.length=0;
+  queue('earFlick');
+  if(dog.aff>0.5 && Math.random()<0.45) queue('hop');
+  else if(Math.random()<0.3) queue('lookAround');
+}
+
+/* ==========================================================================
+   10. UPDATE
+   ========================================================================== */
+var curtainT=0, plantT=0, frameCount=0;
+
+function update(dt){
+  downT+=dt;
+  if(zoneHold>0){ zoneHold-=dt; if(zoneHold<=0) petZone=0; }
+  petEnergy -= dt*(ptrDown?1.6:3.2); if(petEnergy<0) petEnergy=0;
+  var petting = petEnergy>0.10 && petZone!==0;
+
+  dog.bliss += ((petting?1:0)-dog.bliss)*Math.min(1,dt*(petting?7:2.6));
+  if(!petting) dog.aff -= dt*0.009;
+  if(dog.aff<0) dog.aff=0; if(dog.aff>1) dog.aff=1;
+
+  var wag = 0.85 + dog.aff*1.5 + dog.bliss*3.4;
+  if(petZone===3) wag += 2.4;
+  dog.tailPhase += dt*wag*4.2;
+
+  dog.breath += dt*(0.52+dog.aff*0.16+dog.bliss*0.95)*6.283;
+
+  if(!act && !petting){
+    dog.blinkT+=dt;
+    if(dog.blinkT>dog.blinkIn){
+      dog.blinkT=0; dog.blinkIn=1.9+Math.random()*4.2;
+      queue(Math.random()<0.22?'doubleBlink':'blink');
+    }
+  }
+  if(dog.lookT>0){ dog.lookT-=dt; if(dog.lookT<=0 && !petting) dog.facing=0; }
+
+  if(!petting){
+    nextIdle-=dt;
+    if(nextIdle<=0 && !act && !actQueue.length) scheduleIdle();
+  } else nextIdle=1.3+Math.random();
+
+  updateAct(dt);
+
+  if(petting){
+    /* --- petting drives the rig, and each zone reads differently --- */
+    if(petZone===1){                       /* head: leans into the hand */
+      dog.eyes  = dog.bliss>0.5 ? 'happy':'half';
+      dog.mouth = dog.bliss>0.45?'smile':'neutral';
+      dog.ears  = 'back';
+      var lean = (ptrX-(geo.hx+geo.hw*0.5))*0.30;
+      if(lean>3) lean=3; if(lean<-3) lean=-3;
+      dog.headDX=Math.round(lean); dog.headDY=1;
+      dog.tiltDir = lean>1.2?1 : lean<-1.2?-1 : 0;
+      dog.facing=0;
+    } else if(petZone===2){                /* back: settles and pants */
+      dog.eyes  = dog.bliss>0.55?'happy':'half';
+      dog.mouth = dog.bliss>0.45?'pantbig':'pant';
+      dog.ears  = 'back';
+      dog.headDX=0; dog.headDY=1+(dog.bliss>0.7?1:0); dog.tiltDir=0;
+      dog.facing=0;
+    } else {                               /* tail: cranes round to look */
+      dog.eyes  = dog.bliss>0.5?'happy':'wide';
+      dog.mouth = 'grin';
+      dog.ears  = 'flick';
+      dog.facing=1; dog.headDX=3; dog.headDY=0; dog.tiltDir=1;
+    }
+    emitT-=dt;
+    if(emitT<=0){
+      emitT = 0.32-dog.bliss*0.15-dog.aff*0.06;
+      var ex,ey;
+      if(petZone===1){ ex=geo.hx+4+Math.random()*(geo.hw-8); ey=geo.hy-3; }
+      else if(petZone===2){ ex=geo.bx+7+Math.random()*(geo.bw-14); ey=geo.by+2; }
+      else { ex=geo.tx+Math.random()*geo.tw; ey=geo.ty+Math.random()*10; }
+      if(petZone===3 || Math.random()<0.3) emit(1,ex,ey,(Math.random()-0.5)*9,-11-Math.random()*8,0.5);
+      else emit(0,ex,ey,(Math.random()-0.5)*5,-11-Math.random()*7,1.0+Math.random()*0.5);
+    }
+  } else {
+    dog.eyes  = stepEyes  || 'open';
+    dog.mouth = stepMouth || (dog.aff>0.72?'pant' : dog.aff>0.34?'smile':'neutral');
+    dog.ears  = stepEars  || 'up';
+    /* contented dogs give off the odd heart of their own accord */
+    if(dog.aff>0.8){
+      emitT-=dt;
+      if(emitT<=0){ emitT=1.6+Math.random()*2.4;
+        emit(0,geo.hx+4+Math.random()*(geo.hw-8),geo.hy-4,(Math.random()-0.5)*3,-8,1.1); }
+    }
+  }
+
+  for(var i=0;i<PMAX;i++){
+    if(!pA[i]) continue;
+    pT[i]+=dt;
+    if(pT[i]>=pL[i]){ pA[i]=0; continue; }
+    pX[i]+=pVX[i]*dt; pY[i]+=pVY[i]*dt;
+    pVY[i]+=(pK[i]===0?-3.5:15)*dt;
+    pVX[i]*=(1-dt*1.1);
+  }
+  for(var m=0;m<MMAX;m++){
+    mY[m]+=mV[m]*dt; mP[m]+=dt*1.5; mX[m]+=Math.sin(mP[m])*dt*3.2;
+    var yi=mY[m]|0;
+    if(yi>=LH-2||yi<0||mX[m]<beamL[clampY(yi)]-1||mX[m]>beamR[clampY(yi)]+1) respawnMote(m,false);
+  }
+  curtainT+=dt; plantT+=dt;
+}
+
+/* ==========================================================================
+   11. RENDER
+   ========================================================================== */
+function eyeSprite(k){
+  return k==='shut'?SP.eyeShut:k==='half'?SP.eyeHalf:k==='happy'?SP.eyeHappy:
+         k==='wide'?SP.eyeWide:k==='squash'?SP.eyeSquash:SP.eyeOpen;
+}
+function mouthSprite(k){
+  return k==='smile'?SP.mSmile:k==='grin'?SP.mGrin:k==='pant'?SP.mPant:
+         k==='pantbig'?SP.mPantBig:k==='yawn'?SP.mYawn:k==='lick'?SP.mLick:SP.mNeutral;
+}
+function earSprite(k){ return k==='flick'?SP.earFlick:k==='back'?SP.earBack:SP.earUp; }
+
+var earCache={};
+function earFor(kind,right){
+  var key=kind+(right?'R':'L'), c=earCache[key];
+  if(c) return c;
+  c = right ? mirror(earSprite(kind)) : earSprite(kind);
+  earCache[key]=c; return c;
+}
+
+/* face patch offsets, per skull sprite */
+var FACE_F={eyeLX:7, eyeRX:20, eyeY:7,  mouthX:13, mouthY:16, earLX:4, earRX:18, earY:-7, blushLX:3, blushRX:25, blushY:15};
+var FACE_Q={eyeLX:5, eyeRX:17, eyeY:7,  mouthX:18, mouthY:16, earLX:1, earRX:14, earY:-7, blushLX:3, blushRX:23, blushY:15};
+
+function drawDog(){
+  var body=bodySprite();
+  var ha=HEAD_ANCHOR[dog.pose], ta=TAIL_ANCHOR[dog.pose];
+
+  /* Breathing is one whole pixel of travel, held on an ease -- never a
+     fractional scale. The head bob lags the chest by about a fifth of a
+     cycle, which is what stops it reading as a rigid bouncing block. */
+  var bs=Math.sin(dog.breath);
+  var breathPx = bs>0.35?-1:0;
+  if(dog.bliss>0.5) breathPx = bs>0?-1:0;
+  var headBob = Math.sin(dog.breath-0.7)>0.2?-1:0;
+
+  var bx=Math.round(dog.x-body.w*0.5);
+  var by=Math.round(dog.feet-body.h+breathPx+dog.bodyDY);
+  geo.bx=bx; geo.by=by; geo.bw=body.w; geo.bh=body.h;
+
+  /* ---- contact shadow (pre-baked) ---- */
+  var sh = dog.pose==='stand' ? shadowSpr.stand : shadowSpr.sit;
+  ctx.drawImage(sh.cv, Math.round(dog.x)-sh.cx, dog.feet-3-sh.cy);
+
+  /* ---- tail, behind the body ---- */
+  var tf=Math.sin(dog.tailPhase);
+  var ti=Math.round((tf*0.5+0.5)*4); if(ti<0)ti=0; if(ti>4)ti=4;
+  var wagInfo=SP.tailWag[ti];
+  var ts=SP.tailShapes[wagInfo[0]];
+  var tx=bx+ta.x+wagInfo[1], ty=by+ta.y+wagInfo[2];
+  geo.tx=tx; geo.ty=ty; geo.tw=ts.w; geo.th=ts.h;
+  ctx.drawImage(ts.cv,tx,ty);
+
+  /* ---- body ---- */
+  ctx.drawImage(body.cv,bx,by);
+
+  /* ---- head assembly ---- */
+  var hs = dog.facing===0?SP.headF:SP.headQ;
+  var face = dog.facing===0?FACE_F:FACE_Q;
+  var flip = dog.facing===-1;
+  var turn = dog.facing===1?3:dog.facing===-1?-3:0;
+  var hx=Math.round(bx+body.w*0.5-hs.w*0.5+ha.x+dog.headDX+turn);
+  var hy=Math.round(by+ha.y+dog.headDY+headBob);
+  geo.hx=hx; geo.hy=hy; geo.hw=hs.w; geo.hh=hs.h;
+
+  var tilt=dog.tiltDir;
+  ctx.save();
+  if(flip){ ctx.translate(hx*2+hs.w,0); ctx.scale(-1,1); }
+  ctx.drawImage(earFor(dog.ears,false).cv, hx+face.earLX, hy+face.earY+(tilt>0?1:tilt<0?-1:0));
+  ctx.drawImage(earFor(dog.ears,true).cv,  hx+face.earRX, hy+face.earY+(tilt<0?1:tilt>0?-1:0));
+  ctx.drawImage(hs.cv,hx,hy);
+  var es=eyeSprite(dog.eyes);
+  ctx.drawImage(es.cv, hx+face.eyeLX, hy+face.eyeY+(tilt>0?1:0));
+  ctx.drawImage(es.cv, hx+face.eyeRX, hy+face.eyeY+(tilt<0?1:0));
+  var ms=mouthSprite(dog.mouth);
+  ctx.drawImage(ms.cv, hx+face.mouthX+(tilt>0?1:tilt<0?-1:0), hy+face.mouthY);
+  if(dog.aff>0.55||dog.bliss>0.55){
+    ctx.drawImage(SP.blush.cv, hx+face.blushLX, hy+face.blushY+(tilt>0?1:0));
+    ctx.drawImage(SP.blush.cv, hx+face.blushRX, hy+face.blushY+(tilt<0?1:0));
+  }
+  ctx.restore();
+}
+
+/* Two rose cloth panels hanging outside the frame. Cream ones read as more
+   window frame, or as pale pillars; the warm rose separates them clearly.
+   The sway is a whole-pixel 0/1/2px nudge of the inner edge only.
+   All three sway positions are pre-rendered once, so the per-frame cost is
+   a single blit rather than ~300 fillRects. */
+var curtainCv=[];
+function paintCurtain(g,off){
+  var xL=WIN_X-4, xR=WIN_X+WIN_W+1;
+  var top=WIN_Y-5, bot=WIN_Y+WIN_H+2, y;
+  for(y=top;y<bot;y++){
+    var f=(y-top)/(bot-top);
+    var o=Math.round(off*Math.sin(f*3.14));
+    var w=5+(f>0.72?1:0);
+    g.fillStyle=PAL[I_RL];
+    g.fillRect(xL,y,w+o,1);
+    g.fillRect(xR-o,y,w+o,1);
+    g.fillStyle=PAL[I_KM];
+    g.fillRect(xL+w+o-1,y,1,1);
+    g.fillRect(xR-o,y,1,1);
+    g.fillStyle=PAL[I_RM];
+    g.fillRect(xL+1,y,1,1);
+    g.fillRect(xL+3+Math.round(o*0.5),y,1,1);
+    g.fillRect(xR-o+2,y,1,1);
+    g.fillRect(xR-o+4,y,1,1);
+  }
+  g.fillStyle=PAL[I_WD];
+  g.fillRect(WIN_X-7,WIN_Y-7,WIN_W+16,2);
+  g.fillStyle=PAL[I_WL];
+  g.fillRect(WIN_X-7,WIN_Y-7,WIN_W+16,1);
+}
+function buildCurtains(){
+  curtainCv.length=0;
+  var H=WIN_Y+WIN_H+6;
+  for(var off=0;off<3;off++){
+    var c=mkcanvas(LW,H);
+    paintCurtain(c.getContext('2d'),off);
+    curtainCv.push(c);
+  }
+}
+function drawCurtains(){
+  var sw=Math.sin(curtainT*0.5);
+  var off = sw>0.55?2 : sw>0?1 : sw>-0.55?0:1;
+  ctx.drawImage(curtainCv[off],0,0);
+}
+
+/* the contact shadow, likewise baked once instead of ~200 fillRects a frame */
+var shadowSpr={};
+function makeShadow(shW){
+  var w=shW*2+1, c=mkcanvas(w,7), g=c.getContext('2d');
+  g.fillStyle=PAL[I_RD];
+  for(var sy=-3;sy<=3;sy++){
+    var t=1-(sy*sy)/12; if(t<=0) continue;
+    var ww=Math.round(shW*Math.sqrt(t));
+    for(var sx=-ww;sx<=ww;sx++){
+      if(((sx+sy)&1)===0 && Math.abs(sx)>ww-3) continue;
+      g.fillRect(shW+sx,sy+3,1,1);
+    }
+  }
+  return {cv:c,cx:shW,cy:3};
+}
+function buildShadows(){
+  shadowSpr.sit=makeShadow(16);
+  shadowSpr.stand=makeShadow(19);
+}
+
+function drawPlant(){
+  ctx.drawImage((Math.sin(plantT*0.7)>0?SP.leavesA:SP.leavesB).cv, 2, groundY-21);
+}
+
+function drawMotes(){
+  ctx.fillStyle=PAL[I_SB];
+  for(var i=0;i<MMAX;i++){
+    var x=mX[i]|0, y=mY[i]|0;
+    if(x<0||y<0||x>=LW||y>=LH) continue;
+    var tw=Math.sin(mP[i]*2.2);
+    if(tw<-0.35) continue;
+    ctx.fillRect(x,y,1,1);
+    if(mS[i]>1.15&&tw>0.7) ctx.fillRect(x+1,y,1,1);
+  }
+}
+
+function drawParticles(){
+  for(var i=0;i<PMAX;i++){
+    if(!pA[i]) continue;
+    var f=pT[i]/pL[i], s;
+    if(pK[i]===0){
+      s = f<0.15?SP.heartS : f<0.7?SP.heartL : SP.heartM;
+      if(f>0.85 && ((frameCount>>1)&1)) continue;
+    } else {
+      s = f<0.3?SP.spark[0] : f<0.66?SP.spark[1] : SP.spark[0];
+      if(f>0.8 && (frameCount&1)) continue;
+    }
+    ctx.drawImage(s.cv, Math.round(pX[i]-s.w*0.5), Math.round(pY[i]-s.h*0.5));
+  }
+}
+
+function drawHud(){
+  var n=5, filled=dog.aff*n, bx=LW-4-n*8+1, by=5, i;
+  /* a quiet plate so the meter reads over any wall tone */
+  ctx.fillStyle=PAL[I_INK];
+  ctx.globalAlpha=0.30;
+  ctx.fillRect(bx-3,by-3,n*8+4,12);
+  ctx.globalAlpha=1;
+  for(i=0;i<n;i++){
+    var f=filled-i, x=bx+i*8, y=by;
+    if(f>=0.9){
+      var pulse=(dog.bliss>0.4 && ((frameCount>>3)&1))?-1:0;
+      ctx.drawImage(SP.heartL.cv,x,y+pulse);
+    } else if(f>0.12){
+      ctx.drawImage(SP.heartOut.cv,x,y);
+      ctx.drawImage(SP.heartL.cv,x,y);
+      ctx.fillStyle=PAL[I_VD];
+      ctx.globalAlpha=0.92;
+      ctx.fillRect(x,y,7,Math.round((1-Math.min(1,f))*6));
+      ctx.globalAlpha=1;
+      ctx.drawImage(SP.heartOut.cv,x,y);
+    } else {
+      ctx.drawImage(SP.heartOut.cv,x,y);
+    }
+  }
+}
+
+function render(){
+  ctx.drawImage(bgCv,0,0);
+  drawCurtains();
+  drawPlant();
+  drawDog();
+  drawMotes();
+  drawParticles();
+  drawHud();
+}
+
+/* ==========================================================================
+   12. DEBUG SHEET  (?sheet)  -  authoring aid
+   ========================================================================== */
+var sheetStates=[
+  [0,'open','neutral','up',0,0.15,0],
+  [0,'shut','neutral','up',0,0.15,0],
+  [0,'happy','smile','back',0,0.9,0.9],
+  [0,'half','pantbig','back',0,0.9,0.9],
+  [0,'squash','yawn','up',0,0.2,0],
+  [1,'open','smile','up',0,0.2,0],
+  [-1,'open','smile','flick',0,0.2,0],
+  [0,'open','smile','up',1,0.2,0]
+];
+function drawSheet(){
+  ctx.fillStyle='#2a2028'; ctx.fillRect(0,0,LW,LH);
+  var col=0,row=0;
+  for(var i=0;i<sheetStates.length;i++){
+    var st=sheetStates[i];
+    dog.facing=st[0]; dog.eyes=st[1]; dog.mouth=st[2]; dog.ears=st[3];
+    dog.tiltDir=st[4]; dog.aff=st[5]; dog.bliss=st[6];
+    dog.headDX=0; dog.headDY=0; dog.pose='sit'; dog.breath=0; dog.tailPhase=i*1.3;
+    dog.x=28+col*56; dog.feet=68+row*76;
+    groundY=dog.feet-18;
+    drawDog();
+    col++; if(col===4){col=0;row++;}
+  }
+  var parts=[SP.earUp,SP.earFlick,SP.earBack,SP.headF,SP.headQ,
+             SP.tailShapes[0],SP.tailShapes[1],SP.tailShapes[2],
+             SP.bodySit,SP.bodyStand,SP.bodyCrouch,
+             SP.bowl,SP.ball,SP.pot,SP.leavesA,SP.picture,SP.jar,SP.books,
+             SP.heartS,SP.heartM,SP.heartL,SP.heartOut,SP.spark[1]];
+  var px=2,py=158,mh=0;
+  for(var p=0;p<parts.length;p++){
+    var s=parts[p];
+    if(px+s.w+2>LW){ px=2; py+=mh+3; mh=0; }
+    ctx.drawImage(s.cv,px,py);
+    px+=s.w+3; if(s.h>mh) mh=s.h;
+  }
+}
+
+/* ==========================================================================
+   13. LOOP + BOOT
+   ========================================================================== */
+var prev=0;
+function frame(t){
+  if(!prev) prev=t;
+  var dt=(t-prev)/1000; prev=t;
+  if(dt>0.1) dt=0.1;
+  frameCount++;
+  if(SHEET){ drawSheet(); }
+  else { update(dt); render(); }
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize',layout,{passive:true});
+window.addEventListener('orientationchange',function(){ setTimeout(layout,120); },{passive:true});
+document.addEventListener('gesturestart',function(e){e.preventDefault();});
+document.addEventListener('dblclick',function(e){e.preventDefault();});
+
+/* pre-build every mirrored ear now, so no frame ever pays for one later */
+earFor('up',false); earFor('up',true);
+earFor('flick',false); earFor('flick',true);
+earFor('back',false); earFor('back',true);
+
+layout();
+if(!SHEET){ initMotes(); queue('blink'); }
+else { groundY=LH-40; dog.feet=LH-22; }
+requestAnimationFrame(frame);
+
+window.__geo = geo;
+window.__dog = dog;
+window.__spikeReady = true;
+})();
+</script>
+</body>
+</html>
