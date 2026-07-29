@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f6ede1">
+<link rel="manifest" href="probe.webmanifest">
+<title>Pocket Puppies — device probe</title>
+<style>
+  :root { --cream:#f6ede1; --ink:#3d3229; --muted:#8a7a68; --card:#fffaf3;
+          --ok:#2f7d4f; --bad:#b3402f; --warn:#b07d22; --line:#e6d8c6; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--cream); color:var(--ink); max-width:620px;
+         margin:0 auto; padding:calc(env(safe-area-inset-top) + 20px) 16px
+         calc(env(safe-area-inset-bottom) + 40px);
+         font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; }
+  h1 { font-size:21px; margin:0 0 4px; letter-spacing:-.02em; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 18px; }
+  .grp { background:var(--card); border:1px solid var(--line); border-radius:14px;
+         padding:12px 14px; margin-bottom:12px; }
+  .grp h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+            color:var(--muted); margin:0 0 8px; font-weight:650; }
+  .row { display:flex; gap:10px; align-items:baseline; padding:5px 0;
+         border-top:1px solid rgba(230,216,198,.6); font-size:14px; }
+  .grp .row:first-of-type { border-top:none; }
+  .k { flex:0 0 47%; color:var(--muted); }
+  .v { flex:1; font-weight:600; word-break:break-word; }
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  button { font:inherit; font-weight:600; border:none; border-radius:11px;
+           padding:13px 16px; background:#d98b5f; color:#fff; width:100%;
+           margin-bottom:9px; }
+  button:active { transform:scale(.985); }
+  button.sec { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  #out { width:100%; height:150px; font:11px/1.4 ui-monospace,Menlo,monospace;
+         border:1px solid var(--line); border-radius:11px; padding:10px;
+         background:#fff; color:var(--ink); }
+  .note { font-size:13px; color:var(--muted); margin:10px 0 0; }
+  .big { font-size:15px; font-weight:650; padding:10px 12px; border-radius:11px;
+         margin-bottom:12px; }
+  .instal { background:rgba(47,125,79,.1); color:#245f3c; border:1px solid rgba(47,125,79,.25); }
+  .brows { background:rgba(176,125,34,.12); color:#7d5812; border:1px solid rgba(176,125,34,.3); }
+</style>
+</head>
+<body>
+<h1>Device probe</h1>
+<p class="sub">Checks what this phone actually allows, so the game doesn't get built on assumptions. Run it <b>twice</b>: once here in Safari, then again after <b>Share → Add to Home Screen</b> and opening it from the icon. The answers differ, and that difference is the whole point.</p>
+
+<div id="mode" class="big">…</div>
+
+<div class="grp"><h2>Environment</h2><div id="env"></div></div>
+<div class="grp"><h2>Storage — can her progress survive?</h2><div id="stor"></div></div>
+<div class="grp"><h2>Capabilities</h2><div id="caps"></div></div>
+<div class="grp"><h2>Rendering</h2><div id="perf"></div></div>
+
+<div class="grp">
+  <h2>Needs a tap to test</h2>
+  <button id="bmic">Test microphone access</button>
+  <button id="baud">Test sound</button>
+  <button id="bspeech">Test voice recognition</button>
+  <button id="bnotif" class="sec">Test notification permission</button>
+  <div id="gated"></div>
+</div>
+
+<div class="grp">
+  <h2>Send this back</h2>
+  <button id="bcopy">Copy results</button>
+  <textarea id="out" readonly></textarea>
+  <p class="note">If Copy doesn't work, long-press the box, Select All, Copy.</p>
+</div>
+
+<script>
+const R = {};
+function put(host, k, v, cls) {
+  R[k] = typeof v === 'string' ? v : String(v);
+  const d = document.createElement('div');
+  d.className = 'row';
+  d.innerHTML = '<div class="k"></div><div class="v"></div>';
+  d.children[0].textContent = k;
+  d.children[1].textContent = v;
+  if (cls) d.children[1].classList.add(cls);
+  document.getElementById(host).appendChild(d);
+  dump();
+}
+function dump() {
+  document.getElementById('out').value =
+    Object.entries(R).map(([k, v]) => k + ': ' + v).join('\n');
+}
+const yn = b => b ? 'ok' : 'bad';
+
+// ---- display mode: the single most important line ----
+const standalone = window.navigator.standalone === true ||
+  window.matchMedia('(display-mode: standalone)').matches;
+const modeEl = document.getElementById('mode');
+modeEl.textContent = standalone
+  ? '✓ Running installed from the Home Screen — this is the mode that matters'
+  : '⚠ Running in a browser tab — install it and run again';
+modeEl.className = 'big ' + (standalone ? 'instal' : 'brows');
+R['display mode'] = standalone ? 'STANDALONE (installed)' : 'browser tab';
+
+// ---- environment ----
+put('env', 'user agent', navigator.userAgent);
+put('env', 'platform', navigator.platform || '(hidden)');
+put('env', 'screen', `${screen.width}x${screen.height} @ dpr ${devicePixelRatio}`);
+put('env', 'viewport', `${innerWidth}x${innerHeight}`);
+const si = getComputedStyle(document.body);
+put('env', 'safe area top/bottom',
+  `${si.paddingTop} / ${si.paddingBottom}`);
+put('env', 'reduced motion',
+  matchMedia('(prefers-reduced-motion: reduce)').matches ? 'ON' : 'off');
+put('env', 'dark mode', matchMedia('(prefers-color-scheme: dark)').matches ? 'on' : 'off');
+put('env', 'memory (GB, approx)', navigator.deviceMemory || navigator.hardwareConcurrency
+  ? (navigator.deviceMemory || '?') + ' / cores ' + (navigator.hardwareConcurrency || '?')
+  : 'unknown');
+
+// ---- storage ----
+try {
+  localStorage.setItem('__probe', 'x' + Date.now());
+  const got = localStorage.getItem('__probe');
+  put('stor', 'localStorage write/read', got ? 'works' : 'FAILED', yn(!!got));
+  // did a previous run survive?
+  const prev = localStorage.getItem('__probe_first');
+  if (prev) {
+    const days = ((Date.now() - +prev) / 86400000).toFixed(2);
+    put('stor', 'survived since first run', days + ' days', 'ok');
+  } else {
+    localStorage.setItem('__probe_first', String(Date.now()));
+    put('stor', 'survived since first run', 'first run — come back later', 'warn');
+  }
+} catch (e) {
+  put('stor', 'localStorage', 'BLOCKED: ' + e.name, 'bad');
+}
+put('stor', 'IndexedDB present', !!window.indexedDB, yn(!!window.indexedDB));
+put('stor', 'storage.persist() exists',
+  !!(navigator.storage && navigator.storage.persist),
+  yn(!!(navigator.storage && navigator.storage.persist)));
+if (navigator.storage && navigator.storage.persisted) {
+  navigator.storage.persisted().then(p =>
+    put('stor', 'already persisted?', p, p ? 'ok' : 'warn'));
+}
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(p =>
+    put('stor', 'persist() granted', p, p ? 'ok' : 'warn'))
+    .catch(e => put('stor', 'persist() granted', 'threw ' + e.name, 'bad'));
+}
+if (navigator.storage && navigator.storage.estimate) {
+  navigator.storage.estimate().then(e =>
+    put('stor', 'quota',
+      ((e.quota || 0) / 1048576).toFixed(0) + ' MB, used ' +
+      ((e.usage || 0) / 1024).toFixed(0) + ' KB'));
+}
+put('stor', 'cookies enabled', navigator.cookieEnabled, yn(navigator.cookieEnabled));
+
+// ---- capabilities ----
+put('caps', 'service worker', 'serviceWorker' in navigator, yn('serviceWorker' in navigator));
+put('caps', 'PushManager', 'PushManager' in window, yn('PushManager' in window));
+put('caps', 'Notification API', 'Notification' in window, yn('Notification' in window));
+if ('Notification' in window)
+  put('caps', 'notification permission', Notification.permission);
+put('caps', 'SpeechRecognition present',
+  !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+  yn(!!(window.SpeechRecognition || window.webkitSpeechRecognition)));
+put('caps', 'getUserMedia present',
+  !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+  yn(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
+put('caps', 'AudioContext present',
+  !!(window.AudioContext || window.webkitAudioContext),
+  yn(!!(window.AudioContext || window.webkitAudioContext)));
+put('caps', 'vibrate (haptics)', 'vibrate' in navigator, yn('vibrate' in navigator));
+put('caps', 'WakeLock', 'wakeLock' in navigator, yn('wakeLock' in navigator));
+put('caps', 'pointer events', 'onpointerdown' in window, yn('onpointerdown' in window));
+put('caps', 'touch points', navigator.maxTouchPoints);
+put('caps', 'WebGL',
+  (() => { try { return !!document.createElement('canvas').getContext('webgl'); }
+           catch (e) { return false; } })());
+put('caps', 'OffscreenCanvas', 'OffscreenCanvas' in window);
+put('caps', 'ES modules', 'noModule' in document.createElement('script'));
+
+// ---- rendering perf: measure real frame times over ~3s of canvas work ----
+(function () {
+  const cv = document.createElement('canvas');
+  const dpr = Math.min(devicePixelRatio, 2.25);
+  cv.width = 390 * dpr; cv.height = 700 * dpr;
+  const c = cv.getContext('2d');
+  const ts = []; let last = performance.now(), n = 0;
+  function frame(now) {
+    ts.push(now - last); last = now;
+    // rough stand-in for the game's fill-rate load
+    c.clearRect(0, 0, cv.width, cv.height);
+    for (let i = 0; i < 40; i++) {
+      const g = c.createRadialGradient(
+        (i * 37 % 390) * dpr, (i * 53 % 700) * dpr, 4,
+        (i * 37 % 390) * dpr, (i * 53 % 700) * dpr, 90 * dpr);
+      g.addColorStop(0, 'rgba(217,139,95,.5)');
+      g.addColorStop(1, 'rgba(217,139,95,0)');
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc((i * 37 % 390) * dpr, (i * 53 % 700) * dpr, 90 * dpr, 0, 6.284);
+      c.fill();
+    }
+    if (++n < 180) requestAnimationFrame(frame);
+    else {
+      const s = ts.slice(5).sort((a, b) => a - b);
+      const med = s[s.length >> 1], p95 = s[Math.floor(s.length * .95)];
+      put('perf', 'median frame', med.toFixed(1) + ' ms', med < 18.5 ? 'ok' : 'bad');
+      put('perf', 'p95 frame', p95.toFixed(1) + ' ms', p95 < 22 ? 'ok' : 'warn');
+      put('perf', 'effective fps', (1000 / med).toFixed(0));
+      put('perf', 'capped dpr used', dpr);
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+
+// ---- gesture-gated tests ----
+document.getElementById('bmic').onclick = async () => {
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const tr = st.getAudioTracks();
+    put('gated', 'microphone', 'GRANTED, ' + tr.length + ' track(s): ' +
+      (tr[0] && tr[0].label || 'unlabelled'), 'ok');
+    // confirm real samples actually flow — a granted-but-silent stream is the known iOS bug
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    await ac.resume();
+    const src = ac.createMediaStreamSource(st);
+    const an = ac.createAnalyser(); an.fftSize = 512;
+    src.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    let peak = 0, t0 = performance.now();
+    (function poll() {
+      an.getByteTimeDomainData(buf);
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+      if (performance.now() - t0 < 1600) requestAnimationFrame(poll);
+      else {
+        put('gated', 'mic samples flowing',
+          peak > 1 ? 'YES peak ' + peak + '/128 (say something for a real read)'
+                   : 'NO — granted but silent (the known bug)',
+          peak > 1 ? 'ok' : 'bad');
+        st.getTracks().forEach(t => t.stop()); ac.close();
+      }
+    })();
+  } catch (e) {
+    put('gated', 'microphone', 'DENIED/FAILED: ' + e.name + ' — ' + e.message, 'bad');
+  }
+};
+
+document.getElementById('baud').onclick = async () => {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    put('gated', 'AudioContext initial state', ac.state, ac.state === 'running' ? 'ok' : 'warn');
+    await ac.resume();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 523.25; o.type = 'triangle';
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.22, ac.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.5);
+    o.connect(g); g.connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + 0.55);
+    put('gated', 'AudioContext after resume', ac.state, ac.state === 'running' ? 'ok' : 'bad');
+    put('gated', 'did you hear a beep?', 'CHECK YOUR VOLUME + silent switch', 'warn');
+  } catch (e) {
+    put('gated', 'audio', 'FAILED: ' + e.name, 'bad');
+  }
+};
+
+document.getElementById('bspeech').onclick = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { put('gated', 'speech recognition', 'not present at all', 'bad'); return; }
+  try {
+    const r = new SR();
+    r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
+    let settled = false;
+    const done = (msg, cls) => {
+      if (settled) return; settled = true;
+      put('gated', 'speech recognition', msg, cls);
+      try { r.stop(); } catch (e) {}
+    };
+    r.onresult = e => done('HEARD: "' + e.results[0][0].transcript + '"', 'ok');
+    r.onerror = e => done('ERROR: ' + e.error +
+      (e.error === 'not-allowed' ? ' (blocked — expected in installed PWA)' : ''), 'bad');
+    r.onstart = () => put('gated', 'speech started', 'yes — say a name now', 'ok');
+    r.onend = () => done('ended with no result', 'warn');
+    r.start();
+    setTimeout(() => done('timed out after 7s, no result/error', 'warn'), 7000);
+  } catch (e) {
+    put('gated', 'speech recognition', 'threw on construct: ' + e.name, 'bad');
+  }
+};
+
+document.getElementById('bnotif').onclick = async () => {
+  if (!('Notification' in window)) {
+    put('gated', 'notifications', 'API absent', 'bad'); return;
+  }
+  try {
+    const p = await Notification.requestPermission();
+    put('gated', 'notification permission result', p, p === 'granted' ? 'ok' : 'warn');
+  } catch (e) {
+    put('gated', 'notifications', 'FAILED: ' + e.name, 'bad');
+  }
+};
+
+document.getElementById('bcopy').onclick = async () => {
+  const t = document.getElementById('out');
+  try {
+    await navigator.clipboard.writeText(t.value);
+    document.getElementById('bcopy').textContent = 'Copied ✓';
+  } catch (e) {
+    t.select();
+    document.getElementById('bcopy').textContent = 'Select All + Copy manually';
+  }
+};
+
+dump();
+</script>
+</body>
+</html>

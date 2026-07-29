@@ -1,0 +1,10 @@
+{
+  "name": "Puppy Probe",
+  "short_name": "Probe",
+  "start_url": "./probe.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6ede1",
+  "theme_color": "#f6ede1"
+}
