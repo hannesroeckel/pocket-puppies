@@ -3,9 +3,42 @@
 Derived from `docs/nintendogs-design-reference.md` §3, which cites WebKit blog posts,
 bugs.webkit.org and Apple Developer Forums. Read that section for sources.
 
-**Everything here must be confirmed on the actual target phone** using `/probe.html`,
-run twice: once in a Safari tab, once installed to the Home Screen. Two of these risks
-behave *differently* in those two modes, which is exactly why the probe exists.
+---
+
+## ✅ MEASURED ON THE REAL DEVICE — 2026-07-29
+
+Probe run on the actual target phone, **installed to the Home Screen** (standalone):
+**iPhone, iOS 18.7, Safari 26.5.2**, 393×852 @ dpr 3, 4 cores, dark mode on.
+
+**Two of the predictions below were wrong, in opposite directions.** Trust this section
+over the research where they conflict.
+
+| Thing | Predicted | **Actually measured** |
+|---|---|---|
+| `SpeechRecognition` | blocked in installed PWAs | ✅ **WORKS** — returned a full accurate transcript |
+| Raw mic samples | should work as fallback | ❌ **BROKEN** — granted, live track, **zero samples** (bug 185448) |
+| `storage.persist()` | does nothing on iOS | ✅ **granted `true`**; quota 39 GB |
+| Wake Lock | unavailable | ✅ **available** |
+| Vibration / haptics | unavailable | ❌ confirmed unavailable |
+| Frame time | unknown on real hw | ✅ **17.0 ms median AND p95** → dead-stable 59 fps at capped dpr 2.25 |
+| `AudioContext` | starts suspended | ✅ confirmed; `resume()` in a gesture works |
+
+**Consequences:**
+1. **Voice is back on.** Use `SpeechRecognition` **single-shot** (`continuous:false`,
+   `interimResults:false`, `maxAlternatives:1`) — the exact config proven to work. Trigger
+   from an explicit gesture. It needs **network** (server-side), so it fails offline → must
+   degrade silently to tap.
+2. **The "mic as gesture sensor" plan is dead.** No samples means nothing to analyse. Anything
+   needing raw audio (blowing into the mic, volume-reactive behaviour) is not viable.
+3. **Perf budget confirmed** with real headroom. The dpr 2.25 cap is doing its job.
+4. **No haptics.** Never design feedback that depends on vibration.
+5. **The phone is in dark mode** — the game is a warm *light* design. Verify nothing inverts
+   or washes out; `color-scheme: light` is set but worth eyeballing.
+6. Storage is **healthier than feared**, but ship export/import anyway — see below.
+
+> ⏳ **Still unconfirmed:** whether a save actually *survives* a week. The probe recorded its
+> first run; re-running it after 8+ days will show a "survived since first run" figure. Until
+> then, treat the 7-day eviction risk as unproven-but-plausible rather than settled.
 
 ---
 
@@ -33,21 +66,30 @@ Consequences, all binding:
 4. Consider a lightweight cloud save (or at minimum an automatic reminder to export)
    earlier than the feature list would suggest.
 
-## Risk 2 — Voice is the feature most likely to die
+## Risk 2 — Voice — ⚠️ SUPERSEDED BY MEASUREMENT, SEE TOP OF FILE
 
-- `SpeechRecognition` is **explicitly blocked in installed PWAs** — it errors without even
-  prompting. `continuous` mode is broken on iOS; `interimResults` is unreliable; it needs
-  the network. So the mode we *must* ship in is the mode where it *doesn't work*.
-- The fallback is also suspect: WebKit bug 185448 has `getUserMedia` failing in standalone
-  mode, behaving "as if there is no camera." Granted-but-silent streams are the failure
-  shape — which is why `probe.html` doesn't just check permission, it verifies real audio
-  samples flow.
+**The prediction below was wrong and is kept only for the record.** Real recognition
+**works** on the target device; the **raw mic is what's broken**. Build voice with
+`SpeechRecognition` single-shot, not with envelope detection.
 
-**Design response — and this one is an improvement, not a concession:** treat the mic as a
-**gesture sensor** (loudness, duration, pitch envelope), never as speech recognition. Crude
-envelope matching gives us *authentic mis-association* — the dog mishearing its name is the
-charm of the original, not a bug in it. The touch/tap cue path stays at fully equal status,
-never a degraded mode, and nothing in progression may depend on the mic.
+~~Original prediction:~~ `SpeechRecognition` is *explicitly blocked in installed PWAs*;
+`continuous` mode is broken on iOS; `interimResults` is unreliable; it needs the network.
+The fallback was also suspect: WebKit bug 185448 has `getUserMedia` failing in standalone,
+behaving "as if there is no camera."
+
+**What actually holds:**
+- `SpeechRecognition` single-shot works and transcribes accurately, *even installed*.
+- `getUserMedia` **does** exhibit bug 185448 here — permission granted, live track, no samples.
+  So the envelope/gesture-sensor idea is unbuildable.
+- `continuous` mode remains untested and unproven — **don't use it**. Single-shot only.
+- Recognition is **server-side, so it needs network.** This game must work offline, so voice
+  must degrade silently to tap whenever it's unavailable.
+
+**What survives from the original design thinking, and still matters most:** the dog decides
+whether to come based on **mood and trust**, never on recognition accuracy. She calls, his
+ears prick, and he chooses. A mishearing must read as *him being distracted*, never as broken
+software — that legibility was the accident that made the original magic. Tap stays fully
+equal-status, and nothing in progression may depend on voice.
 
 ## Risk 3 — No background execution
 
@@ -63,14 +105,16 @@ they stop. So:
 
 ## Other confirmed limits
 
-| Capability | Status on iOS |
-|---|---|
-| Web Push | Needs Home-Screen install + `display: standalone` + a user gesture |
-| `AudioContext` | Starts **suspended**; must `resume()` inside a gesture or all sound silently dies |
-| Vibration API | **Unavailable** — no haptics. Don't design feedback that needs it |
-| Fullscreen API | **Unavailable** on iPhone (installing is the substitute) |
-| Wake Lock | **Unavailable** — the screen will sleep during a long cuddle |
-| `beforeunload` | Unreliable. Save on `visibilitychange`→hidden and `pagehide` instead |
+| Capability | Status on iOS | Measured? |
+|---|---|---|
+| Web Push | Needs Home-Screen install + `display: standalone` + a user gesture | `PushManager` present ✅ |
+| `AudioContext` | Starts **suspended**; must `resume()` inside a gesture or all sound silently dies | ✅ confirmed exactly this |
+| Vibration API | **Unavailable** — no haptics. Don't design feedback that needs it | ✅ confirmed absent |
+| Fullscreen API | **Unavailable** on iPhone (installing is the substitute) | not probed |
+| Wake Lock | ~~Unavailable~~ → **available** on iOS 18.7 | ✅ present |
+| `beforeunload` | Unreliable. Save on `visibilitychange`→hidden and `pagehide` instead | — |
+| `OffscreenCanvas` | Available — usable for pre-baking sprites | ✅ present |
+| Safe-area insets | 20px top / 40px bottom on this device; usable viewport 393×793 | ✅ measured |
 
 ## Camera-angle verdicts (from §1/§10 of the reference)
 
