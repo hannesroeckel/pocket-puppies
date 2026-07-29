@@ -17,6 +17,15 @@
       her back off.
    4. LEANING OUTLASTS THE STROKE. A liked stroke biases the whole rest pose
       toward where the finger was for ~1.7s after you let go.
+
+   TWO PAYOUTS, TWO TIME CONSTANTS (stage 2). A stroke pays into MOOD (fast,
+   visible, unsaved) and into AFFECTION (slow, saved, session- and day-capped
+   in state/game.js) at rates that differ by ~130x. The quality multiplier is
+   shared. Everything the body does here reads off mood, not the bond.
+
+   hooks: { onAffection(amt, zone), onTapAffection(amt, zone),
+            onMood(amt, zone), onMoodDent(amt, zone),
+            onSpawn(kind, lx, ly), onTap(zone, clipId, kind), onMiss(vx, vy) }
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { Spring, approach, makeSprings } from '../engine/spring.js';
@@ -126,6 +135,15 @@ export function createPetting(rig, opts = {}) {
       });
     }
   }
+  /**
+   * Resolve a part anchor in rig-local space. Exposed for stage 2's care
+   * actions, which place dirt regions and the coat grain against the same
+   * anchors the petting zones use — so a dirt patch sits on the shoulder even
+   * while the shoulder is being dented by a stroke.
+   * @param part 'head'|'muz'|'neck'|'body'|'tail'|'paw'
+   * @returns {{x,y,hx,hy}} centre and half-extents, rig-local
+   */
+  function anchorFor(part) { return anchor(part); }
   function hitZone(lx, ly) {
     let best = null, bd = 1e9;
     for (let i = 0; i < zoneList.length; i++) {
@@ -190,6 +208,13 @@ export function createPetting(rig, opts = {}) {
       };
     },
     computeZones, hitZone, deformPoint, addPress, kindOf,
+    anchor: anchorFor,
+    /** Let another layer register displeasure through the same channel a bad
+        spot uses — stage 2's brush does this for a stroke against the grain,
+        so the complaint reads identically to petting her nose. */
+    irritate(amount) { mood.irritate.kick(amount); },
+    /** the stroke-field ruffle, for tools that aren't a bare hand */
+    ruffle,
 
     /* ---- pointer, in rig-local coords ------------------------------- */
     down(lx, ly, vx, vy) {
@@ -264,17 +289,30 @@ export function createPetting(rig, opts = {}) {
         leanT = B.lean.hold;
       }
 
-      /* --- affection: zone gain x rhythm quality ------------------- */
+      /* --- the two axes, paid at very different rates ---------------
+         Quality (zone x slowness x not-overstimulated) is shared, because a
+         slow stroke behind the ears is both nicer *now* and better for the
+         bond. The RATES differ by ~130x: mood moves in seconds, the bond
+         moves over days. */
       const A = BALANCE.affection;
-      const mult = (h.zone.gain || 1)
+      const MD = BALANCE.mood;
+      const travel = Math.min(seg, A.maxSegPerFrame);
+      const mult = Math.max(0, (h.zone.gain || 1)
         * (1 + slowness() * RH.contentBonus)
-        * (1 - mood.overstim.x * RH.overstimPenalty);
-      const paid = Math.min(seg, A.maxSegPerFrame) * A.perStrokeUnit * Math.max(0, mult);
+        * (1 - mood.overstim.x * RH.overstimPenalty));
+      /* MOOD — fast, visible, unsaved */
+      if (IN.kind === 'bad') {
+        if (hooks.onMoodDent) hooks.onMoodDent(travel * MD.perStrokeUnit * 0.25, IN.zone);
+      } else if (hooks.onMood) {
+        hooks.onMood(travel * MD.perStrokeUnit * mult, IN.zone);
+      }
+      /* AFFECTION — slow, saved, session- and day-capped in state/game.js */
+      const paid = travel * A.perStrokeUnit * mult;
       if (paid > 0 && hooks.onAffection) hooks.onAffection(paid, IN.zone);
 
       /* hearts only where it's actually nice */
       if (hooks.onSpawn && IN.kind !== 'bad' && mood.overstim.x < 0.6
-        && rng.next() < seg * B.heartChancePerUnit * (0.5 + (rig.drive.affection || 0))) {
+        && rng.next() < seg * B.heartChancePerUnit * (0.5 + (rig.drive.mood || 0))) {
         hooks.onSpawn(rng.next() < 1 - B.sparkleShare ? 'heart' : 'spark', lx, ly);
       }
       return { zone: IN.zone, kind: IN.kind, seg };
@@ -300,8 +338,14 @@ export function createPetting(rig, opts = {}) {
     tapReact(zid) {
       sinceTouch = 0;
       const kind = kindOf(zid);
+      const zg = ZONES[zid].gain || 1;
       if (hooks.onTapAffection) {
-        hooks.onTapAffection(BALANCE.affection.tapGain * (ZONES[zid].gain || 1), zid);
+        hooks.onTapAffection(BALANCE.affection.tapGain * zg, zid);
+      }
+      if (kind === 'bad') {
+        if (hooks.onMoodDent) hooks.onMoodDent(BALANCE.mood.badTouch, zid);
+      } else if (hooks.onMood) {
+        hooks.onMood(BALANCE.mood.tapGain * zg, zid);
       }
       let clip = null;
       const shake = rig.mo.shake;
@@ -416,8 +460,12 @@ export function createPetting(rig, opts = {}) {
       const lean = mood.lean.x;
       const recoil = mood.recoil.x;
 
-      /* feed the rig's drive channels */
+      /* feed the rig's drive channels. `mood` is the fast axis and is what
+         the body reads; `affection` is kept alongside for anything that wants
+         the long game (stage 3's obedience rolls, for one). */
+      const moodNow = clamp(moodState.mood === undefined ? moodState.affection : moodState.mood, 0, 1);
       rig.drive.petLevel = pv;
+      rig.drive.mood = moodNow;
       rig.drive.affection = clamp(moodState.affection, 0, 1);
       rig.drive.wiggle = zone.tail.x * (1 - irr) + zone.chest.x * 0.5;
 
@@ -426,7 +474,7 @@ export function createPetting(rig, opts = {}) {
       const anyZone = ZONE_IDS.reduce((acc, id) => acc + zone[id].x, 0);
       if (pv < 0.004 && anyZone < 0.004 && irr < 0.004 && lean < 0.004 && recoil < 0.004) return;
 
-      const m = clamp(moodState.affection, 0, 1);
+      const m = moodNow;
       const t = rig.t;
       /* how much of the response is pleasure vs annoyance */
       const nice = clamp(1 - irr, 0, 1);

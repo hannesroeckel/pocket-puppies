@@ -11,7 +11,7 @@
      - version every save and migrate FORWARD. Never break an old save.
    ========================================================================== */
 import BALANCE from './balance.js';
-import { SCHEMA_VERSION, newState } from './game.js';
+import { SCHEMA_VERSION, newState, DIRT_REGIONS } from './game.js';
 
 const KEY = BALANCE.save.key;
 
@@ -21,9 +21,30 @@ const KEY = BALANCE.save.key;
    rather than defended against at every read site.
    --------------------------------------------------------------------- */
 export const MIGRATIONS = {
-  /* example for stage 2+:
-  2: (s) => { s.inventory.care.brush = s.inventory.care.brush ?? 0; s.v = 2; return s; },
-  */
+  /* ---- v1 -> v2 : stage 2 (care + bonding) --------------------------
+     Adds the coat model (per-region dirt + gloss) and the slow-axis bond
+     ledger. A stage-1 save keeps its dog, its affection, its floor and its
+     name — including the hard-coded "Mochi", which is now a name she chose
+     rather than a default, and must not be wiped. */
+  2: (s) => {
+    if (!s.inventory) s.inventory = {};
+    if (!Array.isArray(s.inventory.toys) || !s.inventory.toys.length) s.inventory.toys = ['ball'];
+    for (const d of (s.dogs || [])) {
+      if (typeof d.name !== 'string') d.name = '';
+      /* seed the dirt mask from the cleanliness the save already had, so a
+         grubby stage-1 dog arrives visibly grubby rather than spotless */
+      const soil = Math.max(0, 1 - (d.needs && typeof d.needs.cleanliness === 'number' ? d.needs.cleanliness : 0.9));
+      if (!Array.isArray(d.dirt)) d.dirt = new Array(DIRT_REGIONS).fill(soil);
+      if (typeof d.gloss !== 'number') d.gloss = 0.50;
+      if (!d.bond) d.bond = { day: -1, earned: 0, showedUp: false, care: {}, session: 0, sessionAt: 0 };
+    }
+    /* a stage-1 save was made under the old fast-affection economy, so its
+       affection number is inflated relative to the new pacing. It is NOT
+       clawed back: the bond is hers and the ratchet says it never falls.
+       New earnings simply proceed at the new (slow) rate from wherever she is. */
+    s.v = 2;
+    return s;
+  },
 };
 
 export function migrate(raw) {
@@ -62,6 +83,22 @@ function fillDefaults(s) {
     if (typeof d.trust !== 'number') d.trust = 0;
     /* the ratchet is an invariant of the data, not just of the mutator */
     if (d.affection < d.affectionFloor) d.affection = d.affectionFloor;
+    /* ---- stage 2 fields ----
+       An UNNAMED dog is a completely valid save: she arrives unnamed and the
+       naming beat runs on the next launch. Never substitute a placeholder. */
+    if (typeof d.name !== 'string') d.name = '';
+    if (typeof d.sex !== 'string') d.sex = BALANCE.gift.sex;
+    if (!Array.isArray(d.dirt) || d.dirt.length !== DIRT_REGIONS) {
+      const soil = Math.max(0, 1 - d.needs.cleanliness);
+      d.dirt = new Array(DIRT_REGIONS).fill(soil);
+    }
+    for (let i = 0; i < d.dirt.length; i++) {
+      const v = +d.dirt[i];
+      d.dirt[i] = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+    }
+    if (typeof d.gloss !== 'number' || !Number.isFinite(d.gloss)) d.gloss = 0.50;
+    d.bond = { day: -1, earned: 0, showedUp: false, care: {}, session: 0, sessionAt: 0, ...(d.bond || {}) };
+    if (!d.bond.care || typeof d.bond.care !== 'object') d.bond.care = {};
   }
   if (!out.dogs.some((d) => d.id === out.activeDogId)) out.activeDogId = out.dogs[0].id;
   out.v = SCHEMA_VERSION;

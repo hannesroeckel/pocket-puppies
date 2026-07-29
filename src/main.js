@@ -135,7 +135,7 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 1,
+    version: 2,
     app, loop, view, saver, BALANCE,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
@@ -187,6 +187,77 @@ async function boot() {
       scene.pointer(app, { type: 'up', x: v.x, y: v.y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
       loop.stepFixed(dt, 2);
       return scene.debug;
+    },
+    /* ---- stage 2 drivers ---------------------------------------------
+       Every one of these advances the sim deterministically. Nothing in the
+       verification path sleeps and hopes. */
+    /** run a care action: kind = 'feed'|'water'|'wash'|'brush' */
+    care(kind) { return loop.scene.startCare ? loop.scene.startCare(kind) : false; },
+    stopCare() { if (loop.scene.stopCare) loop.scene.stopCare(); },
+    /** drag a care prop: a synthetic press-move-release in virtual space */
+    drag({ from, to, steps = 14, dt = 1 / 60, hold = 0 } = {}) {
+      const scene = loop.scene;
+      const send = (type, x, y, moved) => {
+        input.state.lastX = x; input.state.lastY = y;
+        scene.pointer(app, { type, x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: !!moved });
+      };
+      send('down', from[0], from[1], false);
+      loop.stepFixed(dt, 1);
+      for (let i = 1; i <= steps; i++) {
+        const u = i / steps;
+        send('move', from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u, true);
+        loop.stepFixed(dt, 1);
+      }
+      if (hold > 0) {
+        /* keep holding at the destination — this is how pouring works */
+        const n = Math.round(hold / dt);
+        for (let i = 0; i < n; i++) {
+          send('move', to[0] + (i % 2 ? 0.4 : -0.4), to[1], true);
+          loop.stepFixed(dt, 1);
+        }
+      }
+      send('up', to[0], to[1], true);
+      loop.stepFixed(dt, 1);
+      return loop.scene.debug;
+    },
+    /** a flick: like drag, but the release velocity is what matters */
+    flick({ from, to, steps = 6, dt = 1 / 120 } = {}) {
+      const scene = loop.scene;
+      const send = (type, x, y, moved) => {
+        input.state.lastX = x; input.state.lastY = y;
+        scene.pointer(app, { type, x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: !!moved });
+      };
+      send('down', from[0], from[1], false);
+      loop.stepFixed(dt, 1);
+      for (let i = 1; i <= steps; i++) {
+        const u = i / steps;
+        send('move', from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u, true);
+        loop.stepFixed(dt, 1);
+      }
+      send('up', to[0], to[1], true);
+      loop.stepFixed(dt, 1);
+      return loop.scene.debug;
+    },
+    /** fake an absence: rewind lastSeenAt, re-run the decay, replay the greeting */
+    fakeAway(hours = 9) {
+      state.lastSeenAt = Date.now() - hours * 3600e3;
+      const el = applyElapsed(game, Date.now());
+      app.elapsed = el;
+      return el;
+    },
+    /** replay the reunion at an explicit intensity, without waiting 8 hours */
+    reunion(intensity = 0.8, hours = 12) {
+      return loop.scene.playReunion ? loop.scene.playReunion(intensity, hours) : false;
+    },
+    /** name her without a keyboard */
+    name(v) {
+      if (loop.scene.naming && loop.scene.naming.isOpen) { loop.scene.naming.submit(v); return true; }
+      return !!game.setName(v);
+    },
+    openNaming(mode = 'rename') {
+      if (!loop.scene.naming) return false;
+      loop.scene.naming.start(mode, view);
+      return true;
     },
     exportSave: () => exportSave(state),
     importSave: (s) => importSave(s),

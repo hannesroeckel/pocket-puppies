@@ -95,7 +95,7 @@ export function createIdle(rig, opts = {}) {
          the cycle. Otherwise a neglected dog bids a third of the time, which
          reads as needy rather than needed. */
       if (!forceBid && CLIPS[id].bid) {
-        w *= sinceBid < I.bidEveryN * 0.5 ? I.bidEarlyDamp : 1;
+        w *= sinceBid < I.bidEveryN * I.bidDampUntil ? I.bidEarlyDamp : 1;
       }
       ws.push(w); tot += w;
     }

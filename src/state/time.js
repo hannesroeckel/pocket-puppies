@@ -69,8 +69,12 @@ export function applyElapsed(game, now = Date.now()) {
     game.addNeed(key, -per * capped);
   }
 
+  /* coat gloss dulls while she's away, so grooming stays a ritual */
+  if (game.addGloss && capped > 0) game.addGloss(-T.glossDecayPerHour * capped);
+
   /* affection: a small "missed you" dip, bounded, and the mutator refuses to
-     go below the floor no matter what we pass it */
+     go below the floor no matter what we pass it. Deliberately tiny — the bond
+     must never visibly fall from absence (research §2). */
   if (capped > 0.5) {
     const dip = Math.min(T.affectionDipMax, T.affectionDipPerHour * capped);
     game.addAffection(-dip);
@@ -84,17 +88,55 @@ export function applyElapsed(game, now = Date.now()) {
   }
 
   state.lastSeenAt = now;
+
+  /* MOOD IS NOT PERSISTED. It starts wherever the bond and the current needs
+     say it should — a mood that survives a cold start is a grudge, not a mood.
+     (The reunion then drives it up hard, which is the whole point.) */
+  if (game.setMood) game.setMood(game.moodBaseline);
+
   game.touch();
 
+  const reunion = hours >= T.reunionAfterHours;
   return {
     hours: +hours.toFixed(3),
     cappedHours: +capped.toFixed(3),
     capped: hours > T.maxDecayHours,
-    reunion: hours >= T.reunionAfterHours,
+    reunion,
     newDay,
+    /* the reunion's intensity input: time_away x affection (research §1.7).
+       0..1, saturating at BALANCE.reunion.hoursFull hours. */
+    intensity: reunion ? reunionIntensity(hours, game.affection) : 0,
     /* >0 means the device clock had moved backwards and we refused to trust it */
     clockSkewMs: clockSkew,
   };
+}
+
+/**
+ * Reunion intensity: `time_away x affection`, exactly as the research asks.
+ * At k=0 it's a pleased trot toward the camera; at k=1 it's a full-body
+ * torpedo that takes a few seconds to calm down.
+ */
+export function reunionIntensity(hours, affection) {
+  const RU = BALANCE.reunion;
+  const timeShare = clamp(hours / RU.hoursFull, 0, 1);
+  return +clamp(timeShare * RU.hourWeight + clamp(affection, 0, 1) * RU.affWeight, 0, 1).toFixed(3);
+}
+
+/**
+ * Live decay: the original ran on the real clock and so do we, so needs move
+ * (invisibly slowly) while she is in the room too. Keeps the offline model and
+ * the live model consistent instead of having needs freeze whenever she looks.
+ * Dirt is deliberately excluded here — dirt comes from ACTIVITY.
+ */
+export function decayLive(game, dt) {
+  if (!T.liveDecay) return;
+  const perSec = dt / 3600;
+  for (const key in T.needDecayPerHour) {
+    const per = T.needDecayPerHour[key];
+    if (!per) continue;
+    game.addNeed(key, -per * perSec);
+  }
+  if (game.addGloss) game.addGloss(-T.glossDecayPerHour * perSec);
 }
 
 /** Human-readable gap, for the reunion line stage 2 will show. */
@@ -106,4 +148,7 @@ export function describeGap(hours) {
   return d === 1 ? 'a day' : `${d} days`;
 }
 
-export default { applyElapsed, timeOfDay, isNewDay, dayIndex, describeGap };
+export default {
+  applyElapsed, timeOfDay, isNewDay, dayIndex, describeGap,
+  reunionIntensity, decayLive,
+};

@@ -390,6 +390,93 @@ registerClip({
   },
 });
 
+/* ---- stage 2: cruelty reaction + the toy bid ---------------------------
+   CRUELTY GETS AN IMMEDIATE PHYSICAL REACTION AND NOTHING THAT PERSISTS
+   (research §2 / SCOPE.md principle 5). A toy flicked down at her startles
+   her for about a second. There is no score penalty, no guilt line, and no
+   memory of it: the dog must never resent her.
+   ---------------------------------------------------------------------- */
+registerClip({
+  id: 'flinch', dur: 1.25, cd: 2.5,
+  weight: () => 0,                 // reaction only, never self-initiated
+  update(u, dt, ctx) {
+    const { s, flags } = ctx;
+    if (u < 0.10) {
+      /* the recoil: all impulse, so it is visible in the very first frame */
+      if (!flags.k) {
+        flags.k = 1;
+        s.squash.kick(2.4);
+        s.headLift.kick(-26);
+        s.earBack.kick(3.8);
+        s.eyeOpen.kick(2.6);
+        ctx.blink(1);
+      }
+      s.eyeOpen.to(1.20);
+    } else if (u < 0.52) {
+      const b = smooth((u - 0.10) / 0.42);
+      /* shrinks: sits back, head tucked, ears flat, NO smile at all */
+      s.sit.to(Math.max(s.sit.t, 0.62 * b));
+      s.squash.to(0.08 * b);
+      s.headLift.to(-9 * b);
+      s.pitch.t = -0.38 * b;
+      s.earBack.to(0.92 * b);
+      s.eyeOpen.to(1.18);
+      s.eyeSmile.to(0);
+      s.smile.to(0.10);
+      s.brow.to(0.95 * b);
+      s.wagAmp.to(0.04);
+      s.wagSpd.to(1.1);
+      s.tailUp.to(-0.18 * b);
+    } else {
+      /* recovers on her own — quickly, and all the way */
+      const d = smooth((u - 0.52) / 0.48);
+      s.sit.to(0.62 * (1 - d));
+      s.headLift.to(-9 * (1 - d));
+      s.pitch.t = -0.38 * (1 - d) + 0.06 * d;
+      s.earBack.to(0.92 * (1 - d));
+      s.eyeOpen.to(1.18 - 0.18 * d);
+      s.smile.to(0.10 + 0.45 * d);
+      s.brow.to(0.95 * (1 - d) + 0.3 * d);
+      s.wagAmp.to(0.04 + 0.20 * d);
+      s.wagSpd.to(1.1 + 2.4 * d);
+      s.tailUp.to(-0.18 * (1 - d) + 0.16 * d);
+      if (d > 0.55 && !flags.bk) { flags.bk = 1; ctx.blink(1); s.earL.kick(2.4); }
+    }
+  },
+});
+
+registerClip({
+  /* SHE DROPS THE TOY AT YOUR FEET. Played by dog/toy.js when she actually
+     gives it up — one of the three bids the research names by hand, and it
+     counts toward the director's 1-in-N bid quota because it is tagged. */
+  id: 'bidToy', dur: 2.3, cd: 5, bid: true,
+  weight: () => 0,                 // driven by dog/toy.js, not self-initiated
+  update(u, dt, ctx) {
+    const { s, flags } = ctx;
+    ctx.lookAt(195, 995);
+    const env = plateau(u, 0.14, 0.34);
+    s.eyeOpen.to(1 + 0.14 * env);
+    s.brow.to(0.80 * env);
+    s.perk.to(0.50 * env);
+    s.earBack.to(-0.18 * env);
+    s.smile.t = Math.max(s.smile.t, 0.65 * env);
+    s.mouth.to(0.20 * env + 0.08 * Math.sin(u * 11) * env);
+    s.tongue.to(0.55 * env);
+    /* a hopeful wag, and a paw nudging the ball forward */
+    s.wagAmp.to(0.30 + 0.34 * env);
+    s.wagSpd.to(4.0 + 8.0 * env);
+    s.tailUp.to(0.42 * env);
+    if (u > 0.20 && !flags.p) {
+      flags.p = 1;
+      ctx.rig.pawLift[ctx.rng.next() < 0.5 ? 0 : 1].kick(9);
+      s.tilt.kick(0.28);
+      ctx.sound('yip');
+    }
+    if (u > 0.30 && !flags.bk) { flags.bk = 1; ctx.blink(1); }
+    if (u > 0.62 && !flags.h) { flags.h = 1; s.lift.kick(11); }
+  },
+});
+
 registerClip({
   id: 'earFlick', dur: 1.1, cd: 8,
   weight: () => 1.4,

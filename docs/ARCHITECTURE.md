@@ -448,3 +448,208 @@ Not measured on an iPhone. `docs/PLATFORM-RISKS.md` describes the probe that mus
 `app.nav.go()` returning false), `dog/rig.side.js` (stage 4), real audio (stage 7 fills
 `audio.voices`; the room already calls `play()` with names — see `audio.pending` for the
 list it owes), and the needs/reunion HUD (stage 2).
+
+---
+
+## 12. Stage 2 (Care + bonding) — as built
+
+Stage 2 is landed. This section is **authoritative** where it differs from §11 and above.
+
+### 12.1 THE BIG ONE: mood and affection are now two axes
+
+Stage 1 conflated them, and the measured consequence was that ~50 strokes in one sitting
+took the bond from 0.30 to 0.93. Research §2 prescribes two axes with different time
+constants, and that is now what exists:
+
+| | `mood` | `affection` | `trust` |
+|---|---|---|---|
+| speed | seconds | days | weeks |
+| persisted | **no** | yes | yes |
+| drives | **everything visible** — posture, tail amplitude/speed, ear height, eye openness, mouth, blush, breathing | the **mood baseline**, reunion intensity | stage 3's advanced tricks |
+| drawn | never | never | never |
+
+- `rig.base(mood, dt)` and `pet.apply(dt, mood)` read **`mood.mood`**, not `mood.affection`.
+  `rig.drive.mood` is the fast channel; `rig.drive.affection` is kept alongside for anything
+  that wants the long game. `dogRenderer.draw(g, pet, mood, coat)`'s third argument is now
+  **mood**, not affection.
+- Mood decays toward `baseBias + affection*baseFromAffection − unmet_needs*needWeight`. So a
+  bonded dog *rests* happy and an unbonded one doesn't, which is where the bond is legible.
+  Mood is **never persisted** — a mood that survives a cold start is a grudge.
+- `BALANCE.affection.idleDrainPerSec` is now **0**. The per-second drift moved to mood.
+  `game.drainAffection(dt)` is kept and is a no-op at that setting.
+
+**The affection economy is metered in `state/game.js`, not by callers.** `addAffection()`
+puts every positive delta through `meter()`: a per-session diminishing return
+(`exp(−earnedThisSession / session.soft)`, converging on `session.cap`) and a hard
+`day.cap`. `awardDay(kind)` pays the once-a-day bonuses — `showUp`, `reunion`,
+`care:feed|water|wash|brush`, `toy` — which is how "distinct sessions beat session length"
+is implemented. `addAffectionRaw()` bypasses the meter and is for migrations only.
+
+Measured on the identical probe the human ran (10 zones x 5 strokes, one sitting):
+
+| | stage 1 | stage 2 |
+|---|---|---|
+| affection | 0.300 → 0.932 (**+0.632**) | 0.300 → 0.320 (**+0.020**) |
+| mood after ~1s of stroking | n/a | +0.11 |
+| mood after ~3s of stroking | n/a | +0.26 |
+| 0.06 → 0.75 at maximum daily play | one sitting | **13 days** |
+
+### 12.2 Pipeline order — an explicit deviation
+
+```
+rig.base -> idle.update -> pet.apply -> care.apply -> toy.apply -> reunion.apply
+         -> rig.update -> pet.computeZones
+```
+
+§6 puts the action clip *before* the petting overlay. `care.apply` runs **after** it, on
+purpose: during feed and water the action owns the head and petting must not be able to yank
+her muzzle out of the bowl; during wash and brush care writes almost no pose, so the whole
+petting response still reads through. `reunion.apply` is last because it owns the entire
+animal for six seconds, and `idle.update` is **skipped** while the reunion runs.
+
+State machines (`reunion.update`, `care.update`, `toy.update`) run *before* the pose
+pipeline, so the pose they drive is never a frame stale.
+
+### 12.3 New interfaces
+
+```js
+// state/game.js  (additive; every stage-1 member still exists)
+moodLevel, moodBaseline, addMood(d), setMood(v), dentMood(amt?), stepMood(dt)
+addAffection(d, reason)     // now metered by session + day
+addAffectionRaw(d, reason)  // unmetered — migrations only
+awardDay(kind, now?) -> paid      noteTouch(now?)      bondLedger
+fillNeed(action, delta)     // respects that action's ceiling (brush stops at "Clean")
+appetite()                  // 0..1, from how hungry she is right now
+dirt (live array), dirtMean, setDirt(i,v), soil(amount, rng), syncCleanliness()
+gloss, addGloss(d), describeGloss()
+isNamed, displayName, setName(name), pressingNeed()
+DIRT_REGIONS                // exported const: how many dirt regions a coat has
+
+// state/time.js
+reunionIntensity(hours, affection) -> 0..1     decayLive(game, dt)
+applyElapsed(...) now also returns `intensity`
+
+// dog/pet.js  (additive)
+pet.anchor(part) -> {x,y,hx,hy}   // rig-local; care places dirt + grain against these
+pet.irritate(amount)              // register displeasure through the bad-spot channel
+pet.ruffle(lx,ly,ux,uy,mag)
+hooks: + onMood(amt, zone), onMoodDent(amt, zone)
+
+// dog/rig.js  (additive)
+rig.sy            // vertical scale — the FORESHORTENING channel, 1 by default
+rig.home          // {x,y,s} resting placement, so a sequence can spring back
+rig.drive.mood / .pant / .neck
+pose.neckX, pose.neckY
+
+// dog/care.js
+createCare(rig, {game, pet, idle, rng, reduced, spawn, sound, toast}) -> {
+  active, mode, phase, hint, coat, weight, modal, bowl, fill,
+  start(kind), stop(), update(dt, mood), apply(dt, mood),
+  pointer(ev, local) -> consumed, drawFront(g), drawOver(g),
+  soil(amount), resetStroke(), debug }
+
+// dog/toy.js
+createToy(rig, {game, idle, rng, reduced, spawn, sound, toast, soil}) -> {
+  toy, state, outcome, busy, held, depth,
+  update(dt, mood), apply(dt, mood), pointer(ev, local) -> consumed, draw(g),
+  throwUp(power), reset(toHome), debug }
+
+// dog/reunion.js
+createReunion(rig, {game, idle, rng, reduced, spawn, sound}) -> {
+  active, phase, intensity, progress, shake,
+  start(intensity, hours), stop(), update(dt), apply(dt, mood), drawOver(g), debug }
+
+// ui/naming.js
+createNaming({game, reduced, onName, onDone}) -> {
+  isOpen, active, mode, asking, named,
+  start(mode, view), close(), skip(), update(dt), draw(g, view),
+  pointer(ev, view) -> consumed, submit(v), resize(view), debug }
+
+// ui/hud.js  (additive)
+hud.visible, hud.showNeeds(), hud.needsShowing, hud.hit(x,y) -> 'name'|null
+
+// scenes/props.js  (new; shared by the room's decor and the care actions)
+drawBowl(c,x,y,s,kind,fill,t,ripple)  drawSack  drawJug  drawBrush
+drawSoap  drawBall  drawBone  drawDropRing  PC
+```
+
+`ui/sheet.js` rows accept an optional `right` string — the word-scale status of the need
+that row serves. That is how the care sheet is the original's inspect screen.
+
+### 12.4 Schema v2
+
+`SCHEMA_VERSION = 2`, migration `MIGRATIONS[2]` in `state/save.js`. Added to each dog:
+
+- `name` may be **`''`** — the puppy arrives unnamed and *she* names it. A save with no name
+  is completely valid; nothing may substitute a placeholder, and `ui/hud.js` draws no name
+  pill until there is one. `BALANCE.gift = { breedId, sex }` is the one-line change for the
+  starter puppy until the human confirms breed and sex.
+- `dirt[]` — per-region coat dirt, `DIRT_REGIONS` long. **Dirt accrues from ACTIVITY**
+  (`BALANCE.needs.dirt.*`, paid by play and by stage 4's walks), not from the clock. The
+  time-based `cleanliness` decay is a deliberate whisper (0.0015/h ≈ one word-step a
+  fortnight) so a long absence reads as a dull coat and nothing more.
+- `gloss` — raised by brushing along the grain, fades ~0.01/h.
+- `bond` — `{day, earned, showedUp, care{}, session, sessionAt}`, the slow-axis ledger.
+
+A stage-1 save keeps its dog, its affection, its floor and its name — including "Mochi",
+which is now a name she chose rather than a default. Its dirt mask is seeded from the
+cleanliness it already had, so a grubby stage-1 dog arrives visibly grubby. Verified: v1 →
+v2 loads with `name='Mochi'`, `affection=0.614`, `dirt=0.62`, and the naming beat correctly
+does not open.
+
+### 12.5 Art additions in `dog/draw.js`
+
+- **Dirt** is drawn in **part-local space** (`at x halfExtent`, the space the body and head
+  groups are already in — no transform gymnastics), in three concentric passes,
+  **on top of the rim light**. Under it, a filthy dog rendered as spotless.
+- **Foam / wet / gloss.** Wet flattens the fur clumps (`drawFur(..., wet)`), which is most
+  of what makes a wet dog read as wet rather than as a dog with a blue filter on it.
+- **The neck bridge** (`rig.drive.neck`, 0..1). The frontal rig has no drawn neck; that is
+  fine until a care action drives the head down into a bowl or the reunion scales her to
+  2.35x, at which point any daylight between head and shoulders reads as the head having
+  come off. Drawn between the body and the front legs, no outline pass.
+- **`rig.sy`** is applied as `c.scale(rig.s, rig.s * rig.sy)`.
+
+### 12.6 Frontal-camera geometry, learned the hard way
+
+Two attempts at "her head is in the bowl" are worth recording, because the first is the
+obvious one and it is wrong:
+
+1. **Bowl on the floor in front of her paws, head dropped 132 rig units to reach it.**
+   The head group ends up entirely over the body and the dog renders as a *disembodied head
+   on the rug*. Caught by rendering it and looking; no amount of reading the code would have.
+2. **What shipped:** the bowl comes UP to chest height (`stage.bowlTarget = [178, 644]`),
+   the head drops only `care.headDown = 74` and pitches to `-0.62`, the placed bowl is drawn
+   *in front of* the dog at 1.15x so its rim occludes the muzzle, and `drive.neck` bridges
+   the shoulders. The whole animal stays in frame.
+
+The same lesson applies to the toy chase and the reunion: on this rig, **depth is scale**.
+`rig.s` shrinking with `rig.sy` squashing is what reads as running away; `rig.s` growing is
+what reads as running at you. There is no gait cycle and none is needed.
+
+### 12.7 Measured (headless Chromium, 390x844, `--enable-gpu`)
+
+| | work median | work p95 | rAF median | rAF p95 |
+|---|---|---|---|---|
+| DPR 2, idle | 1.4ms | 2.3ms | 16.7ms | 16.8ms |
+| DPR 2, mid-petting | 1.2ms | 2.2ms | 16.7ms | 16.8ms |
+| DPR 2, wash + suds + droplets | 1.7ms | 3.8ms | 16.7ms | 16.7ms |
+| DPR 3→2.25, idle | 1.5ms | 2.4ms | 16.7ms | 16.8ms |
+| DPR 3→2.25, mid-petting | 1.4ms | 2.3ms | 16.7ms | 16.8ms |
+| DPR 3→2.25, wash + suds + droplets | 1.6ms | 2.5ms | 16.7ms | 16.8ms |
+
+Stage 2's heaviest new load (the bath: dirt mask, foam clusters, wet pass, gloss band and
+~90 live particles) costs about **0.3ms** over stage 1. The loop is still vsync-locked with
+roughly 7x headroom.
+
+Idle mandates re-measured over 240 simulated seconds: 57 clips, 13 unique, longest repeat
+run 1, **1 bid in 8.1** (research target ~1 in 8; stage 1 was 1 in 6.7 and adding stage 2's
+clips pushed it to 1 in 5.6, so `BALANCE.idle.bidDampUntil` was added), longest true silence
+**3.42s** (research target ~4s).
+
+### 12.8 Not built in stage 2
+
+Real audio (`audio.pending` now also owes `crunch`, `lap`, `water-pour`, `scrub`, `suds`,
+`shake-big`, `brush`, `grumble-brush`, `toy-throw`, `toy-land`, `toy-grab`, `scamper`,
+`yelp`, `huff`, `proud-yip`, `bark`, `boop`, `launch`, `perk`), a shop for care items
+(brushes and shampoos are free and universal for now), and the install prompt.

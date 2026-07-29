@@ -133,6 +133,7 @@ export function createRig(opts = {}) {
     muzX: 0, muzY: 0,
     tailNodes: [], eyeOpenEff: 1, sit: 0, breathe: 0,
     pupilX: 0, pupilY: 0,
+    neckX: 0, neckY: 0,
     lastHX: undefined, lastHY: undefined, lastHR: undefined,
   };
 
@@ -142,9 +143,19 @@ export function createRig(opts = {}) {
     breed, dims, pal, sil, springs: s, pawLift, tail, fur, pose, gaze, reduced,
     /* placement in virtual space */
     x: R.place.x, y: R.place.y, s: R.place.scale,
+    /* Non-uniform vertical scale, default 1. This is how the frontal rig fakes
+       FORESHORTENING: running "into" the screen is `s` shrinking while `sy`
+       squashes, and the reunion's nose-at-the-lens is `s` overshooting while
+       `sy` stretches. dog/draw.js applies it. Never used by stage 1. */
+    sy: 1,
+    /* the resting placement, so a sequence can always spring back to it */
+    home: { x: R.place.x, y: R.place.y, s: R.place.scale },
     t: 0,
-    /* per-frame drive written by pet.js before update() */
-    drive: { petLevel: 0, affection: 0, wiggle: 0 },
+    /* Per-frame drive written by pet.js / care.js before update().
+         mood       the FAST channel — what visibly drives her body
+         affection  the SLOW bond, kept for anything that wants the long game
+       Stage 1 only had `affection` and used it for both. */
+    drive: { petLevel: 0, mood: 0, affection: 0, wiggle: 0, pant: 0 },
     /* motion multipliers for prefers-reduced-motion */
     mo: {
       parallax: reduced ? RM.parallaxScale : 1,
@@ -173,9 +184,16 @@ export function createRig(opts = {}) {
 
     /* ==================================================================
        LAYER 1 — base mood pose. Neutral targets only.
+
+       `m` IS THE FAST MOOD CHANNEL, NOT THE BOND. Everything visible here —
+       tail amplitude and speed, ear height, eye openness, the mouth, the perk
+       — reads off mood, which responds within seconds and decays toward a
+       baseline that affection sets. Stage 1 drove this from `affection`
+       directly, which is why the bond had to move fast to make the dog look
+       alive, which is why the bond maxed out in one session.
        ================================================================== */
     base(mood, dt) {
-      const m = clamp(mood.affection, 0, 1);
+      const m = clamp(mood.mood === undefined ? mood.affection : mood.mood, 0, 1);
       gaze.t += dt;
       const G = R.gazeDrift;
       /* micro-saccades + slow drift so the stare is never dead */
@@ -225,7 +243,7 @@ export function createRig(opts = {}) {
 
       /* --- breathing: asymmetric (quick in, slow out) --- */
       rig.breathSpd = lerp(R.breathSpdIdle, R.breathSpdPet,
-        clamp(rig.drive.petLevel * 0.6 + rig.drive.affection * 0.35, 0, 1));
+        clamp(rig.drive.petLevel * 0.6 + rig.drive.mood * 0.35 + rig.drive.pant, 0, 1));
       rig.breath += dt * rig.breathSpd;
       const bp = rig.breath % 1;
       const breathe = bp < R.breathIn ? smoother(bp / R.breathIn) : 1 - smoother((bp - R.breathIn) / (1 - R.breathIn));
@@ -278,6 +296,9 @@ export function createRig(opts = {}) {
       const neckX = pose.bodyX + Math.sin(pose.bodyRot) * (-dims.neckDY);
       const neckY = pose.bodyY + dims.neckDY * Math.cos(pose.bodyRot)
         - (dims.bodyHH - pose.bodyHH) * 0.55;
+      /* published so dog/draw.js can bridge the shoulders to the head when a
+         care action drives the head right down into a bowl (rig.drive.neck) */
+      pose.neckX = neckX; pose.neckY = neckY;
       pose.headX = neckX + pose.yaw * 7 + s.headPush.x * 6;
       pose.headY = neckY - dims.headOffset - s.headLift.x + sit * 2 + melt * 5
         - pose.pitch * 3 + breathe * 0.8 - s.perk.x * 4;

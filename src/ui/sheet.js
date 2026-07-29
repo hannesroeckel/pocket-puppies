@@ -81,6 +81,7 @@ export function createSheet(opts = {}) {
         const ry = y0 + i * rowH;
         c.fillStyle = 'rgba(233,149,79,0.10)';
         roundRect(c, pad, ry + 4, W - pad * 2, rowH - 8, 13); c.fill();
+        c.textAlign = 'left';
         c.fillStyle = '#5d3018';
         c.font = '600 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         c.fillText(r.label, pad + 16, ry + (r.note ? rowH / 2 - 7 : rowH / 2));
@@ -88,6 +89,15 @@ export function createSheet(opts = {}) {
           c.fillStyle = 'rgba(93,48,24,0.62)';
           c.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           c.fillText(r.note, pad + 16, ry + rowH / 2 + 9);
+        }
+        /* `right` is the WORD-SCALE status of the need this row serves — the
+           care sheet is the original's inspect screen. Words, never bars. */
+        if (r.right) {
+          c.textAlign = 'right';
+          c.fillStyle = 'rgba(93,48,24,0.86)';
+          c.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          c.fillText(r.right, W - pad - 16, ry + rowH / 2);
+          c.textAlign = 'left';
         }
       }
       c.restore();

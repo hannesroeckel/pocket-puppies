@@ -171,11 +171,14 @@ export function createDogRenderer(rig) {
      Positions are resolved against the live outline, so they follow body
      curvature and every petting dent for free.
      ================================================================== */
-  function drawFur(c, part, b, hh, ox, oy) {
+  function drawFur(c, part, b, hh, ox, oy, wet) {
     const list = rig.fur[part];
     if (!list.length) return;
     const p = b.p, norms = b.n, n = p.length;
-    const len = FU.lobeLen * hh * furType.lobe;
+    /* WET FUR LIES DOWN. Flattening the clumps is most of what makes a wet
+       dog read as wet rather than as a dog with a blue filter on it. */
+    const flat = 1 - clamp(wet || 0, 0, 1) * 0.62;
+    const len = FU.lobeLen * hh * furType.lobe * flat;
     const wid = len * FU.lobeWide;
     for (let k = 0; k < list.length; k++) {
       const f = list[k];
@@ -303,6 +306,176 @@ export function createDogRenderer(rig) {
   }
   const stockingFront = markingFor('stocking', 'legFront');
   const tailUnderMk = markingFor('tailUnder');
+
+  /* ==================================================================
+     THE COAT STATE — stage 2. `coat` is optional; with no coat argument
+     the dog renders exactly as it did in stage 1.
+
+       coat.regions  the dirt region table (part + fraction-of-half-extent)
+       coat.dirt     0..1 per region — HER STROKES ERASE THIS
+       coat.foam     0..1 per region — suds build where she scrubs
+       coat.wet / coat.suds / coat.gloss / coat.sheen
+
+     Dirt and foam are resolved in PART-LOCAL space (at x halfExtent), which
+     is exactly the space the body and head groups are already drawn in, so
+     no transform gymnastics and no drift when she is being dented.
+     ================================================================== */
+  const DIRT = { a: '#8a5f38', b: '#6b4526' };
+
+  function drawSoil(c, coat, where, hw, hh) {
+    if (!coat || !coat.regions) return;
+    const wetK = 1 + clamp(coat.wet || 0, 0, 1) * 0.35;   // wet mud is darker
+    for (let i = 0; i < coat.regions.length; i++) {
+      const r = coat.regions[i];
+      if (r.part !== where) continue;
+      const d = clamp(coat.dirt[i] || 0, 0, 1);
+      if (d < 0.012) continue;
+      const x = r.at[0] * hw, y = r.at[1] * hh;
+      /* three concentric passes: big+faint to small+solid. A single hard blob
+         reads as a sticker; this reads as ground-in muck. */
+      const rr = r.r * (0.55 + d * 0.62);
+      const passes = [[1.42, 0.22], [1.0, 0.42], [0.58, 0.56]];
+      for (const [grow, af] of passes) {
+        c.globalAlpha = clamp(d * af * wetK, 0, 0.85);
+        c.fillStyle = grow < 0.7 ? DIRT.b : DIRT.a;
+        ell(c, x, y, rr * grow, rr * grow * 0.82, i * 0.7); c.fill();
+      }
+      /* a few specks at the edge so it isn't a perfect oval */
+      c.globalAlpha = clamp(d * 0.34, 0, 0.6);
+      c.fillStyle = DIRT.b;
+      for (let k = 0; k < 3; k++) {
+        const a = i * 1.7 + k * 2.3;
+        ell(c, x + Math.cos(a) * rr * 0.9, y + Math.sin(a) * rr * 0.72,
+          rr * 0.16, rr * 0.13, a); c.fill();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+
+  function drawFoam(c, coat, where, hw, hh) {
+    if (!coat || !coat.suds || coat.suds < 0.02) return;
+    for (let i = 0; i < coat.regions.length; i++) {
+      const r = coat.regions[i];
+      if (r.part !== where) continue;
+      const f = clamp((coat.foam[i] || 0) * coat.suds, 0, 1);
+      if (f < 0.02) continue;
+      const x = r.at[0] * hw, y = r.at[1] * hh;
+      const rr = r.r * (0.5 + f * 0.55);
+      /* a cluster of overlapping bubbles, not one white blob */
+      for (let k = 0; k < 6; k++) {
+        const a = i * 2.1 + k * 1.05;
+        const dd = rr * (0.2 + (k % 3) * 0.28);
+        const br = rr * (0.34 - (k % 3) * 0.06);
+        c.globalAlpha = clamp(f * 0.80, 0, 0.9);
+        c.fillStyle = 'rgba(255,255,255,0.92)';
+        ell(c, x + Math.cos(a) * dd, y + Math.sin(a) * dd * 0.8, br, br * 0.94); c.fill();
+        c.globalAlpha = clamp(f * 0.9, 0, 1);
+        c.fillStyle = 'rgba(255,255,255,0.98)';
+        ell(c, x + Math.cos(a) * dd - br * 0.3, y + Math.sin(a) * dd * 0.8 - br * 0.32,
+          br * 0.30, br * 0.26); c.fill();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+
+  /** wet: a cool wash, darker streaks, and a much stronger specular */
+  function drawWet(c, coat, hw, hh) {
+    const w = clamp(coat && coat.wet, 0, 1);
+    if (!(w > 0.02)) return;
+    c.globalAlpha = w * 0.20;
+    c.fillStyle = '#4f6a72';
+    c.fillRect(-hw * 1.4, -hh * 1.6, hw * 2.8, hh * 3.2);
+    c.globalAlpha = w * 0.16;
+    c.strokeStyle = '#3d565e';
+    c.lineWidth = 1.6;
+    for (let i = -5; i <= 5; i++) {
+      const x = i * hw * 0.19;
+      c.beginPath();
+      c.moveTo(x, -hh * 1.1);
+      c.quadraticCurveTo(x + 3, 0, x - 2, hh * 1.15);
+      c.stroke();
+    }
+    c.globalAlpha = w * 0.34;
+    c.fillStyle = 'rgba(255,255,255,0.9)';
+    ell(c, hw * 0.42, -hh * 0.52, hw * 0.26, hh * 0.34, -0.5); c.fill();
+    ell(c, -hw * 0.30, -hh * 0.20, hw * 0.13, hh * 0.20, -0.4); c.fill();
+    c.globalAlpha = 1;
+  }
+
+  /** gloss: a specular bloom whose strength IS the brushing progress */
+  function drawGloss(c, coat, hw, hh) {
+    const gl = clamp(coat && coat.gloss, 0, 1);
+    if (!(gl > 0.03)) return;
+    /* the light in this room comes from the upper right (see the window) */
+    c.globalAlpha = 0.06 + gl * 0.26;
+    const g2 = c.createRadialGradient(hw * 0.40, -hh * 0.62, 2, hw * 0.40, -hh * 0.62, hw * 1.05);
+    g2.addColorStop(0, 'rgba(255,250,228,0.85)');
+    g2.addColorStop(0.45, 'rgba(255,246,214,0.22)');
+    g2.addColorStop(1, 'rgba(255,246,214,0)');
+    c.fillStyle = g2;
+    c.fillRect(-hw * 1.4, -hh * 1.6, hw * 2.8, hh * 3.2);
+    /* and a narrow band that travels, so a gleaming coat visibly shines */
+    if (gl > 0.4) {
+      const u = ((coat.sheen || 0) % 1);
+      const y = lerp(-hh * 1.3, hh * 1.3, u);
+      c.globalAlpha = (gl - 0.4) / 0.6 * 0.20;
+      const g3 = c.createLinearGradient(0, y - hh * 0.34, 0, y + hh * 0.34);
+      g3.addColorStop(0, 'rgba(255,252,236,0)');
+      g3.addColorStop(0.5, 'rgba(255,252,236,0.95)');
+      g3.addColorStop(1, 'rgba(255,252,236,0)');
+      c.fillStyle = g3;
+      c.fillRect(-hw * 1.4, y - hh * 0.34, hw * 2.8, hh * 0.68);
+    }
+    c.globalAlpha = 1;
+  }
+
+  /**
+   * THE NECK BRIDGE. The frontal rig has no drawn neck: the head simply
+   * overlaps the shoulders. That is fine until a care action drives the head
+   * right down into a bowl, at which point the head reads as having detached
+   * and slid down the chest. `rig.drive.neck` (0..1) asks for a tapered coat
+   * shape from the shoulders to the base of the head, which puts the geometry
+   * back. Drawn between the body and the front legs.
+   */
+  function drawNeck(c, k) {
+    const P = rig.pose;
+    const dx = P.headX - P.neckX, dy = (P.headY + D.headHH * 0.52) - P.neckY;
+    const len = Math.hypot(dx, dy);
+    if (len < 6) return;
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux;
+    const w0 = D.bodyHW * 0.50, w1 = D.headHW * 0.46;
+    const nodes = [
+      pt(P.neckX - ux * 6, P.neckY - uy * 6),
+      pt(P.neckX + dx * 0.34, P.neckY + dy * 0.34),
+      pt(P.neckX + dx * 0.72, P.neckY + dy * 0.72),
+      pt(P.headX + ux * 4, P.headY + D.headHH * 0.52 + uy * 4),
+    ];
+    const ws = [w0, lerp(w0, w1, 0.42) * 1.02, lerp(w0, w1, 0.78), w1];
+    c.save();
+    c.globalAlpha = clamp(k, 0, 1);
+    /* NO outline pass: the neck is always sandwiched between two outlined
+       shapes, and a dark border on it reads as a separate collar-shaped object
+       rather than as part of the animal. Shape and shading only. */
+    c.beginPath(); ribbon(c, nodes, ws);
+    const ng = c.createLinearGradient(P.neckX - w0, P.neckY, P.neckX + w0, P.neckY);
+    ng.addColorStop(0, pal.coatSh);
+    ng.addColorStop(0.42, pal.coatMid);
+    ng.addColorStop(1, pal.coat);
+    c.fillStyle = ng; c.fill();
+    /* the cream throat carries down the front of the neck */
+    c.beginPath();
+    ribbon(c, nodes.map((q) => pt(q.x + nx * 2.5, q.y + ny * 2.5)), ws.map((v) => v * 0.42));
+    c.fillStyle = rgba(pal.creamMid, 0.55); c.fill();
+    /* soft shoulder blend so the neck melts into the chest instead of ending */
+    const bg = c.createRadialGradient(P.neckX, P.neckY, 2, P.neckX, P.neckY, w0 * 1.5);
+    bg.addColorStop(0, rgba(pal.coatMid, 0.72));
+    bg.addColorStop(0.6, rgba(pal.coatMid, 0.30));
+    bg.addColorStop(1, rgba(pal.coatMid, 0));
+    c.fillStyle = bg;
+    c.beginPath(); c.arc(P.neckX, P.neckY, w0 * 1.5, 0, TAU); c.fill();
+    c.restore();
+  }
 
   /* ==================================================================
      Tail
@@ -591,15 +764,25 @@ export function createDogRenderer(rig) {
   /* ==================================================================
      The dog
      ================================================================== */
-  function draw(g, pet, mood) {
+  /**
+   * @param mood 0..1 — the FAST channel (stage 2). Drives the blush and the
+   *   warmth of the face. Stage 1 passed affection here; mood is what the body
+   *   is supposed to read off, and it is what the room passes now.
+   * @param coat optional coat state (dirt / foam / wet / suds / gloss). Absent
+   *   is fine: the dog then renders exactly as it did in stage 1.
+   */
+  function draw(g, pet, mood, coat) {
     const c = g.ctx;
     const P = rig.pose, s = rig.springs;
     const petLevel = pet ? pet.level : 0;
     const aff = mood === undefined ? 0 : mood;
+    const wet = coat ? clamp(coat.wet, 0, 1) : 0;
 
     c.save();
     c.translate(rig.x, rig.y);
-    c.scale(rig.s, rig.s);
+    /* rig.sy is the FORESHORTENING channel: running into the screen squashes
+       vertically while the uniform scale shrinks. 1 for a stage-1 dog. */
+    c.scale(rig.s, rig.s * (rig.sy === undefined ? 1 : rig.sy));
     if (!G) initGrads(c);
 
     const sit = P.sit;
@@ -654,14 +837,25 @@ export function createDogRenderer(rig) {
     c.fillStyle = G.bodyShade;
     c.fillRect(-D.bodyHW * 1.4, -D.bodyHH * 1.6, D.bodyHW * 2.8, D.bodyHH * 3.2);
     drawMarkings(c, 'body', P.bodyHW, P.bodyHH, pet, P.bodyX, P.bodyY, null);
-    drawFur(c, 'body', b, D.bodyHH, P.bodyX, P.bodyY);
+    drawFur(c, 'body', b, D.bodyHH, P.bodyX, P.bodyY, wet);
+    drawWet(c, coat, P.bodyHW, P.bodyHH);
+    drawGloss(c, coat, P.bodyHW, P.bodyHH);
     c.fillStyle = G.rim;
     c.fillRect(-D.bodyHW * 1.4, -D.bodyHH * 1.6, D.bodyHW * 2.8, D.bodyHH * 3.2);
+    /* DIRT GOES ON TOP OF THE LIGHTING, not under it: muck sits on the coat,
+       so the rim light must not wash it out. (It did, and the first render of
+       a filthy dog came back looking spotless.) */
+    drawSoil(c, coat, 'body', P.bodyHW, P.bodyHH);
+    drawFoam(c, coat, 'body', P.bodyHW, P.bodyHH);
     c.restore();
     c.restore();
 
     /* ---- ART FIX 2: blend the tail root into the rump ---- */
     drawTailRoot(c);
+
+    /* ---- the neck, only when a care action has pulled the head down ---- */
+    const neckK = rig.drive.neck || 0;
+    if (neckK > 0.01) drawNeck(c, neckK);
 
     /* ---- front legs ---- */
     const fHipY = P.bodyY + P.bodyHH * R.leg.frontHipAt;
@@ -715,10 +909,14 @@ export function createDogRenderer(rig) {
     c.save(); c.clip();
     c.fillStyle = G.headShade;
     c.fillRect(-D.headHW * 1.3, -D.headHH * 1.3, D.headHW * 2.6, D.headHH * 2.6);
-    drawFur(c, 'head', hb, D.headHH, P.headX, P.headY);
+    drawFur(c, 'head', hb, D.headHH, P.headX, P.headY, wet);
     drawFace(c, aff, petLevel);
+    drawWet(c, coat, D.headHW, D.headHH);
+    drawGloss(c, coat, D.headHW, D.headHH);
     c.fillStyle = G.rim;
     c.fillRect(-D.headHW * 1.3, -D.headHH * 1.3, D.headHW * 2.6, D.headHH * 2.6);
+    drawSoil(c, coat, 'head', D.headHW, D.headHH);
+    drawFoam(c, coat, 'head', D.headHW, D.headHH);
     c.restore();
 
     if (farIsLeft) drawEar(c, 1, P.yaw, s.earBack.x, s.earR.x, earScale);

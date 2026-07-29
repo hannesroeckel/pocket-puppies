@@ -19,12 +19,18 @@ import { createRig } from '../dog/rig.js';
 import { createDogRenderer } from '../dog/draw.js';
 import { createIdle } from '../dog/idle.js';
 import { createPetting } from '../dog/pet.js';
+import { createCare } from '../dog/care.js';
+import { createToy } from '../dog/toy.js';
+import { createReunion } from '../dog/reunion.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
 import { createToasts } from '../ui/toast.js';
 import { createSheet } from '../ui/sheet.js';
+import { createNaming } from '../ui/naming.js';
 import { heartPath } from '../ui/meter.js';
+import { drawBowl } from './props.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
+import { decayLive, describeGap } from '../state/time.js';
 
 const VW = BALANCE.view.W, VH = BALANCE.view.H, FLOOR = BALANCE.view.floorY;
 const PA = BALANCE.particles;
@@ -171,58 +177,6 @@ function drawShelf(c) {
   }
 }
 
-function drawBowl(c, bx, by, s, teal) {
-  c.save(); c.translate(bx, by); c.scale(s, s);
-  c.fillStyle = 'rgba(104,58,32,0.20)'; ell(c, 2, 6, 34, 10); c.fill();
-  const g = c.createLinearGradient(-30, -14, 30, 14);
-  g.addColorStop(0, teal ? C.tealL : '#e5b98d');
-  g.addColorStop(0.5, teal ? C.teal : '#d09a63');
-  g.addColorStop(1, teal ? C.tealD : '#b57c47');
-  c.fillStyle = g;
-  c.beginPath(); c.moveTo(-30, -8);
-  c.bezierCurveTo(-28, 10, -16, 18, 0, 18);
-  c.bezierCurveTo(16, 18, 28, 10, 30, -8);
-  c.closePath(); c.fill();
-  c.fillStyle = teal ? '#f0f2e6' : '#f6e6c9'; ell(c, 0, -8, 30, 9.5); c.fill();
-  c.fillStyle = teal ? C.tealD : '#a97141'; ell(c, 0, -7, 24.5, 7); c.fill();
-  if (!teal) {
-    c.fillStyle = '#a9743f'; ell(c, 0, -9, 21, 6.4); c.fill();
-    c.fillStyle = '#c08a4d';
-    const kb = [[-13, -11, 4.4], [-5, -13, 4.8], [4, -12, 4.4], [12, -10, 4], [-9, -8, 4.2],
-      [1, -7.6, 4.6], [9, -8.4, 4.1], [-16, -8, 3.4], [16, -7.6, 3.2]];
-    kb.forEach((k, i) => { ell(c, k[0], k[1], k[2], k[2] * 0.78, i * 0.7); c.fill(); });
-    c.fillStyle = 'rgba(255,235,190,0.5)';
-    for (let i = 0; i < kb.length; i += 2) { ell(c, kb[i][0] - 1, kb[i][1] - 1.4, kb[i][2] * 0.36, kb[i][2] * 0.26, 0); c.fill(); }
-  } else {
-    c.fillStyle = 'rgba(150,196,206,0.92)'; ell(c, 0, -8, 24, 7); c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.55)';
-    ell(c, -8, -10, 8, 2.4, -0.15); c.fill();
-    ell(c, 8, -7, 5, 1.6, 0.2); c.fill();
-  }
-  c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.6;
-  c.beginPath(); c.ellipse(0, -8, 30, 9.5, 0, Math.PI * 1.05, Math.PI * 1.85); c.stroke();
-  c.restore();
-}
-
-function drawBall(c, bx, by, s) {
-  c.save(); c.translate(bx, by); c.scale(s, s);
-  c.fillStyle = 'rgba(104,58,32,0.22)'; ell(c, 2, 15, 16, 5); c.fill();
-  const g = c.createRadialGradient(-6, -7, 2, 0, 0, 20);
-  g.addColorStop(0, '#f7f0dd'); g.addColorStop(0.42, '#e8dcc0'); g.addColorStop(1, '#c9b28c');
-  c.fillStyle = g; ell(c, 0, 0, 16, 16); c.fill();
-  c.save(); ell(c, 0, 0, 16, 16); c.clip();
-  c.fillStyle = '#cf6e58';
-  c.beginPath(); c.moveTo(-18, -4); c.quadraticCurveTo(0, -11, 18, -4);
-  c.lineTo(18, 4); c.quadraticCurveTo(0, -3, -18, 4); c.closePath(); c.fill();
-  c.fillStyle = C.teal;
-  c.beginPath(); c.moveTo(-18, 8); c.quadraticCurveTo(0, 1, 18, 8);
-  c.lineTo(18, 13); c.quadraticCurveTo(0, 6, -18, 13); c.closePath(); c.fill();
-  c.restore();
-  c.strokeStyle = 'rgba(124,74,47,0.38)'; c.lineWidth = 1.6; ell(c, 0, 0, 16, 16); c.stroke();
-  c.fillStyle = 'rgba(255,255,255,0.6)'; ell(c, -6, -7, 4.6, 3.2, -0.6); c.fill();
-  c.restore();
-}
-
 function drawBone(c, bx, by, rot) {
   c.save(); c.translate(bx, by); c.rotate(rot);
   c.fillStyle = 'rgba(104,58,32,0.18)'; roundRect(c, -19, 3, 40, 8, 4); c.fill();
@@ -316,6 +270,7 @@ function buildGrain(rng) {
 export function createRoomScene() {
   let app = null;
   let rig = null, dog = null, idle = null, pet = null;
+  let care = null, toy = null, reunion = null, naming = null;
   let hud = null, nav = null, toasts = null, sheet = null;
   let roomCv = null, ovCv = null;
   const rng = createRng(BALANCE.rng.seed).fork(3);
@@ -325,6 +280,8 @@ export function createRoomScene() {
   let time = 0;
   let capture = '';
   let pressedNav = null;
+  let pendingNaming = false;
+  let sheetKind = '';           // 'care' | 'settings'
 
   const POI = [
     { x: 66, y: 608, w: 1.3 },    // food bowl
@@ -519,11 +476,11 @@ export function createRoomScene() {
     c.restore();
 
     drawRug(c);
-    drawBowl(c, 66, 626, 0.86, false);
-    drawBowl(c, 128, 604, 0.62, true);
-    drawBall(c, 330, 736, 1.0);
     drawBone(c, 96, 792, -0.22);
     drawPouf(c);
+    /* The bowls and the ball are NOT baked any more: they are the same objects
+       the care actions and the toy pick up, so they have to be live. She drags
+       the bowl that was already sitting by the wall. */
 
     const ao = c.createLinearGradient(0, FLOOR, 0, FLOOR + 70);
     ao.addColorStop(0, 'rgba(110,60,32,0.26)'); ao.addColorStop(1, 'rgba(110,60,32,0)');
@@ -558,11 +515,60 @@ export function createRoomScene() {
     c.fillStyle = ts; c.fillRect(-BX, -BY, VW + BX * 2, 120 + BY);
   }
 
+  /* ---- care sheet: THE INSPECT SCREEN ------------------------------
+     Four actions, and beside each one the WORD-SCALE state of the need it
+     serves — `Full`, `Quenched`, `Clean`, `Bouncy`. This is the original's
+     status readout: words, never bars, and no affection row of any kind. */
+  function openCare() {
+    const g = app.game;
+    sheetKind = 'care';
+    sheet.open({
+      title: 'How is she?',
+      rows: [
+        { id: 'feed', label: 'Feed', note: 'Pour a bowl', right: g.describeNeed('hunger') },
+        { id: 'water', label: 'Water', note: 'Fill her bowl', right: g.describeNeed('thirst') },
+        { id: 'wash', label: 'Wash', note: 'Scrub the dirt out', right: g.describeNeed('cleanliness') },
+        { id: 'brush', label: 'Brush', note: 'With the grain', right: g.describeGloss() },
+        { id: 'close', label: 'Done' },
+      ],
+    });
+  }
+
+  function navAction(a, n) {
+    if (n.id === 'care') { openCare(); return; }
+    if (n.id === 'settings') { openSettings(); return; }
+    if (n.id === 'play') {
+      /* Play is not a scene: the ball is in the room. Point at it and get out
+         of the way — flicking it up-screen is the whole interface. */
+      if (toy.busy) { toasts.show('She has gone after it'); return; }
+      hud.setHint('Flick the ball up-screen');
+      toasts.show('Flick the ball up — never sideways');
+      return;
+    }
+    if (!a.nav.go(n.id)) toasts.show(n.label + ' — coming soon');
+  }
+
+  /** start a care action, closing anything that would fight it */
+  function startCare(kind) {
+    if (toy && toy.busy) { toasts.show('She is busy with the ball'); return false; }
+    if (care.mode === kind) { care.stop(); return false; }
+    pet.cancel();
+    care.resetStroke();
+    return care.start(kind);
+  }
+
   /* ---- settings sheet --------------------------------------------- */
   function openSettings() {
+    const g = app.game;
+    sheetKind = 'settings';
     sheet.open({
       title: 'Settings',
       rows: [
+        {
+          id: 'name',
+          label: g.isNamed ? 'Name: ' + g.dog.name : 'Name her',
+          note: g.isNamed ? 'Tap to rename' : 'She is still waiting for a name',
+        },
         { id: 'sound', label: app.game.state.settings.sound ? 'Sound: on' : 'Sound: off', note: 'Sounds arrive in a later update' },
         { id: 'export', label: 'Copy save code', note: 'Keep a backup of your bond' },
         { id: 'import', label: 'Load save code', note: 'Paste a code from another device' },
@@ -573,6 +579,16 @@ export function createRoomScene() {
 
   function sheetAction(id) {
     if (id === 'close' || id === '__backdrop') { sheet.close(); return; }
+    if (id === 'feed' || id === 'water' || id === 'wash' || id === 'brush') {
+      sheet.close();
+      startCare(id);
+      return;
+    }
+    if (id === 'name') {
+      sheet.close();
+      naming.start('rename', app.view);
+      return;
+    }
     if (id === 'sound') {
       const on = !app.game.state.settings.sound;
       app.game.setSetting('sound', on);
@@ -621,6 +637,11 @@ export function createRoomScene() {
       pet = createPetting(rig, {
         reduced: app.reduced, rng,
         hooks: {
+          /* TWO AXES. `onMood` is the fast one you can see; `onAffection` is
+             the slow bond, and state/game.js meters it through the session and
+             day caps so a marathon cannot substitute for coming back. */
+          onMood: (amt) => app.game.addMood(amt),
+          onMoodDent: (amt) => app.game.dentMood(amt),
           onAffection: (amt) => {
             app.game.addAffection(amt);
             hud.bumpHint(app.game.affection);
@@ -649,11 +670,51 @@ export function createRoomScene() {
       toasts = createToasts();
       sheet = createSheet({ reduced: app.reduced });
       hud = createHud(app.game, { hint: 'Stroke the puppy', getTime: () => time });
+
+      care = createCare(rig, {
+        game: app.game, pet, idle, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+      });
+      toy = createToy(rig, {
+        game: app.game, idle, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        soil: (amount) => care.soil(amount),
+      });
+      reunion = createReunion(rig, {
+        game: app.game, idle, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+      });
+      naming = createNaming({
+        game: app.game, reduced: app.reduced,
+        onName: (name) => {
+          /* the puppy reacts to hearing it for the first time */
+          idle.cancel(2.2);
+          idle.play('wagBurst');
+          app.game.addMood(0.35);
+          rig.shiver();
+          const h = rig.headWorld();
+          for (let i = 0; i < (app.reduced ? 3 : 7); i++) {
+            spawn('heart', h.x + rng.range(-26, 26), h.y + rng.range(-24, 4));
+          }
+          app.audio.play('yip');
+        },
+        onDone: (name) => {
+          if (name) toasts.show(name + ' it is');
+          hud.setHint(name ? 'Stroke her' : 'Stroke the puppy');
+        },
+      });
+
       nav = createNav([
-        { id: 'care', label: 'Care', available: app.nav.has('care') },
+        /* care and play are in-room features now, not separate scenes */
+        { id: 'care', label: 'Care', available: true },
         { id: 'walk', label: 'Walk', available: app.nav.has('walk') },
         { id: 'train', label: 'Train', available: app.nav.has('train') },
-        { id: 'play', label: 'Play', available: app.nav.has('contest') },
+        { id: 'play', label: 'Play', available: true },
         { id: 'shop', label: 'Shop', available: app.nav.has('shop') },
         { id: 'settings', label: 'More', icon: 'settings', available: true },
       ], { safeBottom: app.view.safe.bottom / app.view.vs });
@@ -666,15 +727,36 @@ export function createRoomScene() {
       rig.update(1 / 60);
       pet.computeZones();
 
+      hud.setHint(app.game.isNamed ? 'Stroke her' : 'Stroke the puppy');
+
+      /* ---- THE SLOW AXIS PAYS FOR TURNING UP --------------------------
+         "Bond is moved by distinct sessions rather than session length"
+         (research §2). Showing up at all on a new day is worth about half of
+         what a whole session of petting can pay. */
+      app.game.awardDay('showUp');
+
+      /* ---- the reunion ---------------------------------------------- */
       if (params && params.reunion) {
-        toasts.show(app.game.dog.name + ' missed you');
-        idle.play('wagBurst');
+        const el = app.elapsed || {};
+        reunion.start(el.intensity !== undefined ? el.intensity : 0.5, el.hours || 8);
+        app.game.awardDay('reunion');
+        app.game.log('reunion', 'away ' + describeGap(el.hours || 8));
+        const nm = app.game.isNamed ? app.game.dog.name : 'She';
+        toasts.show(nm + ' missed you', 2.6);
+      } else if (!app.game.isNamed) {
+        /* first launch: she arrives and she has no name yet */
+        naming.start('first', app.view);
       }
+      /* if she came back to an unnamed puppy, name it once the greeting lands */
+      if (!app.game.isNamed && reunion.active) pendingNaming = true;
     },
 
     exit() {
       roomCv = null; ovCv = null;
       parts.length = 0;
+      /* the naming beat owns a real DOM input; it must not outlive the scene */
+      if (naming) naming.close();
+      if (care) care.stop();
     },
 
     resize(a) {
@@ -684,47 +766,102 @@ export function createRoomScene() {
       initMotes();
       if (nav) nav.layout(view.safe.bottom / view.vs);
       if (sheet) sheet.setInset(view.safe.bottom / view.vs);
+      if (naming) naming.resize(view);
     },
 
     update(a, dt, t) {
       time = t;
       const game = a.game;
 
-      /* affection drifts toward the ratchet floor, never below it */
+      /* ---- the two axes ----------------------------------------------
+         MOOD drifts toward the baseline affection sets (fast, seconds).
+         AFFECTION does not drift at all any more: it is the slow axis and it
+         only moves when something actually happens. */
+      game.stepMood(dt);
       game.drainAffection(dt);
       game.decayAffectionPulse(dt);
+      /* the original ran on the real clock, so needs move while she watches */
+      decayLive(game, dt);
 
-      /* --- the pose pipeline, in order --- */
+      /* ---- state machines, before the pose they drive ---- */
+      reunion.update(dt);
+      care.update(dt, game.mood);
+      toy.update(dt, game.mood);
+
+      /* --- the pose pipeline, in order ---
+         base -> idle -> pet -> care -> toy -> reunion -> resolve
+         Care sits AFTER petting on purpose (see dog/care.js) and the reunion
+         sits last because it owns the whole animal for six seconds. */
       const mood = game.mood;
       rig.base(mood, dt);
-      idle.update(dt, {
-        affection: mood.affection,
-        petLevel: pet.level,
-        petDown: pet.IN.down,
-        sinceTouch: pet.sinceTouch,
-      });
+      if (!reunion.active) {
+        idle.update(dt, {
+          affection: mood.mood,
+          petLevel: pet.level,
+          petDown: pet.IN.down,
+          sinceTouch: pet.sinceTouch,
+        });
+      }
       pet.apply(dt, mood);
+      care.apply(dt, mood);
+      if (!reunion.active) toy.apply(dt, mood);
+      reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
+
+      /* the naming beat waits for the greeting to finish landing */
+      if (pendingNaming && !reunion.active) {
+        pendingNaming = false;
+        if (!game.isNamed) naming.start('first', a.view);
+      }
+      naming.update(dt);
 
       updateParts(dt);
       toasts.update(dt);
       sheet.update(dt);
       hud.update(dt);
+      /* chrome gets out of the way for the two beats that need the screen */
+      /* chrome gets out of the way for the beats that need the whole screen */
+      hud.visible = !naming.active && !care.modal && !reunion.active;
     },
 
     draw(a, g) {
       const c = g.ctx;
       const view = a.view;
 
+      /* THE REUNION SHAKES THE CAMERA, NOT THE DOG. iOS has no haptics, so the
+         nose-on-the-lens thump has to be sold with scale and a screen shake
+         (PLATFORM-RISKS). The room and the dog shift together; the vignette and
+         grain deliberately do NOT, because they are lens-fixed. */
+      const sk = reunion.shake;
+      const shaking = sk.x !== 0 || sk.y !== 0;
+
       c.setTransform(1, 0, 0, 1, 0, 0);
+      if (shaking) c.translate(sk.x * view.vs * view.dpr, sk.y * view.vs * view.dpr);
       if (roomCv) c.drawImage(roomCv, 0, 0);
+      c.setTransform(1, 0, 0, 1, 0, 0);
       g.toVirtual();
+      if (shaking) c.translate(sk.x, sk.y);
       c.lineJoin = 'round'; c.lineCap = 'round';
 
       drawMotes(c, 1 / 60);
-      dog.draw(g, pet, a.game.affection);
+
+      /* The resting bowls, hidden while a care action has picked one up. Both
+         sit clear of the dog's silhouette — a bowl tucked behind her body is a
+         bowl she can never be seen to drag. */
+      const SG = BALANCE.care.stage;
+      if (care.mode !== 'feed') drawBowl(c, SG.bowlHome[0], SG.bowlHome[1], SG.bowlScale, 'food', 0, time);
+      if (care.mode !== 'water') drawBowl(c, SG.waterHome[0], SG.waterHome[1], SG.bowlScale * 0.78, 'water', 0.5, time);
+
+      /* the toy, in front of or behind her depending on its depth */
+      const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
+      if (toyBehind) toy.draw(g);
+
+      dog.draw(g, pet, a.game.moodLevel, care.coat);
       drawParts(c);
+
+      if (!toyBehind) toy.draw(g);
+      care.drawFront(g);
 
       /* hand glow */
       const gl = pet.glow;
@@ -744,14 +881,22 @@ export function createRoomScene() {
       if (ovCv) c.drawImage(ovCv, 0, 0);
       g.toVirtual();
 
+      reunion.drawOver(g);
+      care.drawOver(g);
       hud.draw(g, view);
-      nav.draw(g);
+      if (!naming.active && !care.modal && !reunion.active) nav.draw(g);
       toasts.draw(g, nav.y - 22);
       sheet.draw(g);
+      naming.draw(g, view);
     },
 
     pointer(a, ev) {
-      const local = () => ({ x: (ev.x - rig.x) / rig.s, y: (ev.y - rig.y) / rig.s });
+      /* rig-local coords. NOTE rig.x/y/s move during a chase and the reunion,
+         so this must be computed per event, never cached. */
+      const local = () => ({ x: (ev.x - rig.x) / rig.s, y: (ev.y - rig.y) / (rig.s * (rig.sy || 1)) });
+
+      /* the naming beat owns the whole surface while it is up */
+      if (naming.active) { naming.pointer(ev, a.view); return; }
 
       if (ev.type === 'down') {
         if (sheet.isOpen) {
@@ -760,31 +905,51 @@ export function createRoomScene() {
           if (row) sheetAction(row.id);
           return;
         }
+        /* CARE FIRST. Feed and water consume the drag; wash and brush pass it
+           straight through, so the petting field still does the real work. */
+        if (care.modal) {
+          const l0 = local();
+          if (care.pointer(ev, l0)) { capture = 'care'; return; }
+          capture = 'dog';
+          a.game.noteTouch();
+          pet.down(l0.x, l0.y, ev.x, ev.y);
+          return;
+        }
+        if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.showNeeds(); return; }
         const n = nav.hit(ev.x, ev.y);
         if (n) { capture = 'nav'; pressedNav = n; nav.pressed = n.id; return; }
+        /* the ball, before the dog: it sits in front of her on the floor */
+        if (!reunion.active && toy.pointer(ev, local())) { capture = 'toy'; return; }
         capture = 'dog';
+        /* a touch after a long quiet gap starts a new petting session, which is
+           what the per-session diminishing return is measured against */
+        a.game.noteTouch();
         const l = local();
         pet.down(l.x, l.y, ev.x, ev.y);
         return;
       }
 
       if (ev.type === 'move') {
+        if (capture === 'toy') { toy.pointer(ev, local()); return; }
+        if (capture === 'care') { care.pointer(ev, local()); return; }
         if (capture !== 'dog') return;
         const l = local();
+        /* wash and brush read the same stroke the petting field reads */
+        if (care.modal) care.pointer(ev, l);
         pet.move(l.x, l.y, ev.x, ev.y);
         return;
       }
 
       if (ev.type === 'up') {
+        if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
+        if (capture === 'care') { care.pointer(ev, local()); capture = ''; return; }
         if (capture === 'nav') {
           nav.pressed = '';
           const n = nav.hit(ev.x, ev.y);
-          if (n && pressedNav && n.id === pressedNav.id) {
-            if (n.id === 'settings') openSettings();
-            else if (!a.nav.go(n.id)) toasts.show(n.label + ' — coming soon');
-          }
+          if (n && pressedNav && n.id === pressedNav.id) navAction(a, n);
           pressedNav = null;
         } else if (capture === 'dog') {
+          if (care.modal) care.pointer(ev, local());
           pet.up(!ev.moved);
         }
         capture = '';
@@ -793,7 +958,9 @@ export function createRoomScene() {
 
       if (ev.type === 'cancel') {
         nav.pressed = ''; pressedNav = null;
-        if (capture === 'dog') pet.cancel();
+        if (capture === 'toy') toy.pointer(ev, local());
+        else if (capture === 'care') care.pointer(ev, local());
+        else if (capture === 'dog') pet.cancel();
         capture = '';
       }
     },
@@ -803,6 +970,32 @@ export function createRoomScene() {
       const z = {};
       for (const id in pet.zoneSprings) z[id] = +pet.zoneSprings[id].x.toFixed(2);
       return {
+        /* ---- stage 2: the two axes, side by side ---- */
+        mood: +app.game.moodLevel.toFixed(3),
+        moodBase: +app.game.moodBaseline.toFixed(3),
+        bond: app.game.bondLedger,
+        needs: {
+          hunger: +app.game.dog.needs.hunger.toFixed(3),
+          thirst: +app.game.dog.needs.thirst.toFixed(3),
+          cleanliness: +app.game.dog.needs.cleanliness.toFixed(3),
+          energy: +app.game.dog.needs.energy.toFixed(3),
+        },
+        words: {
+          hunger: app.game.describeNeed('hunger'),
+          thirst: app.game.describeNeed('thirst'),
+          cleanliness: app.game.describeNeed('cleanliness'),
+          energy: app.game.describeNeed('energy'),
+          gloss: app.game.describeGloss(),
+        },
+        care: care.debug,
+        toyState: toy.debug,
+        reunion: reunion.debug,
+        naming: naming.debug,
+        named: app.game.isNamed,
+        name: app.game.dog.name,
+        neck: +(rig.drive.neck || 0).toFixed(3),
+        pant: +(rig.drive.pant || 0).toFixed(3),
+        needsShowing: hud.needsShowing,
         aff: +app.game.affection.toFixed(3), floor: +app.game.affectionFloor.toFixed(3),
         pet: +pet.level.toFixed(3), energy: +pet.energy.toFixed(3), zone: pet.IN.zone,
         kind: pet.IN.kind, z,
@@ -830,6 +1023,20 @@ export function createRoomScene() {
     get rig() { return rig; },
     get pet() { return pet; },
     get idle() { return idle; },
+    get care() { return care; },
+    get toy() { return toy; },
+    get reunion() { return reunion; },
+    get naming() { return naming; },
+    get hud() { return hud; },
+    /* drivers the verification harness needs; see window.__pp in main.js */
+    startCare(kind) { return startCare(kind); },
+    stopCare() { care.stop(); },
+    playReunion(intensity, hours) {
+      if (naming.active) naming.skip();
+      return reunion.start(intensity, hours);
+    },
+    openCare() { openCare(); },
+    openSettings() { openSettings(); },
     toast(msg) { if (toasts) toasts.show(msg); },
   };
 
