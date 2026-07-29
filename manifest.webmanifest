@@ -1,0 +1,27 @@
+{
+  "name": "Pocket Puppies",
+  "short_name": "Puppies",
+  "description": "A pocket-sized puppy to keep you company.",
+  "id": "/pocket-puppies/",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a1c14",
+  "theme_color": "#e3bd8f",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='108' fill='%23e3bd8f'/%3E%3Cellipse cx='256' cy='300' rx='150' ry='128' fill='%23e9954f'/%3E%3Cpath d='M128 176 L118 74 L206 132 Z' fill='%23c56d38'/%3E%3Cpath d='M384 176 L394 74 L306 132 Z' fill='%23c56d38'/%3E%3Cellipse cx='256' cy='352' rx='74' ry='60' fill='%23fdf4e2'/%3E%3Cellipse cx='196' cy='286' rx='19' ry='23' fill='%2333241d'/%3E%3Cellipse cx='316' cy='286' rx='19' ry='23' fill='%2333241d'/%3E%3Cellipse cx='256' cy='324' rx='22' ry='17' fill='%23413028'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%23e3bd8f'/%3E%3Cellipse cx='256' cy='288' rx='118' ry='102' fill='%23e9954f'/%3E%3Cpath d='M158 190 L150 108 L220 154 Z' fill='%23c56d38'/%3E%3Cpath d='M354 190 L362 108 L292 154 Z' fill='%23c56d38'/%3E%3Cellipse cx='256' cy='330' rx='58' ry='47' fill='%23fdf4e2'/%3E%3Cellipse cx='210' cy='278' rx='15' ry='18' fill='%2333241d'/%3E%3Cellipse cx='302' cy='278' rx='15' ry='18' fill='%2333241d'/%3E%3Cellipse cx='256' cy='308' rx='17' ry='13' fill='%23413028'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

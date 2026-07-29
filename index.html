@@ -2,86 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f6ede1">
-<title>Pick a puppy style</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#e3bd8f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pocket Puppies">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light">
+<meta name="description" content="A pocket-sized puppy to keep you company.">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Pocket Puppies</title>
 <style>
-  :root {
-    --cream: #f6ede1;
-    --ink: #3d3229;
-    --muted: #8a7a68;
-    --card: #fffaf3;
-    --accent: #d98b5f;
-    --line: #e6d8c6;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    background: var(--cream);
-    color: var(--ink);
-    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    padding: calc(env(safe-area-inset-top) + 32px) 20px calc(env(safe-area-inset-bottom) + 40px);
-    max-width: 560px;
-    margin: 0 auto;
-    min-height: 100vh;
-  }
-  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 6px; }
-  .sub { color: var(--muted); margin: 0 0 28px; font-size: 15px; }
-  a.card {
-    display: block;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 18px 20px;
-    margin-bottom: 14px;
-    text-decoration: none;
-    color: inherit;
-    box-shadow: 0 2px 0 rgba(61,50,41,.04), 0 8px 24px -12px rgba(61,50,41,.18);
-    transition: transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .18s;
-  }
-  a.card:active { transform: scale(.985) translateY(1px); }
-  .tag {
-    display: inline-block; font-size: 11px; font-weight: 650; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
-  }
-  .name { font-size: 19px; font-weight: 620; letter-spacing: -0.01em; margin-bottom: 4px; }
-  .desc { font-size: 14px; color: var(--muted); }
-  .go { font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 10px; }
-  .note {
-    margin-top: 26px; padding: 16px 18px; border-radius: 14px;
-    background: rgba(217,139,95,.08); border: 1px solid rgba(217,139,95,.2);
-    font-size: 14px; color: #7a5c45;
-  }
-  .note b { color: #5f4432; }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;width:100%;overflow:hidden;background:#2a1c14;
+       overscroll-behavior:none;-webkit-text-size-adjust:100%;}
+  body{position:fixed;inset:0;touch-action:none;-webkit-user-select:none;user-select:none;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+  /* reads the real safe-area insets back out into JS */
+  #safeprobe{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;
+       padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+       padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+       color:#f1d9b4;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+       background:#2a1c14;transition:opacity .35s ease;}
+  #boot.gone{opacity:0;pointer-events:none;}
 </style>
 </head>
 <body>
-  <h1>Pick a puppy style</h1>
-  <p class="sub">Three takes on the same Shiba Inu puppy. Open each, stroke the puppy for ten seconds, and see which one makes you smile. Best judged on a phone.</p>
-
-  <a class="card" href="spike-a-2d.html">
-    <span class="tag">Style A</span>
-    <div class="name">Hand-crafted 2D</div>
-    <div class="desc">Illustrated puppy drawn and animated entirely in code. Cozy, warm, fast — and cheap to extend to new breeds.</div>
-    <div class="go">Open Style A &rarr;</div>
-  </a>
-
-  <a class="card" href="spike-b-pixel.html">
-    <span class="tag">Style B</span>
-    <div class="name">Pixel art</div>
-    <div class="desc">Chunky, hand-made pixel puppy in a cozy pixel room. Huge charm per byte; the question is whether it feels right for Nintendogs.</div>
-    <div class="go">Open Style B &rarr;</div>
-  </a>
-
-  <a class="card" href="spike-c-3d.html">
-    <span class="tag">Style C</span>
-    <div class="name">3D</div>
-    <div class="desc">A puppy in real 3D space you can walk the camera around and pet from any angle. Closest to actual Nintendogs.</div>
-    <div class="go">Open Style C &rarr;</div>
-  </a>
-
-  <div class="note">
-    <b>What I'm judging on:</b> does the puppy feel <i>alive</i> when you're not touching it, and does petting feel <i>good</i>? Pretty stills matter less than those two things. Whichever wins becomes the real game.
-  </div>
+<canvas id="c"></canvas>
+<div id="safeprobe"></div>
+<div id="boot">Pocket Puppies</div>
+<script type="module">
+  import './src/main.js';
+  /* the boot veil hides the first paint; one rAF after module eval is enough */
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const b = document.getElementById('boot');
+    if (b) { b.classList.add('gone'); setTimeout(() => b.remove(), 420); }
+  }));
+</script>
+<noscript><p style="color:#f1d9b4;padding:24px">Pocket Puppies needs JavaScript.</p></noscript>
 </body>
 </html>
