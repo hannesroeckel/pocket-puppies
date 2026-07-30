@@ -107,21 +107,96 @@ meeting other dogs, unlocking toys — while dodging the gait cycle entirely.
 
 ## Stage 5 — Contests + economy
 
-**Obedience Trial (primary).** Judge calls a trick, dog performs it, scored on speed and
-correctness. Pure frontal rig, zero new art, and it makes stage 3's training *matter* —
-which is the real reason it's the one worth keeping.
+Grounded in `docs/nintendogs-design-reference.md` §6 and §7. Read those first.
 
-**Disc, reframed.** Not a distance-fetch. She throws up-screen, the disc arcs back toward the
-camera, and she times a tap for the dog's **leap and catch**. Frontal, dramatic, and it uses
-the throw mechanic already built for toys in stage 2.
+### Obedience Trial — the primary contest, and build this one properly
 
-**Agility: cut.** Revisit only if everything else is finished and loved.
+Perfect fit for the frontal rig, and it's the mechanical payoff of the whole training system.
+One contest done beautifully beats three done thinly.
 
-**Economy — deliberately compressed.** The original's five-rank ladders, trainer-point breed
-grind, and hundreds of item SKUs were 2005 retention scaffolding for a device with no
-notifications. Keep: coins from contests, a small curated shop (toys, treats, collars, a
-little decor), and breed unlocks priced so a second dog is a genuine event. Cut: rank
-ladders, the item long tail, the hotel, Bark Mode, trainer points as a multi-week grind.
+- **Score 0.00–10.00, two decimals.** The precision matters: it makes a 9.34 feel earned and a
+  9.61 feel like a triumph.
+- **Judged on performance *and* grooming.** Dirty or filthy deducts; clean or beautiful gives a
+  bonus. This is the load-bearing design detail — it makes the stage-2 care loop *earn its
+  place* rather than being a chore list. Bath before a trial should be an obvious good idea
+  she works out herself.
+- The judge calls tricks; some **held** for a duration, some as **sequences**. Hold length
+  scales with how deeply the trick has been practised (stage 3 exposes `holdFor`).
+- A **free-performance** window at the end, where the deeper tricks earn the big points.
+- **She may not touch the dog during a trial.** In the original this was the point: it was the
+  true test of whether training had actually worked. We can honour it literally — voice is
+  confirmed working on the target device — with **tap cues at fully equal status**, never a
+  degraded mode. What's forbidden during a trial is *petting him through it*, not tapping.
+
+Use stage 3's interfaces: `repertoire()` for a fair trick-and-hold choice, `perform(id,
+{judged:true})` which asks **by id** (the judge says the word aloud, so cue interpretation is
+bypassed) and suppresses treats and hints, `onPerform` to subscribe, `latency` as the
+stopwatch stopping at `poseAt`, `correct` as `trick === asked`, and `held`/`holdKept`.
+
+### Disc — reframed as catch-and-leap
+
+Not a distance fetch; that needs a rig we deliberately didn't build. She flicks the disc
+**up-screen**, he tracks it upward from the front, and she **times a tap for the leap and
+catch**. Score by height and airtime rather than distance zone. Reuses the frontal-safe throw
+built for toys in stage 2. Ship it if budget allows; Obedience is the one that must be right.
+
+### Agility — cut
+
+Its top-down route map *is* the mechanic, so it fights this rig hardest, and it carries the
+least emotional payload. If a movement contest is ever wanted, **Lure Coursing** is the better
+candidate — a reel-and-chase framed as the dog running *toward the camera*, nearly free on a
+frontal rig and genuinely tense.
+
+### ⚠️ Breed is COSMETIC. This overrides ARCHITECTURE §4.
+
+The architecture's `Dog.aptitude` says "rolled at adopt from breed + jitter". **Drop the breed
+term.** The research found no sourced evidence Nintendogs modelled per-breed contest stats at
+all, and that the folklore ("retrievers are better at disc") was probably just folklore.
+
+Two reasons this matters more here than in the original:
+1. It avoids a balancing problem we have no reason to take on.
+2. **Her dream breeds must never be mechanically inferior.** The gift puppy is a Schnoodle and
+   the Cockapoo is the reward for saving up. If either turns out to be a bad obedience dog,
+   the game has told her her favourite dog is the wrong dog. Unacceptable.
+
+Per-*dog* jitter is fine and good — it makes individuals feel individual. Per-*breed* bias is
+forbidden.
+
+### Economy — two currencies, and keep the separation verbatim
+
+This is the strongest structural idea in the original and it costs nothing to reproduce:
+
+| Currency | Earned by | Spends on |
+|---|---|---|
+| **Coins** | Contest placings; selling walk finds | Toys, treats, care tools, collars, decor |
+| **Care points** | *Caring well* — feeding, washing, brushing, walks, training, turning up | Nothing directly. **Unlocks** breeds, decor, shop stock |
+
+**Money is skill and luck; points are attentiveness.** She cannot buy her way to the Cockapoo,
+and she cannot grind contests for a new rug. That separation is why the care loop had teeth
+without being a shop. Keep it exactly.
+
+### Classes — keep the shape, compress the grind hard
+
+Five classes (Beginner → Open → Expert → Master → Championship), advancing on a **top-three
+placing**. Championship needs a **≥9.00 average** to hold and **>9.60** to win — those
+thresholds are worth keeping because they give the ceiling a real name.
+
+Prize shape from the original, as a starting point for tuning: 100/50/30 → 200/100/60 →
+300/150/90 → Master 400 → Championship 600.
+
+But **compress the ladder ruthlessly.** The original's top breed sat at 50,000 trainer points
+against a 200/day cap — a *months*-long grind built to retain a 2005 handheld player with no
+notifications and no competition for attention. Target **days, not months**, to reach the
+Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but must read as
+*looking after him*, never as a punishment.
+
+### Non-negotiables
+- **Losing must never feel like rebuke.** A bad score is him being distracted or her needing
+  more practice — never the game telling her she's neglectful. No guilt, ever.
+- No affection bar. Contest feedback is his body language plus the judge's number.
+- Daily entry limits are fine as pacing, but never as a wall she hits and resents.
+- Cut outright: rank ladders per contest type, the item long tail, the hotel, Bark Mode, and
+  trainer points as a multi-week grind.
 
 ## Stage 6 — Shop, kennel, breeds, personalisation
 
