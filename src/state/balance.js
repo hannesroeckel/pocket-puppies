@@ -42,7 +42,10 @@ export const BALANCE = {
      ------------------------------------------------------------------- */
   gift: {
     breedId: 'shiba',
-    sex: 'f',          // 'f' | 'm' — drives pronouns in ui/copy.js
+    /* CONFIRMED BY THE HUMAN: the gift puppy is male. Pronouns are resolved
+       per-dog at runtime from this (state/game.js `game.pron`) — never
+       hardcoded in copy, because a second dog may not be male. */
+    sex: 'm',
   },
 
   /* ---- time & decay -------------------------------------------------- */
@@ -146,6 +149,13 @@ export const BALANCE = {
       careBonus: 0.005,         // per completed care action, max one each
       toyBonus: 0.004,          // per fetched toy
       reunionBonus: 0.010,      // on top of showUpBonus, after an 8h+ gap
+      /* per rewarded training rep (repeatable, still day-capped). Learning a
+         trick together is a bonding moment, so it pays a touch more than a
+         fetched ball — but the day cap means an afternoon of drilling can
+         never substitute for coming back tomorrow. */
+      trickBonus: 0.005,
+      /* the first time she gets a trick right on a NEW cue: a real milestone */
+      learnBonus: 0.010,
     },
     idleDrainPerSec: 0,         // the fast drift lives on MOOD now, not here
     floorRatio: 0.62,           // continuous ratchet: floor >= affection * this
@@ -353,6 +363,231 @@ export const BALANCE = {
     tease: { window: 6.0, at: 3 },
   },
 
+  /* ---- TRAINING + TRICKS ----------------------------------------------
+     The ritual is CUE -> GUIDE -> REWARD (SCOPE.md stage 3, research §5):
+     give the signal, guide the pose with a finger, reward at the right moment.
+
+     Three things here are the design, not decoration:
+
+     1. IT TAKES 3-4 REPS, SPREAD ACROSS SESSIONS. `learn.sessionSoft` damps
+        the third-and-later rep of the SAME trick in one sitting, and
+        `learn.newDayBonus` pays extra for the first rep on a new day. So
+        cramming works but is inefficient, and nothing ever *requires* a long
+        session (principle 3).
+     2. THE WOBBLE IS THE CHARM. A cue can attach to the WRONG trick
+        (`confuse.*`) and a sloppy hand signal can be MISREAD
+        (`signal.misread.*`). Both are recoverable with patience
+        (`recover.*`). Research §5: "this is one of the best mechanics in the
+        game and it is nearly free to implement."
+     3. RELIABILITY IS GATED BY MOOD AND TRUST (`obey.*`, `latency.*`), never
+        by an XP bar. A happy, bonded dog obeys first time; a low-mood one
+        hesitates, guesses, or looks away at something more interesting.
+     ------------------------------------------------------------------- */
+  train: {
+    /* WHICH TRICKS EXIST is a design decision ("a compact set that each feel
+       good beats a long list" — SCOPE stage 3), so the roster lives here.
+       `dog/anim/tricks.js` holds the specs and ASSERTS at load that its keys
+       still match this list, so the two can never drift apart.
+
+       It is also the validation whitelist: `state/game.js` refuses to create a
+       trick record for an id that is not in here. Without that, one careless
+       `bindCue(undefined, 'tap')` wrote a junk trick into the save, and it then
+       appeared as a row in the cue legend and as an askable trick in
+       `repertoire()` — which stage 5's obedience judge would have tried to
+       perform. Caught by rendering the poisoned state and looking at it. */
+    roster: ['sit', 'lieDown', 'beg', 'shake', 'spin', 'jump', 'rollOver', 'playDead'],
+    fade: 0.40,                 // seconds for the training layer to blend in/out
+    /* THE SIGNAL PAD, in virtual design space: the empty air above her, where a
+       hand signal is drawn. Touching HER is guiding or rewarding, never
+       signalling — see `halo`. */
+    pad: { top: 104, bottom: 306, r: 20, inset: 16 },
+    /* her own space, rig-local: any touch in here is a guide or a reward */
+    halo: { hx: 136, top: -330, bottom: 48 },
+    /* discoverability: after a few seconds of nothing, one ghost gesture hint
+       appears on her body — the possible gestures cycle by posture */
+    hintAfter: 3.0,
+    hintCycle: 5.5,
+    hintAlpha: 0.34,
+
+    /* ---- hand signals: eight arbitrary shapes ------------------------
+       WHICH TRICK A SIGNAL MEANS IS LEARNED, NOT FIXED. That is the whole
+       mis-association mechanic: the binding is arbitrary, so it can be
+       wrong (research §5, "the word is arbitrary"). */
+    signal: {
+      ids: ['tap', 'double', 'hold', 'up', 'down', 'left', 'right', 'circle'],
+      glyph: { tap: '·', double: ':', hold: 'o', up: '^', down: 'v', left: '<', right: '>', circle: 'O' },
+      tapTravel: 15, tapDur: 0.38, doubleGap: 0.46, holdDur: 0.40,
+      minSwipe: 28, straightAt: 0.70, circleTurn: 4.2, circleRatio: 1.9,
+      /* below this the signal was sloppy and she may read it as a neighbour */
+      crispAt: 0.62,
+      misread: { base: 0.14, perSloppy: 0.38, perLowMood: 0.20, max: 0.46 },
+      /* which signals look alike to a dog. A lazy circle is a swipe; a slow
+         double-tap is a hold. */
+      neighbours: {
+        tap: ['double'], double: ['tap', 'hold'], hold: ['double'],
+        up: ['down'], down: ['up'],
+        left: ['right', 'circle'], right: ['left', 'circle'], circle: ['left', 'right'],
+      },
+    },
+
+    /* ---- the guide: the stroke that INDUCES each pose ------------------
+       Straight from the DS trick table (research §5). Thresholds are in
+       rig-local units, the same space the petting zones live in. */
+    guide: {
+      minTravel: 19,            // rig units before a drag counts as a guide
+      straightAt: 0.62,
+      wiggleFlips: 2,           // direction reversals that count as a paw wiggle
+      holdFor: 0.52,            // press-and-hold that counts as a flop
+      tapsFor: 3,               // taps above the head that count as "jump"
+      tapWindow: 1.5,
+      circleTurn: 3.6,          // radians of turning for the floor circle
+      /* how long after the signal a guide still counts as the SAME lesson */
+      window: 3.8,
+    },
+
+    /* ---- reward timing MATTERS ---------------------------------------
+       The window opens the instant she reaches the pose. Inside `crisp` the
+       lesson lands properly; later still counts for about half; not at all
+       and she barely learns anything from the rep. */
+    reward: {
+      window: 1.30,
+      crisp: 0.52,
+      quality: { crisp: 1.0, late: 0.55, none: 0.22 },
+      treatR: 15,
+      nomDur: 0.85,
+    },
+
+    /* ---- learning ---------------------------------------------------- */
+    learn: {
+      /* reps (quality-weighted) at which she reaches level 1 / 2 / 3 */
+      levelAt: [3.0, 5.0, 8.0],
+      /* full-value reps of the SAME trick per sitting, then heavy damping —
+         she gets bored of drilling one thing, which is what spreads learning
+         across sessions without ever punishing a short one */
+      sessionSoft: 2,
+      sessionDamp: 0.35,
+      sessionGap: 300,          // seconds without a rep and the sitting resets
+      newDayBonus: 1.25,        // sleep consolidates: first rep of a new day
+      /* confidence in a cue binding */
+      confNew: 0.62,            // a fresh, correct binding
+      confPerRep: 0.16,         // grows with every correct repetition
+      confWrong: 0.45,          // a MIS-ASSOCIATED binding starts here
+      ambiguousAt: 0.22,        // two bindings this close and she guesses
+    },
+
+    /* ---- MIS-ASSOCIATION -------------------------------------------
+       She attaches the cue to whatever she thinks just happened. A long gap
+       between signal and pose, a low mood or a dog that doesn't trust you yet
+       all make the wrong connection more likely. Research is emphatic that
+       this imperfection is the charm. */
+    confuse: {
+      base: 0.10,
+      perGapSec: 0.055,         // x seconds between the signal and the pose
+      perLowMood: 0.24,
+      perLowTrust: 0.16,
+      perSloppy: 0.14,          // a vague signal is easier to mis-file
+      /* REWARD TIMING TEACHES: a crisp reward makes the connection clear, a
+         late one leaves room for her to file it under the wrong heading */
+      perLateReward: 0.18,
+      max: 0.44,
+      /* she remembers what she was doing for this long, and a mis-file
+         prefers one of those over a random trick */
+      memory: 5.0,
+    },
+
+    /* ---- recovery: patience fixes it ------------------------------- */
+    recover: {
+      perRep: 0.12,             // conf a WRONG binding loses per correct rep
+      clearAt: 0.14,            // below this she has stopped believing it
+    },
+
+    /* ---- obedience: mood and trust, not an XP bar ------------------ */
+    obey: {
+      base: 0.14,
+      perLevel: 0.13,           // x level 1..3
+      perMood: 0.34,
+      perTrust: 0.16,
+      perAptitude: 0.10,        // the breed's obedience aptitude
+      min: 0.03, max: 0.985,
+      /* how the remaining probability splits when she does NOT obey cleanly */
+      hesitate: { base: 0.45, perLevel: 0.10, perMood: 0.25 },
+      wrong: { base: 0.25, perOther: 0.06, perUnsure: 0.08 },
+      ignore: { base: 0.30, perLowMood: 0.70, perLowTrust: 0.30 },
+      /* distraction subtracts from the roll — being touched, a ball in play,
+         an unmet need she would rather you dealt with */
+      distract: { pet: 0.30, toy: 0.40, need: 0.12, max: 0.60 },
+    },
+
+    /* ---- latency: what a contest judge scores --------------------- */
+    latency: {
+      base: 0.30,
+      perLevel: 0.50,           // x (1 - level/3)
+      perLowMood: 0.55,         // x (1 - mood)
+      hesitate: [0.65, 1.45],   // the visible "looks at you, looks away" beat
+      chain: 0.55,              // extra per posture she has to get into first
+    },
+
+    /* ---- holds: practice depth, not just breadth -----------------
+       "The more a trick is practiced, the longer the dog will hold the trick"
+       (research §5) — stage 5's obedience trial scores this. */
+    hold: { base: 0.55, perLevel: 0.90, wobbleAt: 0.72 },
+
+    /* ---- clip lengths (seconds) ---------------------------------- */
+    clip: {
+      sit: 1.05, lieDown: 1.30, beg: 1.25, shake: 1.15,
+      spin: 1.55, jump: 0.95, rollOver: 1.75, playDead: 1.60,
+      /* the little "did I get it right?" look afterwards */
+      ask: 1.45, confused: 1.60,
+    },
+
+    /* ---- words, never bars (ARCHITECTURE §11 / SCOPE principle 2) --- */
+    words: {
+      conf: [[0.74, 'sure'], [0.42, 'fairly sure'], [0, 'muddled']],
+      level: [[3, 'sharp'], [2, 'steady'], [1, 'knows it'], [0.01, 'learning'], [0, 'new']],
+    },
+
+    /* ---- VOICE: OPT-IN, SINGLE-SHOT SPEECH RECOGNITION ----------------
+       The target phone was probed and reversed the prediction this used to be
+       written against (docs/PLATFORM-RISKS.md, "MEASURED ON THE REAL DEVICE"):
+       `SpeechRecognition` WORKS in the installed PWA, and the raw microphone
+       is the thing that is broken (granted, live track, zero samples — WebKit
+       185448). So the old envelope sensor is unbuildable and recognition is
+       what we have.
+
+       It is SERVER-SIDE, so it needs the network. Everything here is sized so
+       that a failure costs nothing: one press, one utterance, and any refusal,
+       error or tunnel degrades to tap IN SILENCE. Nothing in progression may
+       depend on it. */
+    voice: {
+      lang: '',                 // '' = follow navigator.language
+      maxListen: 6.0,           // watchdog: a run that says nothing at all
+      /* consecutive runs that produce neither result nor error before we stop
+         offering it for the session — the recogniser telling the same lie the
+         microphone tells */
+      deadRuns: 2,
+      cooldown: 0.60,
+      minWordLen: 2,            // tokens shorter than this are not words
+      /* word match, 0..1 similarity. `accept` is deliberately forgiving: a
+         mishearing must read as him being distracted, and refusing to hear
+         anything reads as the software being fussy. */
+      match: { accept: 0.58, ambiguous: 0.10 },
+      /* how many different sayings of the same word he keeps. The tolerance
+         this buys is also what lets two similar words collide, which is the
+         authentic mis-hearing. */
+      maxAlts: 3,
+      /* hearing his own NAME is not a cue — it is the come-when-called roll
+         (research §1.3). This is the similarity his name has to clear. */
+      nameAccept: 0.66,
+      /* p(he looks up and commits) = base + mood*perMood + trust*perTrust,
+         clamped. NEVER a recognition-accuracy gate: he heard her, he decides. */
+      attend: { base: 0.20, perMood: 0.46, perTrust: 0.26, min: 0.08, max: 0.97 },
+      /* how long he holds the step-toward-you after coming when called */
+      leanFor: 1.9,
+      /* the "call him" button in the training overlay */
+      button: { x: 40, y: 62, r: 21 },
+    },
+  },
+
   /* ---- the reunion ----------------------------------------------------
      "The greeting-on-return is the emotional payoff of the entire real-time
      system and it is one animation." (research §1.7) Intensity scales by
@@ -477,6 +712,13 @@ export const BALANCE = {
   springs: {
     /* posture */
     sit:      [42, 11.5],
+    /* ---- stage 3: two new POSTURE channels the tricks need ----
+       `down` is lying down (the body sinks, the front legs splay forward, the
+       haunches flatten) and `hop` is airborne (the body rises AND the paws
+       come up with it, which is the difference between a jump and a dog on
+       stilts). Everything else a trick needs already existed. */
+    down:     [46, 11.5],
+    hop:      [128, 12.5],
     lift:     [150, 13],
     sway:     [80, 12],
     roll:     [58, 10.5],
@@ -515,6 +757,10 @@ export const BALANCE = {
     /* legs */
     pawLiftL: [120, 13],
     pawLiftR: [120, 13],
+    /* stage 3: where a RAISED paw sits laterally. -1 tucked in under the chin
+       (begging), 0 neutral, +1 swung out clear of the body (offering a paw).
+       Scales with the lift, so a paw on the floor never moves. */
+    pawOut:   [90, 12],
     hindKick: [100, 12],
     /* petting */
     pet:      [58, 12],
@@ -542,6 +788,17 @@ export const BALANCE = {
     bolt:     [78, 12],
     toyDog:   [86, 12],     // how far into the screen she has run
     flinch:   [130, 13],
+    /* ---- stage 3: training ---- */
+    train:    [40, 12],     // training-layer blend weight
+    trickHold: [52, 12],    // how firmly she is holding the pose
+    spin:     [64, 12],     // the spin's circular travel envelope
+    treat:    [150, 13],    // the treat popping into her view
+    nom:      [160, 14],    // taking the treat
+    cueFlash: [90, 13],     // the signal read-back flash
+    /* he came when called: a step toward the camera. Soft and slightly
+       under-damped, so he arrives with a little momentum rather than sliding
+       into place — that overshoot is most of what makes it read as eager. */
+    call:     [46, 9.5],
   },
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },
 
@@ -593,7 +850,53 @@ export const BALANCE = {
     },
     /* legs */
     leg: { frontHipAt: 0.80, hindHipAt: 0.72, bow: 2.5, sitBow: 3, liftBow: 7,
-           pawSpread: 0.42, hindSpread: 0.72, hindOut: 0.88, sitLift: 6, liftAmt: 16 },
+           pawSpread: 0.42, hindSpread: 0.72, hindOut: 0.88, sitLift: 6, liftAmt: 16,
+           /* ---- stage 3 ----
+              LYING DOWN: the body sinks `downDrop` rig units, the front paws
+              splay outward and forward (nearer the camera, so slightly BELOW
+              the floor line) and the hind paws tuck away behind her.
+              AIRBORNE: the paws come up with the body, or she reads as a dog
+              on stilts rather than a dog in the air. */
+           downSpread: 13, downPawY: 5, downBow: 9, downHindTuck: 7,
+           hopPawShare: 0.82,
+           /* WHERE A RAISED PAW GOES SIDEWAYS, driven by the `pawOut` channel
+              and scaled by how far the paw is off the floor — so nothing that
+              only lifts a paw a little (idle kicks, running strides, the
+              bad-spot paw pull) moves laterally at all, and stage 1 and 2
+              behaviour is bit-for-bit unchanged.
+
+              Both of these were measured by looking: a paw raised straight up
+              lands against the cream bib and a cream paw simply vanishes, and
+              a beg with the paws swung out reads as a T-pose rather than as
+              begging. So SHAKE swings out clear of the body, and BEG tucks in
+              under the chin. */
+           liftOut: 26, liftOutFrom: 0.6 },
+    /* the two new posture channels, in rig units */
+    trick: {
+      downDrop: 25,        // how far the body sinks when she lies down
+      downSquash: 0.11,    // and how much it flattens
+      downWiden: 0.13,
+      hopHeight: 36,       // peak altitude of a jump
+      hopSquash: 0.06,
+      /* the spin: she trots a small circle. On this rig DEPTH IS SCALE
+         (ARCHITECTURE §12.6), so the far half of the circle is smaller and
+         squashed rather than drawn from behind. */
+      /* The circle has to be BIG ENOUGH TO SEE. The first pass used rx 34 and
+         a 13% scale change, and in a still frame it read as "the dog is
+         standing slightly to the left" — so the travel, the depth and the head
+         sweep were all pushed up, and the floor scuff was added to show the
+         path she actually took (dog/train.js draws it). */
+      spin: { rx: 50, ry: 19, scale: 0.21, squash: 0.13, turns: 1, lean: 0.13, scuff: 0.55 },
+      /* roll over: the silhouette narrows as she goes over, which is how a
+         frontal rig gets away with a roll at all */
+      roll: { squashX: 0.42, rot: 1.15, paws: 1.25 },
+      /* play dead: a flop onto her side, tongue out, one paw up */
+      dead: { rot: 0.62, squashX: 0.14, tilt: 0.55, paw: 1.15 },
+      /* CAME WHEN CALLED: a step toward the camera. There is no gait cycle and
+         none is needed — bigger and slightly lower IS "he came over" on this
+         rig (§12.6). Kept small: past ~0.16 he crops at the edges of frame. */
+      call: { scale: 0.095, drop: 15 },
+    },
   },
 
   /* ---- fur (ART FIX 1: clumps must read as fur, not nubs) -------------
@@ -675,6 +978,10 @@ export const BALANCE = {
       maxLen: 14,
     },
     care: { rowH: 56, iconR: 13, hintY: 96 },
+    /* the training overlay. THE LEGEND IS HER MENTAL MODEL, not a menu: each
+       row is a signal she knows and the trick SHE thinks it means, in words.
+       That is what makes a mis-association visible instead of mysterious. */
+    train: { hintY: 82, legendTop: 132, rowH: 19, glyphR: 11, maxRows: 8 },
   },
 
   /* ---- reduced motion ------------------------------------------------ */

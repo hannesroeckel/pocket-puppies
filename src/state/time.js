@@ -12,10 +12,18 @@ import { clamp } from '../engine/draw.js';
 const T = BALANCE.time;
 const HOUR = 3600e3;
 
+/** a finite number, or the fallback — see state/game.js on why this is needed */
+const num = (v, f = 0) => { const n = +v; return Number.isFinite(n) ? n : f; };
+
 /** Local midnight-based day index (NOT UTC — she lives in a timezone). */
 export function dayIndex(ms) {
-  const d = new Date(ms);
-  return Math.floor((ms - d.getTimezoneOffset() * 60e3) / 86400e3);
+  /* An unguarded NaN came back as NaN, and since `NaN !== NaN` every caller
+     that compares day indices concluded "it is a new day" on every single
+     call — which silently reset the daily affection ledger and uncapped the
+     anti-grind design. Guarded at the source. */
+  const t = num(ms, Date.now());
+  const d = new Date(t);
+  return Math.floor((t - d.getTimezoneOffset() * 60e3) / 86400e3);
 }
 export function isNewDay(prevMs, nowMs) {
   if (!prevMs) return true;
@@ -41,7 +49,12 @@ export function timeOfDay(now = Date.now()) {
  */
 export function applyElapsed(game, now = Date.now()) {
   const state = game.state;
-  let last = state.lastSeenAt || now;
+  /* `now` and `lastSeenAt` are the two inputs the entire offline model rests
+     on. A bad value in either used to make every decay, the reunion trigger and
+     the day boundary NaN at once — and `lastSeenAt` is persisted, so the
+     corruption survived the relaunch that would otherwise have cleared it. */
+  now = num(now, Date.now());
+  let last = num(state.lastSeenAt, 0) || now;
 
   /* --- CLOCK-TAMPER GUARD ---------------------------------------------
      iOS suspends JS entirely in the background, so all offline progression
@@ -130,7 +143,9 @@ export function reunionIntensity(hours, affection) {
  */
 export function decayLive(game, dt) {
   if (!T.liveDecay) return;
-  const perSec = dt / 3600;
+  const d = num(dt, 0);
+  if (d <= 0) return;
+  const perSec = d / 3600;
   for (const key in T.needDecayPerHour) {
     const per = T.needDecayPerHour[key];
     if (!per) continue;

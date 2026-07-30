@@ -781,19 +781,29 @@ export function createDogRenderer(rig) {
     c.save();
     c.translate(rig.x, rig.y);
     /* rig.sy is the FORESHORTENING channel: running into the screen squashes
-       vertically while the uniform scale shrinks. 1 for a stage-1 dog. */
-    c.scale(rig.s, rig.s * (rig.sy === undefined ? 1 : rig.sy));
+       vertically while the uniform scale shrinks. 1 for a stage-1 dog.
+       rig.sx is its horizontal twin (stage 3), which is how a roll-over reads
+       on a rig that cannot show its own back. */
+    c.scale(rig.s * (rig.sx === undefined ? 1 : rig.sx),
+      rig.s * (rig.sy === undefined ? 1 : rig.sy));
     if (!G) initGrads(c);
 
     const sit = P.sit;
+    /* stage 3 posture channels. `|| 0` so a rig built before them still draws. */
+    const dn = P.down || 0, hop = P.hop || 0;
+    const LG = R.leg, TR = R.trick;
 
     /* ---- contact shadow ---- */
     c.save();
-    const shSpread = 1 + s.sit.x * 0.10 + s.squash.x * 0.20;
+    /* lying down spreads the contact patch; a jump shrinks and fades it, which
+       is most of what sells "her paws have left the floor" */
+    const shSpread = 1 + s.sit.x * 0.10 + s.squash.x * 0.20 + dn * 0.22;
     c.translate(P.bodyX * 0.45, 0);
-    c.scale(shSpread, 0.26 * (1 - clamp(s.lift.x, 0, 20) / 70));
+    c.scale(shSpread, 0.26 * (1 - clamp(s.lift.x, 0, 20) / 70) * (1 - hop * 0.45));
+    c.globalAlpha = 1 - hop * 0.42;
     c.fillStyle = G.shadow;
     c.beginPath(); c.arc(0, 0, D.bodyHW * 1.16, 0, TAU); c.fill();
+    c.globalAlpha = 1;
     c.restore();
 
     /* ---- tail (behind the body) ---- */
@@ -803,14 +813,21 @@ export function createDogRenderer(rig) {
     const hipY = P.bodyY + P.bodyHH * R.leg.hindHipAt;
     const kick = Math.sin(rig.kickPhase) * s.hindKick.x;
     const hw = P.bodyHW;
-    drawLeg(c, P.bodyX - D.hipX, hipY - 6, P.bodyX - D.hindPawX, -5 + sit * 3 - Math.max(0, kick) * 7,
+    /* LYING DOWN tucks the hind paws away behind her; AIRBORNE takes them up
+       with the body, otherwise the legs stretch and she reads as a dog on
+       stilts rather than a dog in the air. */
+    const hindY = -5 + sit * 3 + dn * LG.downHindTuck - hop * TR.hopHeight * LG.hopPawShare;
+    const hindIn = 1 - dn * 0.22;
+    drawLeg(c, P.bodyX - D.hipX, hipY - 6, P.bodyX - D.hindPawX * hindIn, hindY - Math.max(0, kick) * 7,
       -(4 + sit * 15), D.legW * 0.86, true, 1);
-    drawLeg(c, P.bodyX + D.hipX, hipY - 6, P.bodyX + D.hindPawX, -5 + sit * 3 + Math.min(0, kick) * 7,
+    drawLeg(c, P.bodyX + D.hipX, hipY - 6, P.bodyX + D.hindPawX * hindIn, hindY + Math.min(0, kick) * 7,
       (4 + sit * 15), D.legW * 0.86, true, 1);
 
-    /* ---- haunches (reads as "sitting") ---- */
-    if (sit > 0.02) {
-      c.globalAlpha = clamp(sit, 0, 1);
+    /* ---- haunches (reads as "sitting") ----
+       They fade out as she goes down: a lying dog has no haunch bulges, and
+       leaving them in is what makes a lie-down read as a sit that slipped. */
+    if (sit > 0.02 && dn < 0.98) {
+      c.globalAlpha = clamp(sit * (1 - dn), 0, 1);
       c.fillStyle = pal.line;
       ell(c, P.bodyX + hw * 0.80, hipY - 14, hw * 0.40, hw * 0.46, 0.12); c.fill();
       ell(c, P.bodyX - hw * 0.80, hipY - 14, hw * 0.40, hw * 0.46, -0.12); c.fill();
@@ -857,15 +874,26 @@ export function createDogRenderer(rig) {
     const neckK = rig.drive.neck || 0;
     if (neckK > 0.01) drawNeck(c, neckK);
 
-    /* ---- front legs ---- */
+    /* ---- front legs ----
+       LYING DOWN splays them outward and slightly forward — forward on this
+       camera means NEARER, so the paws go a little below the floor line and
+       the leg bows out. That is the sphinx pose, and it is the whole reason a
+       lie-down reads at all from the front. */
     const fHipY = P.bodyY + P.bodyHH * R.leg.frontHipAt;
     for (let i = 0; i < 2; i++) {
       const sd = i === 0 ? -1 : 1;
       const lf = rig.pawLift[i].x;
-      const pawX = P.bodyX + sd * D.pawX + sd * sit * 2 + lf * sd * 3;
-      const pawY = -1 + sit * R.leg.sitLift - lf * R.leg.liftAmt;
+      /* the lateral term: a small natural outward drift with the lift, plus
+         the `pawOut` channel scaled by how far off the floor the paw actually
+         is. A paw on the ground never moves sideways, whatever pawOut says. */
+      const hi = Math.max(0, lf - LG.liftOutFrom);
+      const out = lf * 3 + hi * s.pawOut.x * LG.liftOut;
+      const pawX = P.bodyX + sd * D.pawX + sd * sit * 2 + sd * out + sd * dn * LG.downSpread;
+      const pawY = -1 + sit * LG.sitLift - lf * LG.liftAmt
+        + dn * LG.downPawY - hop * TR.hopHeight * LG.hopPawShare;
       drawLeg(c, P.bodyX + sd * D.shoulderX, fHipY - 4, pawX, pawY,
-        sd * (R.leg.bow + sit * R.leg.sitBow + lf * R.leg.liftBow), D.legW, false, 1 + lf * 0.06);
+        sd * (LG.bow + sit * LG.sitBow + lf * LG.liftBow + dn * LG.downBow),
+        D.legW, false, 1 + lf * 0.06 + dn * 0.10);
     }
 
     /* ---- cream chest ruff over the leg tops ----

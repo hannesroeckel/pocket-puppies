@@ -22,6 +22,9 @@ import { createPetting } from '../dog/pet.js';
 import { createCare } from '../dog/care.js';
 import { createToy } from '../dog/toy.js';
 import { createReunion } from '../dog/reunion.js';
+import { createTraining } from '../dog/train.js';
+import { createVoice } from '../dog/voice.js';
+import { capitalise } from '../state/game.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
 import { createToasts } from '../ui/toast.js';
@@ -271,6 +274,7 @@ export function createRoomScene() {
   let app = null;
   let rig = null, dog = null, idle = null, pet = null;
   let care = null, toy = null, reunion = null, naming = null;
+  let train = null, voice = null;
   let hud = null, nav = null, toasts = null, sheet = null;
   let roomCv = null, ovCv = null;
   const rng = createRng(BALANCE.rng.seed).fork(3);
@@ -537,6 +541,7 @@ export function createRoomScene() {
   function navAction(a, n) {
     if (n.id === 'care') { openCare(); return; }
     if (n.id === 'settings') { openSettings(); return; }
+    if (n.id === 'train') { startTrain(); return; }
     if (n.id === 'play') {
       /* Play is not a scene: the ball is in the room. Point at it and get out
          of the way — flicking it up-screen is the whole interface. */
@@ -551,13 +556,54 @@ export function createRoomScene() {
   /** start a care action, closing anything that would fight it */
   function startCare(kind) {
     if (toy && toy.busy) { toasts.show('She is busy with the ball'); return false; }
+    if (train && train.modal) train.stop();
     if (care.mode === kind) { care.stop(); return false; }
     pet.cancel();
     care.resetStroke();
     return care.start(kind);
   }
 
+  /** enter training mode, closing anything that would fight it */
+  function startTrain() {
+    if (!train) return false;
+    if (train.modal) { train.stop(); return false; }
+    if (toy && toy.busy) {
+      const P = app.game.pron;
+      toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
+      return false;
+    }
+    if (care.modal) care.stop();
+    pet.cancel();
+    return train.start();
+  }
+
   /* ---- settings sheet --------------------------------------------- */
+  /**
+   * The voice row's wording, which is the ONLY place in the game the
+   * microphone is ever mentioned. It is an extra, so it is described as one —
+   * and when it cannot work here it says so plainly, once, and stops offering
+   * (docs/PLATFORM-RISKS.md). Pronouns come from per-dog data at draw time.
+   */
+  function voiceRow() {
+    const P = app.game.pron;
+    if (!voice || !voice.supported) {
+      return { id: 'voice-off', label: 'Voice cues: not available', note: 'This device cannot listen — taps do everything' };
+    }
+    if (voice.retired) {
+      return { id: 'voice-off', label: 'Voice cues: not available', note: 'Listening did not work here — taps do everything' };
+    }
+    if (voice.state === 'denied') {
+      return { id: 'voice-off', label: 'Voice cues: blocked', note: 'The microphone was declined — taps work just as well' };
+    }
+    if (voice.armed) {
+      return {
+        id: 'voice', label: 'Voice cues: on',
+        note: `Tap the bubble while training and say a word — ${P.they} learn${P.s} it`,
+      };
+    }
+    return { id: 'voice', label: 'Voice cues: off', note: 'Optional extra — every trick works by hand alone' };
+  }
+
   function openSettings() {
     const g = app.game;
     sheetKind = 'settings';
@@ -570,6 +616,7 @@ export function createRoomScene() {
           note: g.isNamed ? 'Tap to rename' : 'She is still waiting for a name',
         },
         { id: 'sound', label: app.game.state.settings.sound ? 'Sound: on' : 'Sound: off', note: 'Sounds arrive in a later update' },
+        voiceRow(),
         { id: 'export', label: 'Copy save code', note: 'Keep a backup of your bond' },
         { id: 'import', label: 'Load save code', note: 'Paste a code from another device' },
         { id: 'close', label: 'Done' },
@@ -594,6 +641,26 @@ export function createRoomScene() {
       app.game.setSetting('sound', on);
       app.audio.setEnabled(on);
       openSettings();
+      return;
+    }
+    /* ---- the microphone: opt-in, and it degrades in silence -----------
+       Toggling the row only records the PREFERENCE. It deliberately does not
+       open the microphone: the permission prompt belongs to the gesture that
+       presses "call him" while training, because that is the moment where the
+       player has asked a question and is waiting for an answer. */
+    if (id === 'voice') {
+      const on = !voice.armed;
+      voice.arm(on);
+      app.game.setSetting('mic', on);
+      if (on) {
+        const P = app.game.pron;
+        toasts.show(`Tap the bubble while training and say a word to ${P.them}`);
+      }
+      openSettings();
+      return;
+    }
+    if (id === 'voice-off') {
+      /* nothing to toggle — the row is a statement, not a switch */
       return;
     }
     if (id === 'export') {
@@ -689,6 +756,35 @@ export function createRoomScene() {
         spawn: (kind, vx, vy) => spawn(kind, vx, vy),
         sound: (name) => app.audio.play(name),
       });
+
+      /* ---- TRAINING (stage 3) ------------------------------------------
+         Training is IN THE ROOM, not a separate scene: the ritual is her, in
+         her corner, with the same rig and the same petting field under it.
+         (Deviation from ARCHITECTURE §2's `scenes/train.js` — documented in
+         §13. Stage 2 made care and play in-room for the same reason.)
+
+         VOICE IS OPT-IN AND ADDITIVE. The training layer never asks whether
+         recognition exists: it takes hand signals, and a heard word simply
+         arrives as one more signal if it happens to be working. Nothing is
+         ever listening on its own — one press, one utterance (dog/voice.js). */
+      voice = createVoice({
+        onHeard: (text) => { if (train) train.heard(text); },
+        onState: () => {
+          /* only ever surfaced where she went looking for it */
+          if (sheetKind === 'settings' && sheet.isOpen) openSettings();
+        },
+      });
+      /* restore the opt-in across sessions. `arm` never prompts. */
+      if (app.game.state.settings.mic) voice.arm(true);
+      train = createTraining(rig, {
+        game: app.game, pet, idle, rng, reduced: app.reduced, voice,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        /* she will not be asked to learn anything while she is eating, being
+           washed, or off after the ball */
+        busyElsewhere: () => !!(care.modal || (toy && toy.busy) || reunion.active),
+      });
       naming = createNaming({
         game: app.game, reduced: app.reduced,
         onName: (name) => {
@@ -710,10 +806,10 @@ export function createRoomScene() {
       });
 
       nav = createNav([
-        /* care and play are in-room features now, not separate scenes */
+        /* care, play and training are in-room features, not separate scenes */
         { id: 'care', label: 'Care', available: true },
         { id: 'walk', label: 'Walk', available: app.nav.has('walk') },
-        { id: 'train', label: 'Train', available: app.nav.has('train') },
+        { id: 'train', label: 'Train', available: true },
         { id: 'play', label: 'Play', available: true },
         { id: 'shop', label: 'Shop', available: app.nav.has('shop') },
         { id: 'settings', label: 'More', icon: 'settings', available: true },
@@ -757,6 +853,10 @@ export function createRoomScene() {
       /* the naming beat owns a real DOM input; it must not outlive the scene */
       if (naming) naming.close();
       if (care) care.stop();
+      if (train) train.stop();
+      /* the microphone must never outlive the scene that asked for it: a live
+         mic indicator on a puppy game would be alarming, and correctly so */
+      if (voice) voice.abort();
     },
 
     resize(a) {
@@ -787,11 +887,17 @@ export function createRoomScene() {
       reunion.update(dt);
       care.update(dt, game.mood);
       toy.update(dt, game.mood);
+      train.update(dt, game.mood);
 
       /* --- the pose pipeline, in order ---
-         base -> idle -> pet -> care -> toy -> reunion -> resolve
-         Care sits AFTER petting on purpose (see dog/care.js) and the reunion
-         sits last because it owns the whole animal for six seconds. */
+         base -> idle -> pet -> care -> train -> toy -> reunion -> resolve
+         Care sits AFTER petting on purpose (see dog/care.js), TRAINING sits in
+         the same slot as care (they are mutually exclusive), and the reunion
+         sits last because it owns the whole animal for six seconds.
+
+         `toy.apply` is SKIPPED while a trick owns her: it rewrites rig.x/y/s/sy
+         back to home on every idle frame, which would fight the spin. Same
+         reason the reunion skips it. */
       const mood = game.mood;
       rig.base(mood, dt);
       if (!reunion.active) {
@@ -804,7 +910,8 @@ export function createRoomScene() {
       }
       pet.apply(dt, mood);
       care.apply(dt, mood);
-      if (!reunion.active) toy.apply(dt, mood);
+      train.apply(dt, mood);
+      if (!reunion.active && !train.busy) toy.apply(dt, mood);
       reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
@@ -820,9 +927,8 @@ export function createRoomScene() {
       toasts.update(dt);
       sheet.update(dt);
       hud.update(dt);
-      /* chrome gets out of the way for the two beats that need the screen */
       /* chrome gets out of the way for the beats that need the whole screen */
-      hud.visible = !naming.active && !care.modal && !reunion.active;
+      hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active;
     },
 
     draw(a, g) {
@@ -862,6 +968,9 @@ export function createRoomScene() {
 
       if (!toyBehind) toy.draw(g);
       care.drawFront(g);
+      /* the treat, the reward ring and the ghost gesture hints sit in FRONT of
+         her, the way the bowl does */
+      train.drawFront(g);
 
       /* hand glow */
       const gl = pet.glow;
@@ -883,8 +992,9 @@ export function createRoomScene() {
 
       reunion.drawOver(g);
       care.drawOver(g);
+      train.drawOver(g);
       hud.draw(g, view);
-      if (!naming.active && !care.modal && !reunion.active) nav.draw(g);
+      if (!naming.active && !care.modal && !train.modal && !reunion.active) nav.draw(g);
       toasts.draw(g, nav.y - 22);
       sheet.draw(g);
       naming.draw(g, view);
@@ -915,6 +1025,18 @@ export function createRoomScene() {
           pet.down(l0.x, l0.y, ev.x, ev.y);
           return;
         }
+        /* TRAINING FIRST, and the same shape as wash and brush: a signal drawn
+           in the pad is consumed, but a touch on HER passes straight through to
+           the petting field, so guiding her into a pose still dents her coat,
+           still finds the sweet spots, and still reads as touching a dog. */
+        if (train.modal) {
+          const l0 = local();
+          if (train.pointer(ev, l0)) { capture = 'train'; return; }
+          capture = 'dog';
+          a.game.noteTouch();
+          pet.down(l0.x, l0.y, ev.x, ev.y);
+          return;
+        }
         if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.showNeeds(); return; }
         const n = nav.hit(ev.x, ev.y);
         if (n) { capture = 'nav'; pressedNav = n; nav.pressed = n.id; return; }
@@ -932,10 +1054,13 @@ export function createRoomScene() {
       if (ev.type === 'move') {
         if (capture === 'toy') { toy.pointer(ev, local()); return; }
         if (capture === 'care') { care.pointer(ev, local()); return; }
+        if (capture === 'train') { train.pointer(ev, local()); return; }
         if (capture !== 'dog') return;
         const l = local();
         /* wash and brush read the same stroke the petting field reads */
         if (care.modal) care.pointer(ev, l);
+        /* ...and so does a guide gesture */
+        if (train.modal) train.pointer(ev, l);
         pet.move(l.x, l.y, ev.x, ev.y);
         return;
       }
@@ -943,6 +1068,7 @@ export function createRoomScene() {
       if (ev.type === 'up') {
         if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
         if (capture === 'care') { care.pointer(ev, local()); capture = ''; return; }
+        if (capture === 'train') { train.pointer(ev, local()); capture = ''; return; }
         if (capture === 'nav') {
           nav.pressed = '';
           const n = nav.hit(ev.x, ev.y);
@@ -950,6 +1076,9 @@ export function createRoomScene() {
           pressedNav = null;
         } else if (capture === 'dog') {
           if (care.modal) care.pointer(ev, local());
+          /* the guide is decided on release: it is the whole stroke that means
+             something, not the last frame of it */
+          if (train.modal) train.pointer(ev, local());
           pet.up(!ev.moved);
         }
         capture = '';
@@ -960,7 +1089,11 @@ export function createRoomScene() {
         nav.pressed = ''; pressedNav = null;
         if (capture === 'toy') toy.pointer(ev, local());
         else if (capture === 'care') care.pointer(ev, local());
-        else if (capture === 'dog') pet.cancel();
+        else if (capture === 'train') train.pointer(ev, local());
+        else if (capture === 'dog') {
+          if (train.modal) train.pointer(ev, local());
+          pet.cancel();
+        }
         capture = '';
       }
     },
@@ -989,6 +1122,7 @@ export function createRoomScene() {
         },
         care: care.debug,
         toyState: toy.debug,
+        train: train.debug,
         reunion: reunion.debug,
         naming: naming.debug,
         named: app.game.isNamed,
@@ -1006,6 +1140,12 @@ export function createRoomScene() {
         pupilRaw: [+rig.springs.pupilX.x.toFixed(3), +rig.springs.pupilY.x.toFixed(3)],
         ear: [+rig.springs.earL.x.toFixed(3), +rig.springs.earR.x.toFixed(3)],
         sit: +rig.springs.sit.x.toFixed(2), eye: +rig.pose.eyeOpenEff.toFixed(2),
+        /* stage 3's posture channels, so a trick pose is verifiable by number
+           as well as by eye */
+        downS: +rig.springs.down.x.toFixed(2), hopS: +rig.springs.hop.x.toFixed(2),
+        sx: +(rig.sx === undefined ? 1 : rig.sx).toFixed(3),
+        pawL: +rig.pawLift[0].x.toFixed(2), pawR: +rig.pawLift[1].x.toFixed(2),
+        roll: +rig.springs.roll.x.toFixed(3), tilt: +rig.springs.tilt.x.toFixed(3),
         smile: +rig.springs.eyeSmile.x.toFixed(2), mouth: +rig.springs.mouth.x.toFixed(2),
         wag: +rig.springs.wagSpd.x.toFixed(2), amp: +rig.springs.wagAmp.x.toFixed(2),
         melt: +rig.springs.melt.x.toFixed(2),
@@ -1028,9 +1168,13 @@ export function createRoomScene() {
     get reunion() { return reunion; },
     get naming() { return naming; },
     get hud() { return hud; },
+    get train() { return train; },
+    get voice() { return voice; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     startCare(kind) { return startCare(kind); },
     stopCare() { care.stop(); },
+    startTrain() { return startTrain(); },
+    stopTrain() { if (train) train.stop(); },
     playReunion(intensity, hours) {
       if (naming.active) naming.skip();
       return reunion.start(intensity, hours);

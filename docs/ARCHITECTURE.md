@@ -653,3 +653,209 @@ Real audio (`audio.pending` now also owes `crunch`, `lap`, `water-pour`, `scrub`
 `shake-big`, `brush`, `grumble-brush`, `toy-throw`, `toy-land`, `toy-grab`, `scamper`,
 `yelp`, `huff`, `proud-yip`, `bark`, `boop`, `launch`, `perk`), a shop for care items
 (brushes and shampoos are free and universal for now), and the install prompt.
+
+---
+
+## 13. Stage 3 (Training + tricks) — as built
+
+Stage 3 is landed. This section is **authoritative** where it differs from §11, §12 and above.
+
+### 13.1 Contract deviations
+
+**A. Training is IN THE ROOM, not `scenes/train.js`.** §2 lists a separate scene; stage 2
+already made care and play in-room for the same reason, and the reason is stronger here: the
+ritual is *him, in his corner, with the same rig and the same petting field under it*.
+Guiding a pose is a stroke, so it must dent his coat and find the sweet spots exactly as
+petting does — which it cannot do across a scene boundary. `scenes/train.js` is therefore
+**not built and should not be built**; `app.nav.has('train')` stays false and the Train nav
+item calls `startTrain()` in the room. `dog/train.js` is the layer.
+
+**B. Voice is `SpeechRecognition`, not an envelope sensor — and SCOPE stage 3 is superseded
+here.** `docs/SCOPE.md` says the mic is "a **gesture sensor** (loudness/duration/pitch
+envelope), never ASR". That was written against a prediction the real-device probe
+**reversed** (see PLATFORM-RISKS, "MEASURED ON THE REAL DEVICE"): recognition *works* in the
+installed PWA, and the raw microphone is what is broken — permission granted, live track,
+**zero samples ever** (WebKit 185448). Envelope analysis is unbuildable because there is
+nothing to analyse. `dog/voice.js` is single-shot recognition in the exact proven
+configuration (`continuous:false`, `interimResults:false`, `maxAlternatives:1`), triggered
+only from an explicit "call him" gesture, never ambient.
+
+**C. `train.apply` runs in `care.apply`'s slot, after `pet.apply`.** Same deviation from §6 as
+stage 2's §12.2, same reason; training and care are mutually exclusive so they share the slot.
+`toy.apply` is **skipped** while `train.busy` — it rewrites `rig.x/y/s/sy` back to home every
+idle frame, which would fight the spin.
+
+```
+rig.base -> idle -> pet -> care -> train -> toy -> reunion -> rig.update -> pet.computeZones
+```
+
+**D. `BALANCE.train.roster` duplicates the trick id list.** `dog/anim/tricks.js` holds the
+specs; `state/game.js` needs the ids to refuse junk trick records without importing the dog
+layer into the state layer. The two are checked against each other at module load and throw if
+they diverge, so they cannot silently drift.
+
+### 13.2 Interfaces stage 4+ codes against
+
+```js
+// dog/train.js
+createTraining(rig, { game, pet, idle, rng, reduced, voice, spawn, sound, toast,
+                      busyElsewhere }) -> {
+  active, modal, busy, weight, hint, listening,
+  start(), stop(), update(dt, mood), apply(dt, mood),
+  pointer(ev, local) -> consumed, drawFront(g), drawOver(g),
+  heard(transcript) -> { kind:'teach'|'name'|'cue'|'unknown'|'nothing', ... },
+  callHim() -> bool,                 // opens the mic for ONE utterance
+  /* ---- the stage-5 obedience-trial surface ---- */
+  perform(id, { judged=true, force }) -> performance|null,
+  performance,                       // {trick, asked, state, outcome, correct, latency,
+                                     //  reached, held, holdFor, holdKept, rewarded,
+                                     //  quality, taught, judged, done}
+  onPerform(fn) -> unsubscribe,      // every result as it lands
+  chanceOf(id) -> { obey, hesitate, wrong, ignore, level, mood, trust,
+                    distraction, expectLatency },
+  holdFor(id) -> seconds,
+  repertoire() -> [{ id, name, level, word, cue, cueWord, reps, asked, ok,
+                     reliability, holdFor, prereq, transient }],  // best first
+  roster, trickForCue(sig), cueFor(id), isLearned(id), posture,
+  injectSignal(sig, conf), injectGuide(id, extra), injectReward(), cue, debug,
+}
+
+// dog/voice.js  — nothing in progression may depend on any of this
+createVoice({ onHeard(transcript), onState(state) }) -> {
+  supported, state, armed, listening, retired, offline, lastText, lastAt, heard, level,
+  arm(on), listen() -> Promise<{ok, transcript, reason}>, abort(), update(dt),
+  inject(text), simulate(reason), debug }
+normWord(s)   wordSim(a, b)   utteranceSim(transcript, word)
+matchWord(transcript, words) -> { sig, sim, second, ambiguous }
+
+// state/game.js  (additive)
+trickRecord(id), trick(id), tricks, trickLevel(id), isLearned(id), practised(), known(),
+trickRep(id, quality, now) -> { reps, level, leveledUp, weight, damped, freshDay },
+bindCue(id, sig, conf), nudgeCueConf(id, delta), forgetCue(id), tricksForCue(sig),
+cueFor(id), noteAsk(id, ok), describeTrickLevel(id), describeCueConf(id),
+cueVoice, wordFor(sig), spokenCues(), learnWord(sig, word), forgetWord(sig), clearVoice(),
+num(v, fallback), clampNum(v, a, b, fallback), sanitiseDog(d)      // exported guards
+
+// dog/anim/tricks.js
+TRICKS, TRICK_IDS, TRICK_POSE[id](x, k, u), trickName(id), endPosture(id, was)
+```
+
+**What stage 5's obedience trial should use.** `repertoire()` gives what he can be asked for,
+best first, with `reliability` (the live `p(obey)`) and `holdFor`, so a judge can pick a fair
+trick and set a fair hold. `perform(id, {judged:true})` asks **by id**, bypassing cue
+interpretation entirely — the judge says the word out loud, he does not have to read a hand —
+and `judged` suppresses the treat, the reward window and the teaching hints so the performance
+itself is what is scored. Subscribe with `onPerform`. **`latency` is the stopwatch**: it stops
+at `TRICKS[id].poseAt`, the frame the pose actually lands, not when the clip ends. `correct`
+is `trick === asked`. `held` / `holdKept` score the hold, and hold length grows with practice
+depth (0.55s at level 0 → 3.25s at level 3), which is what research §5 says the trial is
+really testing. `outcome` is `'obey'|'hesitate'|'wrong'|'ignore'|'guided'|'came'`.
+
+### 13.3 Schema v3
+
+`SCHEMA_VERSION = 3`, `MIGRATIONS[3]`. Added per dog: `tricks{}` (per trick: `level`, `reps`,
+`cue`, `cueConf`, `learnedAt`, `lastAt`, `sessReps`, `sessAt`, `dayAt`, `asked`, `ok`) and
+`cueVoice{}` (per signal slot: `{word, alts[], n}`).
+
+`cueVoice` **briefly held a loudness/pitch envelope** during this stage's build, from the
+approach that could not work on the device. `save.js`'s `normVoice()` drops any such entry
+rather than migrating it — there is no meaningful conversion from an envelope to a word, and
+the cost is re-teaching one word of an opt-in extra. Verified: a v1 (stage-1) save loads with
+`name='Mochi'`, `affection=0.608`, `trust=0.225`, its `sit` at level 2 with `reps` derived
+from `levelAt` and its `cue` preserved; a v2 (stage-2) save keeps its dirt, gloss and bond
+ledger, and its legacy envelope is gone. Both then train normally.
+
+### 13.4 Mutator hardening (not local to stage 3)
+
+`engine/draw.js`'s `clamp` is `v < a ? a : (v > b ? b : v)`. **Every comparison against NaN is
+false, so clamp passes NaN and `undefined` straight through.** `setMood(undefined)` therefore
+wrote `undefined` into mood, and the damage surfaced frames later in the rig, or launches
+later out of localStorage — never at the caller. Three layers now:
+
+1. **`state/game.js`** — every numeric mutator runs its arguments through `num` / `clampNum`.
+   The policy is **reject, not coerce**: a nonsense delta is a no-op returning the current
+   value, because snapping to zero would look like progress being erased. Also fixed:
+   `dayIndex(NaN)` returned NaN, and since `NaN !== NaN` the daily bond ledger "rolled over to
+   a new day" on *every* call, silently uncapping the day cap the whole anti-grind design
+   rests on. `awardDay` threw outright on a numeric `kind`. `trickRecord` now refuses ids
+   outside `BALANCE.train.roster`; junk ids used to persist and show up both as rows in the
+   cue legend and as askable entries in `repertoire()`, which stage 5 would have performed.
+2. **`engine/spring.js`** — the worst instance, and the only one that never recovers. A spring
+   is a feedback loop, so one NaN in `x`/`t`/`v` is permanent and **the whole animal
+   disappears until relaunch**. `to`/`set`/`kick` reject bad input; `step` **self-heals**,
+   turning a fatal bug into a one-frame glitch. `approach()` likewise, since it drives
+   `rig.x/y/s`.
+3. **`state/time.js`** — `now` / `lastSeenAt` guarded, because `lastSeenAt` is *persisted* and
+   would survive the relaunch that should have cleared it.
+
+`sanitiseDog()` runs once per load and repairs a save written by a build without the guards.
+Verified by attacking every mutator with `undefined | null | NaN | ±Infinity | 'abc' | {} |
+[] | ±999`, then poisoning every spring and `rig.x/y/s` directly: nothing throws, nothing in
+state goes non-finite, no spring stays poisoned, and he still performs.
+
+### 13.5 Player-facing copy
+
+Every stage-3 string is in **`COPY` at the top of `dog/train.js`**, and only there. Each is a
+function taking `P = game.pron`, so **no pronoun is hardcoded** — the gift puppy is male and a
+later dog may not be. `TRICKS[id].hint` in `dog/anim/tricks.js` carries the eight teaching
+prompts and is deliberately pronoun-free. The **only** place the microphone is named to the
+player is `voiceRow()` in `scenes/room.js`. One pre-existing stage-2 string in `room.js`
+(`startTrain`'s "gone after the ball") was pronoun-parameterised in passing; the rest of the
+older strings are being swept separately.
+
+### 13.6 Measured
+
+Headless Chromium, 390x844, `--enable-gpu`. DPR capped at 2.25 by design.
+
+| | work median | work p95 | work max | rAF median | rAF p95 |
+|---|---|---|---|---|---|
+| DPR 2, idle | 2.1ms | 3.9ms | 4.8ms | 16.7ms | 16.7ms |
+| DPR 2, training, waiting | 1.9ms | 3.3ms | 4.1ms | 16.7ms | 16.7ms |
+| DPR 2, mid-spin (heaviest) | 1.7ms | 3.2ms | 4.2ms | 16.7ms | 16.8ms |
+| DPR 3→2.25, idle | 1.9ms | 3.7ms | 4.6ms | 16.7ms | 16.7ms |
+| DPR 3→2.25, training, waiting | 1.7ms | 3.2ms | 4.2ms | 16.7ms | 16.7ms |
+| DPR 3→2.25, mid-spin (heaviest) | 2.1ms | 3.8ms | 6.1ms | 16.7ms | 16.8ms |
+
+Vsync-locked at 60fps throughout, ~8x headroom. Stage 3 costs roughly nothing over stage 2.
+
+**Learning**, mood 0.85 / trust 0.7, `sit`, quality-weighted reps (`levelAt = [3, 5, 8]`):
+
+| | rep 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| across sessions | 1.25 | 2.50 | **3.75 → knows it** | 5.00 *steady* | 6.25 |
+| crammed in one sitting | 1.25 | 2.25 | 2.60 | 2.95 | **3.30 → knows it** |
+
+**3 reps spread across sessions, 5 if you cram.** Reliability rises 0.561 → 0.693 → 0.807 →
+0.923 and hold length 0.55s → 1.45s → 2.35s → 3.25s.
+
+**Mis-association**, 40 lessons per condition: **5%** with a crisp signal, a happy bonded dog
+and an instant treat; **48%** with a sloppy signal, flat mood, no trust and a late treat
+(`confuse.max` is 0.44). It always mis-files onto a trick he *already knows*, never noise.
+Recovered in **3 patient correct reps** (`recover.perRep` 0.12, `clearAt` 0.14).
+
+**Obedience gating**, `sit` at level 2, 120 asks per condition:
+
+| condition | mood | trust | model p(obey) | obeyed | hesitated | wrong | ignored | median latency |
+|---|---|---|---|---|---|---|---|---|
+| flat mood, no trust | 0.05 | 0.02 | 0.467 | 59/120 | 17 | 13 | 31 | 1.60s |
+| low | 0.25 | 0.15 | 0.555 | 69/120 | 19 | 7 | 25 | 1.48s |
+| middling | 0.55 | 0.45 | 0.706 | 79/120 | 14 | 10 | 17 | 1.32s |
+| happy + bonded | 0.95 | 0.90 | 0.913 | 109/120 | 7 | 3 | 1 | 1.10s |
+
+Gated on `game.moodLevel` and `dog.trust`. **Control:** moving affection 0.10 → 0.99 at fixed
+mood/trust leaves `p(obey)` at 0.7055 — identical, so affection provably does not leak in.
+Distraction subtracts: content 0.896 → famished 0.776.
+
+**Come-when-called** (his name, heard): 48/60 at mood 0.95 / trust 0.85 (`p` 0.858) vs 16/60
+at mood 0.05 / trust 0.02 (`p` 0.228). Recognition accuracy appears nowhere in that roll.
+
+**Tap-only**: all **8/8** guide gestures are recognised and performed from a real synthesised
+pointer path, from the posture each requires, with voice fully off.
+
+### 13.7 Not built in stage 3
+
+Advanced trick *compositions* (research §5's "component tricks performed immediately after one
+another") — the roster is eight standalone tricks, and the composition timing window is a
+stage-5 question if the trial wants it. A per-dog trick cap (research suggests ~8; the roster
+is exactly 8, so it does not bind yet). Real audio: `audio.pending` now also owes `cue`,
+`trick-*`, `trick-done`, `sit-thump`, `flop`, `paw-offer`, `land`, `praise`, `whine`.

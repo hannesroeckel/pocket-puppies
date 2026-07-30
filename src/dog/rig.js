@@ -23,13 +23,13 @@ import { getBreed } from './breeds.js';
 const R = BALANCE.rig;
 
 const SPRING_NAMES = [
-  'sit', 'lift', 'sway', 'roll', 'squash', 'melt', 'perk',
+  'sit', 'down', 'hop', 'lift', 'sway', 'roll', 'squash', 'melt', 'perk',
   'pupilX', 'pupilY',
   'yaw', 'pitch', 'tilt', 'headLift', 'headPush',
   'earL', 'earR', 'earBack',
   'eyeOpen', 'eyeSmile', 'brow', 'mouth', 'smile', 'tongue', 'noseTw',
   'wagAmp', 'wagSpd', 'tailUp',
-  'pawLiftL', 'pawLiftR', 'hindKick',
+  'pawLiftL', 'pawLiftR', 'pawOut', 'hindKick',
 ];
 
 /** normalised outline -> rig-local points */
@@ -131,7 +131,7 @@ export function createRig(opts = {}) {
     headX: 0, headY: dims.bodyY + dims.neckDY - dims.headOffset, headRot: 0,
     yaw: 0, pitch: 0,
     muzX: 0, muzY: 0,
-    tailNodes: [], eyeOpenEff: 1, sit: 0, breathe: 0,
+    tailNodes: [], eyeOpenEff: 1, sit: 0, down: 0, hop: 0, breathe: 0,
     pupilX: 0, pupilY: 0,
     neckX: 0, neckY: 0,
     lastHX: undefined, lastHY: undefined, lastHR: undefined,
@@ -148,6 +148,11 @@ export function createRig(opts = {}) {
        squashes, and the reunion's nose-at-the-lens is `s` overshooting while
        `sy` stretches. dog/draw.js applies it. Never used by stage 1. */
     sy: 1,
+    /* Horizontal companion to `sy`, default 1 (stage 3). A frontal rig cannot
+       show its own back, so a ROLL OVER is sold by narrowing the silhouette as
+       she goes over rather than by rotating a drawing of her front. Same rule
+       as §12.6: on this rig, depth is scale. */
+    sx: 1,
     /* the resting placement, so a sequence can always spring back to it */
     home: { x: R.place.x, y: R.place.y, s: R.place.scale },
     t: 0,
@@ -233,6 +238,13 @@ export function createRig(opts = {}) {
       s.wagSpd.to(1.5 + m * 3.4);
       s.hindKick.to(0);
       pawLift[0].to(0); pawLift[1].to(0);
+      /* a raised paw's lateral bias is a per-action choice, so it resets like
+         the lift it scales with */
+      s.pawOut.to(0);
+      /* AIRBORNE ALWAYS RETURNS TO THE GROUND. `sit` and `down` deliberately
+         persist (a posture is a state she stays in until something changes it),
+         but a jump is an event, so it is reset here like `lift` and `squash`. */
+      s.hop.to(0);
     },
 
     /* ==================================================================
@@ -256,6 +268,13 @@ export function createRig(opts = {}) {
         if (rig.blinkT <= 0 && rig.blinkQ > 0) { rig.blinkQ--; rig.blinkT = rig.blinkDur; }
       } else rig.blink = 0;
 
+      /* --- posture invariant: you cannot be LYING DOWN and not SITTING.
+             Both channels persist by design, so without this the idle
+             director's `standUp` (which only knows about `sit`) would leave her
+             half-risen out of a lie-down. Enforced on the TARGETS, so the
+             springs still resolve it smoothly. --- */
+      if (s.sit.t < 0.5 && s.down.t > 0) s.down.to(0);
+
       /* --- springs --- */
       stepAll(s, dt);
       for (const part of ['body', 'head']) for (const f of fur[part]) f.sp.step(dt);
@@ -268,10 +287,14 @@ export function createRig(opts = {}) {
       /* --- body --- */
       const sit = s.sit.x, melt = s.melt.x;
       const sq = s.squash.x + melt * 0.16 + breathe * 0.020;
-      pose.sit = sit;
-      pose.bodyHH = dims.bodyHH * (1 - sq * 0.55) * (1 + sit * 0.03);
-      pose.bodyHW = dims.bodyHW * (1 + sq * 0.34) * (1 + sit * 0.06);
+      /* stage 3 posture channels: lying down and airborne */
+      const TR = R.trick;
+      const dn = s.down.x, hp = s.hop.x;
+      pose.sit = sit; pose.down = dn; pose.hop = hp;
+      pose.bodyHH = dims.bodyHH * (1 - sq * 0.55) * (1 + sit * 0.03) * (1 - dn * TR.downSquash);
+      pose.bodyHW = dims.bodyHW * (1 + sq * 0.34) * (1 + sit * 0.06) * (1 + dn * TR.downWiden);
       pose.bodyY = dims.bodyY + sit * 17 + melt * 7 - s.lift.x - s.perk.x * 3
+        + dn * TR.downDrop - hp * TR.hopHeight
         + (dims.bodyHH - pose.bodyHH) + wob * W.y;
       pose.bodyX = s.sway.x + wob2 * W.x;
       pose.bodyRot = s.roll.x + wob * W.rot;

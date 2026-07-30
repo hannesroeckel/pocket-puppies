@@ -11,9 +11,36 @@
      - version every save and migrate FORWARD. Never break an old save.
    ========================================================================== */
 import BALANCE from './balance.js';
-import { SCHEMA_VERSION, newState, DIRT_REGIONS } from './game.js';
+import { SCHEMA_VERSION, newState, DIRT_REGIONS, newTrick, trickLevelFromReps } from './game.js';
 
 const KEY = BALANCE.save.key;
+
+/**
+ * Normalise the learned-word map to `{ [signalId]: {word, alts[], n} }`.
+ *
+ * During stage 3's build this field briefly held a LOUDNESS/PITCH ENVELOPE
+ * (`{dur, loud, pitch}`) from an approach that could never work on the target
+ * device — the real phone grants the microphone and then delivers zero samples
+ * (WebKit 185448), so there was nothing to analyse. Any such entry is dropped
+ * rather than migrated: there is no meaningful conversion from an envelope to
+ * a word, and a dropped word costs the player one re-teach of an opt-in extra.
+ */
+function normVoice(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  const slots = BALANCE.train.signal.ids;
+  for (const sig of Object.keys(raw)) {
+    if (!slots.includes(sig)) continue;
+    const v = raw[sig];
+    const word = typeof v === 'string' ? v : (v && typeof v.word === 'string' ? v.word : '');
+    if (!word.trim()) continue;                       // legacy envelope: drop it
+    const alts = (v && Array.isArray(v.alts) ? v.alts : [])
+      .filter((a) => typeof a === 'string' && a.trim())
+      .slice(0, Math.max(0, BALANCE.train.voice.maxAlts - 1));
+    out[sig] = { word: word.trim().toLowerCase(), alts, n: (v && v.n > 0) ? v.n | 0 : 1 };
+  }
+  return out;
+}
 
 /* ---- migrations -------------------------------------------------------
    Add an entry per version bump. `migrate` runs them in order until the
@@ -43,6 +70,37 @@ export const MIGRATIONS = {
        clawed back: the bond is hers and the ratchet says it never falls.
        New earnings simply proceed at the new (slow) rate from wherever she is. */
     s.v = 2;
+    return s;
+  },
+
+  /* ---- v2 -> v3 : stage 3 (training + tricks) ------------------------
+     Adds the trick ledger and the (opt-in, usually empty) voice prototype
+     map. A v1 or v2 save has `tricks: {}` already, so in practice this is a
+     no-op that exists to normalise anything hand-edited — and to guarantee
+     that a save written before stage 3 loads with a dog who simply hasn't
+     learned anything yet. */
+  3: (s) => {
+    for (const d of (s.dogs || [])) {
+      if (!d.tricks || typeof d.tricks !== 'object' || Array.isArray(d.tricks)) d.tricks = {};
+      for (const id of Object.keys(d.tricks)) {
+        const raw = d.tricks[id] || {};
+        const t = { ...newTrick(), ...raw };
+        /* §4's documented shape was {level, learnedAt, cue}: derive the fields
+           stage 3 added rather than throwing away a level someone already had */
+        if (!(t.reps > 0) && t.level > 0) {
+          t.reps = BALANCE.train.learn.levelAt[Math.min(t.level, 3) - 1] || 0;
+        }
+        t.level = trickLevelFromReps(t.reps);
+        if (t.cue && !BALANCE.train.signal.ids.includes(t.cue)) { t.cue = ''; t.cueConf = 0; }
+        if (t.cue && !(t.cueConf > 0)) t.cueConf = BALANCE.train.learn.confNew;
+        d.tricks[id] = t;
+      }
+      d.cueVoice = normVoice(d.cueVoice);
+    }
+    /* the mic stays OFF until she asks for it (ARCHITECTURE §9) */
+    if (!s.settings) s.settings = {};
+    if (typeof s.settings.mic !== 'boolean') s.settings.mic = false;
+    s.v = 3;
     return s;
   },
 };
@@ -76,7 +134,11 @@ function fillDefaults(s) {
     d.needs = { ...base.dogs[0].needs, ...(d.needs || {}) };
     d.aptitude = { ...base.dogs[0].aptitude, ...(d.aptitude || {}) };
     d.wear = { ...base.dogs[0].wear, ...(d.wear || {}) };
-    d.tricks = d.tricks || {};
+    if (!d.tricks || typeof d.tricks !== 'object' || Array.isArray(d.tricks)) d.tricks = {};
+    for (const id of Object.keys(d.tricks)) {
+      d.tricks[id] = { ...newTrick(), ...(d.tricks[id] || {}) };
+    }
+    d.cueVoice = normVoice(d.cueVoice);
     d.log = Array.isArray(d.log) ? d.log : [];
     if (typeof d.affection !== 'number') d.affection = base.dogs[0].affection;
     if (typeof d.affectionFloor !== 'number') d.affectionFloor = base.dogs[0].affectionFloor;
