@@ -61,6 +61,7 @@ import { rng as sharedRng } from '../engine/rng.js';
 import { capitalise } from '../state/game.js';
 import { TRICKS, TRICK_IDS, TRICK_POSE, trickName, endPosture } from './anim/tricks.js';
 import { matchWord, utteranceSim, normWord } from './voice.js';
+import { drawPlate, drawText } from '../ui/text.js';
 
 const T = BALANCE.train;
 const SG = T.signal;
@@ -1603,18 +1604,19 @@ export function createTraining(rig, opts = {}) {
     }
 
     /* ---- the legend: HER understanding, in words ---- */
-    drawLegend(c, chrome);
+    drawLegend(g, c, chrome);
 
-    /* ---- one quiet hint line ---- */
+    /* ---- one quiet hint line ----
+       Also retrofitted in stage 4, and for the same reason as the legend below
+       it: this was cream + a drop shadow over the cream wall, which rendering
+       it proves is not a contrast treatment. It is the FIRST instruction in
+       the training beat, so it is the last thing that should be hard to read.
+       Anchored to the safe-area top edge rather than a hard y. */
     if (hint) {
-      c.save();
-      c.globalAlpha = clamp(w, 0, 1) * clamp(hintT / 0.4, 0, 1) * 0.86;
-      c.fillStyle = C.hint;
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.shadowColor = 'rgba(48,24,12,0.65)'; c.shadowBlur = 6; c.shadowOffsetY = 1;
-      c.fillText(hint, VW / 2, UI.hintY);
-      c.restore();
+      drawText(g, hint, {
+        anchor: 'top', y: UI.hintY - 30, size: 12.5, weight: 600, ink: C.hint,
+        fade: clamp(w, 0, 1) * clamp(hintT / 0.4, 0, 1),
+      });
     }
 
     /* ---- leave affordance (same shape and place as the care actions) ---- */
@@ -1677,7 +1679,7 @@ export function createTraining(rig, opts = {}) {
    * with how sure she is IN WORDS. Reading it is how you discover she has got
    * the wrong idea, and it is deliberately her list, not yours.
    */
-  function drawLegend(c, a) {
+  function drawLegend(g, c, a) {
     if (a < 0.02) return;
     const rows = [];
     for (const sig of SG.ids) {
@@ -1692,19 +1694,27 @@ export function createTraining(rig, opts = {}) {
     }
     const x0 = T.pad.inset + 18;
     let y = UI.legendTop;
+    /* THIS TEXT HAS TO BE READABLE OR THE MECHANIC IS INVISIBLE. The first
+       version was cream at 0.62 alpha over a warm CREAM wall and was
+       essentially not there. The second — a drop shadow, on the theory that it
+       gives every glyph its own contrast "regardless of what is behind it" —
+       is the assumption ui/text.js exists to retire: a shadow is a HOPE that
+       the art behind is light, and measured, this ink on this wall was 1.22:1.
+
+       RETROFITTED (stage 4). One plate across the whole block, its alpha
+       SOLVED so the ink clears 4.5:1 against the worst background that could
+       ever sit behind it. `drawPlate` rather than `drawText` because the rows
+       interleave drawn signal glyphs with two columns of type, which would
+       otherwise collect a dozen separate plates.
+
+       The block is measured before it is drawn, so the plate fits the rows
+       that actually exist rather than a fixed rectangle. */
+    const legendH = 16 + rows.length * UI.rowH + 10;
+    const legendW = VW - T.pad.inset * 2 - 18;
+    drawPlate(g, x0 - 12, y - 14, legendW, legendH, { ink: C.glyph, fade: a });
+
     c.save();
     c.textBaseline = 'middle';
-    /* THIS TEXT HAS TO BE READABLE OR THE MECHANIC IS INVISIBLE. The first
-       version was cream at 0.62 alpha, and the room behind it is a warm CREAM
-       wall — rendering it and looking at it, "He has not learned a signal yet"
-       was essentially not there. Cream-on-cream is unfixable by nudging alpha,
-       so the rows get the same treatment the hint line already uses: a soft
-       dark drop shadow that gives every glyph its own contrast regardless of
-       what is behind it. (The phone is in dark mode and this is a light design,
-       so there is no system colour to lean on either — see PLATFORM-RISKS.) */
-    c.shadowColor = 'rgba(48,24,12,0.72)';
-    c.shadowBlur = 5;
-    c.shadowOffsetY = 1;
     c.globalAlpha = a * 0.88;
     c.fillStyle = C.glyph;
     c.textAlign = 'left';

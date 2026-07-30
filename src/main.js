@@ -135,7 +135,7 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 3,
+    version: 4,
     app, loop, view, saver, BALANCE,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
@@ -543,6 +543,135 @@ async function boot() {
       return v.debug;
     },
 
+    /* ---- stage 4 drivers: WALKS ---------------------------------------
+       Every one of these is deterministic. In particular NOTHING here sleeps
+       to wait out a walk: a walk's progress is a pure function of
+       `startedAt`, so the way to test it is to REWRITE `startedAt` and ask
+       again — which is also exactly what happens when iOS suspends the app
+       and she comes back later. */
+    /** open the leash beat */
+    walk(on = true) {
+      const sc = loop.scene;
+      if (!sc.startWalk) return false;
+      if (on) { const r = sc.startWalk(); loop.stepFixed(1 / 60, 2); return r; }
+      sc.stopWalk(); loop.stepFixed(1 / 60, 2); return true;
+    },
+    /** wind the anticipation up without waggling anything, for screenshots */
+    fizz(v = 1, steps = 24) {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      w.setFizz(v);
+      loop.stepFixed(1 / 60, steps);
+      return w.debug;
+    },
+    /** waggle the leash for real, as a synthetic pointer path in the room */
+    waggle({ reps = 3, dt = 1 / 60 } = {}) {
+      const scene = loop.scene;
+      const w = scene.walk;
+      if (!w) return null;
+      const P4 = BALANCE.walk.prep;
+      const send = (type, x, y, moved) => {
+        input.state.lastX = x; input.state.lastY = y;
+        scene.pointer(app, { type, x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: !!moved });
+      };
+      const [x0, y0] = [w.debug.leash[0], w.debug.leash[1]];
+      send('down', x0, y0, false);
+      loop.stepFixed(dt, 1);
+      for (let r = 0; r < reps; r++) {
+        for (let i = 0; i <= 12; i++) {
+          const u = i / 12;
+          send('move', x0 + Math.sin(u * Math.PI * 2) * 56, y0 + Math.sin(u * Math.PI * 4) * 26, true);
+          loop.stepFixed(dt, 1);
+        }
+      }
+      send('up', x0, y0, true);
+      loop.stepFixed(dt, 1);
+      return w.debug;
+    },
+    /** clip the lead on (the same call the drop and the tap both make) */
+    clip() {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      w.clipItOn();
+      loop.stepFixed(1 / 60, Math.ceil((BALANCE.walk.prep.clipHold + 0.1) * 60));
+      return w.debug;
+    },
+    /** the route map: pick a place, or hand it a drawn path */
+    route(id) {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      w.map.pick(id);
+      loop.stepFixed(1 / 60, 2);
+      return w.map.debug;
+    },
+    drawRoute(pts) {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      w.map.setPath(pts);
+      loop.stepFixed(1 / 60, 2);
+      return w.map.debug;
+    },
+    /** set off. `dur` in seconds; omit to use whatever the map worked out. */
+    setOff(mix, dur) {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      const m = mix || w.map.mix;
+      const a = w.setOff(m, dur === undefined ? w.map.dur : dur, w.map.path);
+      loop.stepFixed(1 / 60, 2);
+      return a;
+    },
+    /**
+     * PRETEND THE APP WAS CLOSED FOR `mins` MINUTES MID-WALK. Rewinds the
+     * walk's `startedAt` (and `lastSeenAt`) rather than sleeping, which is the
+     * only honest way to test a model whose whole point is that it does not
+     * tick. Returns the derived progress.
+     */
+    fakeWalkAway(mins = 4) {
+      const w = state.walks && state.walks.active;
+      if (!w) return null;
+      w.startedAt -= mins * 60e3;
+      state.lastSeenAt = Date.now() - mins * 60e3;
+      /* MARK IT DIRTY. These drivers write `state` directly rather than through
+         a mutator, so `onChange` never fires and a following `saveNow()` is a
+         silent no-op — which made a reload test pass for the wrong reason
+         until it was caught. Anything that fakes elapsed time must schedule. */
+      saver.schedule();
+      loop.stepFixed(1 / 60, 2);
+      return game.walkProgress();
+    },
+    /** move the device clock BACKWARDS: the tamper guard must absorb it */
+    fakeClockBack(mins = 30) {
+      const w = state.walks && state.walks.active;
+      if (!w) return null;
+      w.startedAt += mins * 60e3;      // i.e. "started in the future"
+      saver.schedule();
+      const before = { startedAt: w.startedAt };
+      const p = game.walkProgress();
+      loop.stepFixed(1 / 60, 2);
+      return { before, after: state.walks.active ? state.walks.active.startedAt : null, progress: p };
+    },
+    /** bring him home now (the always-available, never-penalised path) */
+    bringHome() {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      w.bringHome();
+      loop.stepFixed(1 / 60, 2);
+      return w.debug;
+    },
+    /** run the whole return beat to its end */
+    runHome({ dt = 1 / 60, sim = false } = {}) {
+      const w = loop.scene.walk;
+      if (!w) return null;
+      const n = Math.ceil((BALANCE.walk.home.beats.settle + 0.4) / dt);
+      for (let i = 0; i < n && w.beat === 'home'; i++) {
+        if (sim) loop.stepSim(dt, 1); else loop.stepFixed(dt, 1);
+      }
+      return w.debug;
+    },
+    /** what he WOULD bring home, without moving anything */
+    peekFinds(progress) { return game.walkFinds(progress); },
+    walkState() { return loop.scene.walk ? loop.scene.walk.debug : null; },
+
     /** fake an absence: rewind lastSeenAt, re-run the decay, replay the greeting */
     fakeAway(hours = 9) {
       state.lastSeenAt = Date.now() - hours * 3600e3;
@@ -559,11 +688,15 @@ async function boot() {
       if (loop.scene.naming && loop.scene.naming.isOpen) { loop.scene.naming.submit(v); return true; }
       return !!game.setName(v);
     },
+    /** through the scene's arbiter, so a driver cannot stack two overlays */
     openNaming(mode = 'rename') {
-      if (!loop.scene.naming) return false;
-      loop.scene.naming.start(mode, view);
-      return true;
+      if (!loop.scene.openNaming) return false;
+      const ok = loop.scene.openNaming(mode);
+      loop.stepFixed(1 / 60, 2);
+      return ok;
     },
+    /** who owns the whole screen: '' | 'naming' | 'reunion' | 'walk' | 'away' */
+    surface() { return loop.scene.surfaceOwner ? loop.scene.surfaceOwner() : ''; },
     exportSave: () => exportSave(state),
     importSave: (s) => importSave(s),
     saveNow: () => saver.flush(),

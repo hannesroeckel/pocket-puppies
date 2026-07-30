@@ -28,8 +28,13 @@ import { clamp } from '../engine/draw.js';
 import { getBreed } from '../dog/breeds.js';
 import { rng as sharedRng } from '../engine/rng.js';
 import { dayIndex } from './time.js';
+import {
+  walkState, startWalk as startWalkModel, walkProgress as walkProgressModel,
+  endWalk as endWalkModel, cancelWalk as cancelWalkModel, rollFinds,
+  collected as collectedFinds, FIND_BY_ID,
+} from './walks.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -110,14 +115,21 @@ export function newState(now = Date.now(), opts = {}) {
     player: { coins: 0, trainerPoints: 0 },
     dogs: [dog],
     activeDogId: dog.id,
-    inventory: { food: {}, care: {}, toys: ['ball'], accessories: [] },
+    /* `activeToy` is which of the fetch toys is currently on the rug. Stage 4's
+       walks are the only thing that adds to `toys`, so what he brought home
+       genuinely becomes the thing he fetches. */
+    inventory: { food: {}, care: {}, toys: ['ball'], activeToy: 'ball', accessories: [] },
     unlocks: { breeds: [dog.breedId], items: [], rooms: ['room'] },
     contests: {
       disc: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
       agility: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
       obedience: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
     },
-    walks: { lastWalkAt: 0, walksToday: 0, found: [] },
+    /* `active` is the walk he is on RIGHT NOW, and it is the whole reason a
+       walk survives the app being killed: it stores when he left and how long
+       for, and progress is recomputed from the wall clock on resume. See
+       state/walks.js. `day` is the local-midnight index `walksToday` belongs to. */
+    walks: { lastWalkAt: 0, walksToday: 0, found: [], active: null, day: dayIndex(now), total: 0 },
     flags: { seenIntro: false, namedFirstDog: false },
     settings: { sound: true, reducedMotion: 'auto', mic: false },
   };
@@ -434,6 +446,10 @@ export function createGame(state, opts = {}) {
         amount = D.careBonus;
         if (b.care[kind]) amount = 0;
       } else if (kind === 'toy') { amount = D.toyBonus; once = false; }
+      /* A WALK IS A BONDING EVENT, not a chore — being taken out and brought
+         home safe is worth more than a fetched ball and less than a whole care
+         action. Repeatable (three a day is normal) and still day-capped. */
+      else if (kind === 'walk') { amount = D.walkBonus; once = false; }
       /* TRAINING PAYS THROUGH THE SAME DAILY LEDGER as everything else, so an
          afternoon of drilling cannot outrun the day cap (stage 2's §12.1). */
       else if (kind && kind.indexOf('trick:') === 0) { amount = D.trickBonus; once = false; }
@@ -784,6 +800,100 @@ export function createGame(state, opts = {}) {
       if (m[sig]) { delete m[sig]; onChange(); }
     },
     clearVoice() { const d = dog(); d.cueVoice = {}; onChange(); },
+
+    /* ==================================================================
+       WALKS — stage 4. The offline-safe model itself lives in
+       state/walks.js (pure functions, no tick); these are the MUTATORS, so
+       nothing outside this file writes `state.walks`, `inventory` or
+       `unlocks` for a walk. Needs, dirt, mood, affection and trust still go
+       through the existing ratcheted mutators above — a walk is not allowed
+       its own back door into them.
+       ================================================================== */
+    /** the repaired walks block (day boundary checked on every read) */
+    get walks() { return walkState(state); },
+    /** the walk he is on right now, or null */
+    get walkActive() { return walkState(state).active; },
+    get walksToday() { return walkState(state).walksToday; },
+    get walksTotal() { return walkState(state).total; },
+    /** he has already had a good few today — thins the finds, never refuses */
+    get walkedEnoughToday() { return walkState(state).walksToday >= BALANCE.walk.perDay; },
+    /**
+     * Set off. @param opts {mix|route, dur, path, rng, now}
+     * @returns the active record
+     */
+    startWalk(opts = {}) {
+      const a = startWalkModel(state, opts);
+      api.log('walk', 'set off for the ' + a.route);
+      onChange();
+      return a;
+    },
+    /** where the walk has got to — the ONLY progress function */
+    walkProgress(now) { return walkProgressModel(state, num(now, Date.now())); },
+    /** roll (deterministically) what he is bringing home at this progress */
+    walkFinds(progress, now) {
+      const p = walkProgressModel(state, num(now, Date.now()));
+      if (!p.active) return { finds: [], coins: 0, route: '', mix: {} };
+      const at = progress === undefined ? p.progress : clampNum(progress, 0, 1, p.progress);
+      return rollFinds(p.active, at, { owned: collectedFinds(state) });
+    },
+    /** bank the walk: clears `active`, bumps `walksToday` at local midnight */
+    endWalk(now) {
+      const done = endWalkModel(state, num(now, Date.now()));
+      onChange();
+      return done;
+    },
+    cancelWalk() { cancelWalkModel(state); onChange(); },
+
+    /**
+     * He brought something home. THIS is where a find becomes a real unlock:
+     *   - it joins the dated collection log (`walks.found`, capped)
+     *   - the first of its kind joins `unlocks.items`, which is what the room
+     *     shelf displays, so the collection is visible in the world
+     *   - a `toy` find joins `inventory.toys` AND becomes the toy on the rug,
+     *     so what he found is what he now fetches
+     * @returns {{id, fresh, unlockedToy}} or null for a junk id
+     */
+    addFind(find, now) {
+      const id = typeof find === 'string' ? find : (find && find.id);
+      const spec = FIND_BY_ID[id];
+      if (!spec) return null;                       // never persist a junk find
+      const w = walkState(state);
+      const t = num(now, Date.now());
+      if (!state.unlocks || typeof state.unlocks !== 'object') state.unlocks = { breeds: [], items: [], rooms: ['room'] };
+      if (!Array.isArray(state.unlocks.items)) state.unlocks.items = [];
+      if (!state.inventory || typeof state.inventory !== 'object') state.inventory = {};
+      if (!Array.isArray(state.inventory.toys) || !state.inventory.toys.length) state.inventory.toys = ['ball'];
+
+      const fresh = state.unlocks.items.indexOf(id) < 0;
+      if (fresh) state.unlocks.items.push(id);
+      w.found.push({ at: t, id, route: (find && find.route) || (w.active ? w.active.route : '') });
+      while (w.found.length > BALANCE.walk.find.logCap) w.found.shift();
+
+      let unlockedToy = '';
+      if (spec.toy && state.inventory.toys.indexOf(spec.toy) < 0) {
+        state.inventory.toys.push(spec.toy);
+        unlockedToy = spec.toy;
+      }
+      /* whatever he just carried in is what he wants thrown */
+      if (spec.toy) state.inventory.activeToy = spec.toy;
+      onChange();
+      return { id, fresh, unlockedToy };
+    },
+    /** every distinct thing he has ever brought home */
+    findCollection() { return collectedFinds(state); },
+    get activeToy() {
+      const inv = state.inventory || {};
+      const id = typeof inv.activeToy === 'string' ? inv.activeToy : 'ball';
+      return (Array.isArray(inv.toys) && inv.toys.indexOf(id) >= 0) ? id : 'ball';
+    },
+    setActiveToy(id) {
+      const inv = state.inventory || (state.inventory = {});
+      if (!Array.isArray(inv.toys)) inv.toys = ['ball'];
+      if (typeof id !== 'string' || inv.toys.indexOf(id) < 0) return api.activeToy;
+      inv.activeToy = id;
+      onChange();
+      return id;
+    },
 
     addCoins(n) {
       const cur = Math.max(0, num(state.player.coins, 0));

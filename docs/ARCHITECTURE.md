@@ -859,3 +859,136 @@ another") — the roster is eight standalone tricks, and the composition timing 
 stage-5 question if the trial wants it. A per-dog trick cap (research suggests ~8; the roster
 is exactly 8, so it does not bind yet). Real audio: `audio.pending` now also owes `cue`,
 `trick-*`, `trick-done`, `sit-thump`, `flop`, `paw-offer`, `land`, `praise`, `whine`.
+
+---
+
+## 14. Stage 4 (Walks + discovery) — as built
+
+Four beats, **not one frame of gait**. `anticipation -> absence -> return`, exactly as
+SCOPE.md reframed it. The near-frontal rig was never extended, no side profile was built, and
+depth on the return is scale (§12.6) as it is for the reunion and the toy chase.
+
+### 14.1 Contract deviations
+
+**1. There is no `scenes/walk.js`. The walk lives in the room.**
+§2's file layout implies a walk scene. Three of the four beats *are* the room — prepare is him
+going electric in front of the same rig, absence is this room with him missing, and the return
+is him coming back into it. Unmounting the room would throw away the rig, the baked room
+canvas and the continuity between the beats, and would buy nothing: only the map is a
+full-surface overlay, and it is one. `dog/walk.js` is a LAYER, like `dog/train.js`.
+
+**2. `walk.apply()` runs in the care/train slot, and `toy.apply` is skipped while it owns
+the animal.** Prepare and return own the body the way a care action does. Same precedent and
+same reason as stage 3 skipping `toy.apply` during a spin (§12.2).
+
+**3. THE SURFACE IS EXCLUSIVE, and that is new shared machinery in `scenes/room.js`.**
+A defect got through without it: `startWalk()` guarded toy, care and training but not the
+NAMING beat, so on a fresh save the leash-drop anticipation played *underneath* "He's yours."
+— two modal states stacked, on first launch.
+
+The fix is `surfaceOwner()` / `surfaceBlockedFor()`: one arbiter, consulted by every modal
+start, in **both** directions. A first draft gave the layers a precedence order so important
+beats could displace lesser ones; that table immediately grew the hole it was meant to close
+(naming outranked the walk, so renaming from Settings while he was out opened the overlay over
+the absence panel — measured failing, then deleted). **Nothing displaces anything.** A beat
+that still wants to happen is queued via `pendingNaming` and drains when the surface frees.
+
+Stage 5 MUST route contest entry through `surfaceBlockedFor('contest')` rather than adding
+another private `if`. That is the whole point of it existing.
+
+**4. `src/ui/text.js` is new, and it is not local to stage 4.**
+Three legibility failures shipped on this project, all the same failure: canvas text drawn
+straight over background art with no contrast guarantee and no safe-area awareness. Measured,
+the stage-4 anticipation line was **1.22:1** against the cream wall (WCAG AA is 4.5:1). A drop
+shadow — the previous mitigation, twice — is a *hope* that the art behind is light.
+
+`ui/text.js` makes the contrast a guarantee by construction: given an ink and a plate colour
+it **solves** for the smallest plate alpha at which the ink clears the target against the
+WORST POSSIBLE background. Because luminance is monotonic per channel, pure black and pure
+white showing through the plate are genuinely the extremes, so clearing both clears everything
+— including art nobody has drawn yet, a dark-mode phone, or a scrim another layer adds later.
+Cream `#fff0d4` on the standard dark plate solves to alpha 0.625 and delivers **4.58:1**.
+
+It also converts `env(safe-area-inset-*)` (already in `view.safe`) into virtual units and
+anchors copy to the safe edge, and shrinks type to fit rather than letting it clip.
+
+`over` is the escape hatch: a caller that has already drawn an opaque card says so, the
+contrast is checked against that colour exactly, and **no plate is added** — which is how the
+route map keeps its hand-drawn paper. A translucent ink is composited over the known
+background before measuring, because `rgba(107,58,36,0.66)` on the map paper is truly 4.58:1,
+not the 7.61:1 its nominal colour claims.
+
+Retrofitted beyond stage 4: stage 3's **cue legend** (via `drawPlate`, one plate under a block
+that interleaves drawn glyphs with two text columns) and its **hint line**, and the **naming
+title**. Tunables in `BALANCE.ui.text`; raising `contrast` there really does make everything
+more legible rather than just darker.
+
+**HONEST LIMIT:** the guarantee is defined at the text's full opacity. Text mid-fade is
+unavoidably low-contrast — contrast against a background you are dissolving into is not a
+thing that exists. `fade` is for transitions, never as a style.
+
+**5. `walksToday` is not trusted across the v3->v4 bump.** It belonged to a day index that was
+never recorded, so it is stamped with today rather than counting an old day's walks against
+this one. Worst case is one extra walk on update day, which is a gift, not a loss.
+
+### 14.2 Interfaces stage 5 codes against
+
+Stage 5 spends what stage 4 produces. All of it is already persisted and migrated.
+
+- `game.state.player.coins` — **the currency.** Paid by `game.addCoins(n)` on every return;
+  route-biased (high street ~17/walk, river ~9). Stage 5 needs a `spendCoins(n)` that refuses
+  to go negative; it does not exist yet and should live beside `addCoins` in `state/game.js`.
+- `game.findCollection()` -> `Set` of find ids ever brought home. Drawn on the window sill by
+  `room.js drawSill()`. `BALANCE.walk.finds` is the table: `{id, kind, tier, w, toy, met}`,
+  where `kind` is `flower|toy|keep|gift|photo`.
+- `state.inventory.toys` / `state.inventory.activeToy` — a `toy` find joins `toys` and becomes
+  the toy on the rug. A shop that sells toys must push here and respect `activeToy`.
+- `state.unlocks.items` — the authoritative collected set (`walks.found` is the dated log,
+  capped at `BALANCE.walk.find.logCap`).
+- `game.walkProgress(now)` -> `{active, progress, remainMs, done, skewMs, clamped}`. **The
+  only progress function.** A contest that runs over wall-clock time should copy this shape
+  rather than inventing a timer: nothing ticks, and that is why a walk survives being killed.
+- `state/walks.js rollFinds(active, progress, {owned})` — deterministic from the seed. A
+  contest reward roll should take the same shape so it is replay-safe.
+- `walk.onHome(cb)` — fires when a return has landed; `cb({after, carried})`.
+- `game.awardDay(kind)` — the once-a-day bond ledger. Stage 5 must award through it, not by
+  writing affection.
+
+Test drivers on `window.__pp`: `walk`, `fizz`, `waggle`, `clip`, `route`, `drawRoute`,
+`setOff`, `fakeWalkAway`, `fakeClockBack`, `bringHome`, `runHome`, `peekFinds`, `walkState`,
+`surface`, `openNaming`. **`fakeWalkAway`/`fakeClockBack` now call `saver.schedule()`**: they
+write `state` directly, so `onChange` never fires and a following `saveNow()` was a silent
+no-op — which made a reload test pass for the wrong reason until it was caught.
+
+### 14.3 Measured (headless Chromium, 390x844, `--enable-gpu`)
+
+Safe-area insets forced to the target device's **20px top / 40px bottom**.
+
+| beat | DPR | work median | work p95 | work max | frame median |
+|---|---|---|---|---|---|
+| prepare (busiest) | 2 | 1.9 ms | 4.0 ms | 5.3 ms | 16.7 ms |
+| prepare (busiest) | 3 | 2.3 ms | 5.3 ms | 6.6 ms | 16.7 ms |
+| absence | 2 | 1.1 ms | 2.8 ms | 3.7 ms | 16.7 ms |
+| absence | 3 | 1.5 ms | 2.8 ms | 6.4 ms | 16.7 ms |
+
+Solid 60fps throughout. Zero console errors, zero external requests, verified in **dark mode**
+and with `prefers-reduced-motion: reduce`.
+
+Gates: a walk survives the page being **closed outright** and reopened (mid-walk, progress
+0.511 derived from the wall clock; and after nine hours shut, where he is simply home with
+what he found). Same seed -> identical finds across a full restart. A backwards clock is
+absorbed, and a poisoned walk record is repaired rather than fatal. Stage-1/2/3 saves each
+migrate and can start a walk afterwards. Discovery is route-biased over N=4000 walks/route
+with zero empty-handed returns. See `docs/STAGE4-NOTES.md` for the numbers.
+
+### 14.4 Not built in stage 4
+
+The **route-map paper is positioned in fixed virtual space**, not anchored to the safe area —
+acceptable because its top edge sits 70 virtual units down, well clear of a 20px inset, but a
+smaller device would want it anchored. The **back/cancel buttons** (`BALANCE.ui.map.back`,
+and training's at `342,62`) are tap targets rather than text and still use hard coordinates;
+they clear the 20px inset but are not derived from it, and the hit tests would have to move
+with them. `ui/toast.js`, `ui/sheet.js`, `ui/hud.js` and `ui/nav.js` are **not yet routed
+through `ui/text.js`** — the toast is the most visible of these and is the obvious next
+retrofit. Real audio: `audio.pending` now also owes `perk`, `scamper`, `toy-land`,
+`proud-yip`. No walk *history* screen — `walks.found` is a dated log nothing reads yet.

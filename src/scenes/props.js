@@ -224,8 +224,16 @@ export function drawSoap(c, x, y, s, squeeze = 0) {
   c.restore();
 }
 
-/** The ball toy. `spin` rotates the stripes; `s` fakes distance. */
-export function drawBall(c, bx, by, s, spin = 0, shadowAt) {
+/**
+ * The ball toy. `spin` rotates the stripes; `s` fakes distance.
+ *
+ * `variant` (stage 4) is which fetch toy he currently has — the thing he
+ * brought home from a walk becomes the thing he fetches, which is what makes a
+ * find a real unlock rather than a line of text. Unknown variants fall back to
+ * the ball, so an older save (or a future find) can never draw nothing.
+ */
+export function drawBall(c, bx, by, s, spin = 0, shadowAt, variant) {
+  const v = variant && variant !== 'ball' ? variant : '';
   if (shadowAt !== undefined) {
     c.fillStyle = `rgba(104,58,32,${(0.22 * clamp(s, 0.2, 1)).toFixed(3)})`;
     ell(c, bx + 2, shadowAt, 16 * s, 5 * s); c.fill();
@@ -234,6 +242,20 @@ export function drawBall(c, bx, by, s, spin = 0, shadowAt) {
   c.translate(bx, by);
   c.scale(s, s);
   c.rotate(spin);
+  if (v === 'stick') { stickShape(c, 1.35); c.restore(); return; }
+  if (v === 'pinecone') { coneShape(c, 1.30); c.restore(); return; }
+  if (v === 'tennis') {
+    const tg = c.createRadialGradient(-6, -7, 2, 0, 0, 20);
+    tg.addColorStop(0, '#e8f59a'); tg.addColorStop(0.5, '#cbe062'); tg.addColorStop(1, '#9ab73c');
+    c.fillStyle = tg; ell(c, 0, 0, 16, 16); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.86)'; c.lineWidth = 2.1;
+    c.beginPath(); c.arc(-13, 0, 15, -0.95, 0.95); c.stroke();
+    c.beginPath(); c.arc(13, 0, 15, Math.PI - 0.95, Math.PI + 0.95); c.stroke();
+    c.strokeStyle = 'rgba(96,116,40,0.42)'; c.lineWidth = 1.5; ell(c, 0, 0, 16, 16); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.5)'; ell(c, -6, -7, 4.4, 3.0, -0.6); c.fill();
+    c.restore(); return;
+  }
+  if (v === 'squeaky') { duckShape(c, 1.15); c.restore(); return; }
   const g = c.createRadialGradient(-6, -7, 2, 0, 0, 20);
   g.addColorStop(0, '#f7f0dd'); g.addColorStop(0.42, '#e8dcc0'); g.addColorStop(1, '#c9b28c');
   c.fillStyle = g; ell(c, 0, 0, 16, 16); c.fill();
@@ -247,6 +269,356 @@ export function drawBall(c, bx, by, s, spin = 0, shadowAt) {
   c.restore();
   c.strokeStyle = 'rgba(124,74,47,0.38)'; c.lineWidth = 1.6; ell(c, 0, 0, 16, 16); c.stroke();
   c.fillStyle = 'rgba(255,255,255,0.6)'; ell(c, -6, -7, 4.6, 3.2, -0.6); c.fill();
+  c.restore();
+}
+
+/* ==========================================================================
+   STAGE 4 — the leash, the finds, and the paw-print trail.
+
+   All ART, not design tunables (ARCHITECTURE §11 G): the geometry and colour
+   ramps are here, the numbers a designer would turn are in BALANCE.walk.
+   ========================================================================== */
+export const WC = {
+  strap: '#c25b46', strapD: '#9c4032', strapL: '#e08067',
+  brass: '#e0b25c', brassD: '#a97f33', brassL: '#f6dda0',
+  stitch: 'rgba(255,240,214,0.72)',
+  paper: '#fdf3df', paperSh: '#e6d2ac', ink: '#6b3a24',
+  leaf: '#7f9f74', leafD: '#5f7d57', stem: '#84a179',
+  petal: '#fdf6e6', yolk: '#f0c355', bluebell: '#8b93cf',
+  bark: '#a8763f', barkD: '#7d5527',
+  stone: '#b7b0a2', stoneD: '#8e887c', stoneL: '#dad4c6',
+  wool: '#cf6e58', woolD: '#a94d3c',
+  photo: '#fffaf0',
+};
+
+/** a wobbly hand-drawn line: the whole charm of the map beat */
+export function inkLine(c, pts, wob = 0, ph = 0) {
+  if (!pts.length) return;
+  c.beginPath();
+  c.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    const w = wob ? Math.sin(i * 1.7 + ph) * wob : 0;
+    const w2 = wob ? Math.cos(i * 2.3 + ph * 1.3) * wob : 0;
+    c.lineTo(pts[i][0] + w, pts[i][1] + w2);
+  }
+}
+
+/**
+ * THE LEASH — the object the whole prepare beat is about.
+ *
+ * `(cx, cy)` is the CLIP end, i.e. the thing under her finger. The strap trails
+ * up and off the top of the frame, so it reads as hanging from her hand rather
+ * than floating: there is no arm to draw and none is needed.
+ */
+export function drawLeash(c, cx, cy, s, anchorX, sway = 0, t = 0, glow = 0) {
+  c.save();
+  /* the strap: two control points so it hangs with real slack */
+  const ax = anchorX + sway * 10;
+  const midX = (ax + cx) / 2 + sway * 26 + Math.sin(t * 1.7) * 3;
+  const midY = (cy - 40) * 0.52 + 28;
+  const strap = (col, w) => {
+    c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(ax, -46);
+    c.bezierCurveTo(ax + sway * 12, midY * 0.5, midX, midY, cx, cy - 12 * s);
+    c.stroke();
+  };
+  strap('rgba(104,58,32,0.20)', 9.5 * s);
+  strap(WC.strapD, 7.4 * s);
+  strap(WC.strap, 5.4 * s);
+  c.setLineDash([4.5 * s, 5 * s]);
+  strap(WC.stitch, 1.1 * s);
+  c.setLineDash([]);
+
+  /* a soft halo while it is the live thing to drag */
+  if (glow > 0.01) {
+    const gr = c.createRadialGradient(cx, cy, 2, cx, cy, 46 * s);
+    gr.addColorStop(0, `rgba(255,246,214,${(0.34 * glow).toFixed(3)})`);
+    gr.addColorStop(1, 'rgba(255,246,214,0)');
+    c.fillStyle = gr;
+    c.beginPath(); c.arc(cx, cy, 46 * s, 0, TAU); c.fill();
+  }
+
+  c.translate(cx, cy);
+  c.scale(s, s);
+  c.rotate(sway * 0.30);
+  /* the collar: a soft loop, so what she is holding reads as "for the dog" */
+  c.strokeStyle = WC.strapD; c.lineWidth = 6.2;
+  c.beginPath(); c.ellipse(0, 8, 13, 9.5, 0, 0, TAU); c.stroke();
+  c.strokeStyle = WC.strap; c.lineWidth = 4.2;
+  c.beginPath(); c.ellipse(0, 8, 13, 9.5, 0, 0, TAU); c.stroke();
+  c.strokeStyle = WC.strapL; c.lineWidth = 1.3;
+  c.beginPath(); c.ellipse(0, 6.6, 12, 8.4, 0, Math.PI * 1.05, Math.PI * 1.9); c.stroke();
+  /* the brass clip */
+  const bg = c.createLinearGradient(-5, -14, 5, 4);
+  bg.addColorStop(0, WC.brassL); bg.addColorStop(0.55, WC.brass); bg.addColorStop(1, WC.brassD);
+  c.fillStyle = bg;
+  roundRect(c, -3.6, -15, 7.2, 15, 3); c.fill();
+  c.strokeStyle = WC.brassD; c.lineWidth = 2.2;
+  c.beginPath(); c.arc(0, -1.5, 5.4, Math.PI * 0.15, Math.PI * 0.9, true); c.stroke();
+  c.fillStyle = WC.brassL; roundRect(c, -2.4, -13.6, 2.0, 10, 1); c.fill();
+  /* a little name tag, because it is HIS leash */
+  c.fillStyle = WC.brass; ell(c, 7.5, 13, 4.6, 5.2, 0.2); c.fill();
+  c.fillStyle = WC.brassL; ell(c, 6.6, 11.6, 2.0, 2.2, 0.2); c.fill();
+  c.restore();
+}
+
+/** the collar he wears once it is clipped on */
+export function drawCollar(c, x, y, hw, s) {
+  c.save();
+  c.translate(x, y);
+  c.strokeStyle = WC.strapD; c.lineWidth = 5.6 * s; c.lineCap = 'round';
+  c.beginPath(); c.ellipse(0, 0, hw, hw * 0.30, 0, 0.10, Math.PI - 0.10); c.stroke();
+  c.strokeStyle = WC.strap; c.lineWidth = 3.8 * s;
+  c.beginPath(); c.ellipse(0, 0, hw, hw * 0.30, 0, 0.10, Math.PI - 0.10); c.stroke();
+  c.fillStyle = WC.brass; ell(c, 0, hw * 0.30, 4.2 * s, 4.8 * s); c.fill();
+  c.fillStyle = WC.brassL; ell(c, -0.8 * s, hw * 0.30 - 1.2 * s, 1.8 * s, 2.0 * s); c.fill();
+  c.restore();
+}
+
+/* ---- the finds ---------------------------------------------------------
+   One small icon each, drawn not fonted. They have to be recognisable at
+   ~24px in his mouth and at ~16px on the shelf, so every one of them is a
+   silhouette first and detail second (research §7: "recognisable in
+   silhouette from across the room").
+   -------------------------------------------------------------------- */
+function stemFlower(c, petal, centre, n = 6, pr = 6.2) {
+  c.strokeStyle = WC.stem; c.lineWidth = 2.0; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(1, 14); c.quadraticCurveTo(-2, 6, 0, -1); c.stroke();
+  c.fillStyle = WC.leaf;
+  ell(c, -5, 7, 4.6, 2.4, -0.5); c.fill();
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU;
+    c.fillStyle = petal;
+    ell(c, Math.cos(a) * 5.4, Math.sin(a) * 5.4 - 2, pr * 0.62, pr * 0.42, a); c.fill();
+  }
+  c.fillStyle = centre; ell(c, 0, -2, 3.4, 3.2); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.5)'; ell(c, -1, -3, 1.4, 1.2); c.fill();
+}
+function stickShape(c, k = 1) {
+  c.save(); c.scale(k, k); c.rotate(-0.32);
+  c.strokeStyle = WC.barkD; c.lineWidth = 5.4; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-14, 3); c.quadraticCurveTo(0, -2, 14, 1); c.stroke();
+  c.strokeStyle = WC.bark; c.lineWidth = 3.4;
+  c.beginPath(); c.moveTo(-14, 3); c.quadraticCurveTo(0, -2, 14, 1); c.stroke();
+  c.strokeStyle = WC.barkD; c.lineWidth = 2.6;
+  c.beginPath(); c.moveTo(4, 0); c.lineTo(11, -7); c.stroke();
+  c.beginPath(); c.moveTo(-6, 1); c.lineTo(-11, -5); c.stroke();
+  c.strokeStyle = 'rgba(255,240,214,0.34)'; c.lineWidth = 1.0;
+  c.beginPath(); c.moveTo(-12, 1.6); c.quadraticCurveTo(0, -3.2, 12, 0); c.stroke();
+  c.restore();
+}
+function coneShape(c, k = 1) {
+  c.save(); c.scale(k, k);
+  c.fillStyle = WC.barkD;
+  c.beginPath(); c.ellipse(0, 1, 7.4, 11, 0, 0, TAU); c.fill();
+  for (let r = 0; r < 5; r++) {
+    for (let q = -1; q <= 1; q++) {
+      const y = -8 + r * 4.2;
+      const x = q * (5.2 - r * 0.4) + (r % 2 ? 1.8 : 0);
+      c.fillStyle = r % 2 ? WC.bark : '#946233';
+      ell(c, x, y, 3.0 - r * 0.15, 2.2, 0); c.fill();
+    }
+  }
+  c.fillStyle = 'rgba(255,240,214,0.26)'; ell(c, -3, -6, 2.2, 1.6, -0.4); c.fill();
+  c.restore();
+}
+function duckShape(c, k = 1) {
+  c.save(); c.scale(k, k);
+  c.fillStyle = '#e8b93f';
+  ell(c, 1, 5, 11, 8.4); c.fill();
+  ell(c, -6, -4, 6.6, 6.2); c.fill();
+  c.fillStyle = '#f2cf6e'; ell(c, -7, -6, 3.2, 2.6, -0.4); c.fill();
+  c.fillStyle = '#e0784a';
+  c.beginPath(); c.moveTo(-11, -3.4); c.quadraticCurveTo(-18, -2.2, -16, 0.6);
+  c.quadraticCurveTo(-13, 0.4, -10, -0.6); c.closePath(); c.fill();
+  c.fillStyle = '#4a352a'; ell(c, -7.4, -5.6, 1.2, 1.4); c.fill();
+  c.fillStyle = '#d9a72f';
+  c.beginPath(); c.moveTo(4, 2); c.quadraticCurveTo(12, -1, 11, 6); c.quadraticCurveTo(7, 6, 4, 4); c.closePath(); c.fill();
+  c.restore();
+}
+function photoShape(c, coat, ear, k = 1) {
+  c.save(); c.scale(k, k);
+  c.fillStyle = 'rgba(104,58,32,0.20)'; roundRect(c, -9, -10, 20, 24, 2); c.fill();
+  c.fillStyle = WC.photo; roundRect(c, -11, -12, 22, 26, 2); c.fill();
+  c.save();
+  roundRect(c, -8.5, -9.5, 17, 17, 1.4); c.clip();
+  const sky = c.createLinearGradient(0, -10, 0, 8);
+  sky.addColorStop(0, '#cfe4dd'); sky.addColorStop(1, '#e9dcbe');
+  c.fillStyle = sky; c.fillRect(-9, -10, 18, 18);
+  /* the dog he met: a silhouette, facing out, because that is the joke */
+  c.fillStyle = coat;
+  ell(c, 0.5, 5, 5.6, 4.4); c.fill();
+  ell(c, 0.5, -1.4, 4.2, 3.9); c.fill();
+  if (ear === 'floppy') {
+    ell(c, -4.0, -0.6, 2.0, 3.4, 0.25); c.fill();
+    ell(c, 5.0, -0.6, 2.0, 3.4, -0.25); c.fill();
+  } else if (ear === 'long') {
+    ell(c, -4.2, 1.2, 2.2, 4.6, 0.16); c.fill();
+    ell(c, 5.2, 1.2, 2.2, 4.6, -0.16); c.fill();
+  } else {
+    c.beginPath(); c.moveTo(-4.2, -3.0); c.lineTo(-2.4, -7.2); c.lineTo(-0.6, -3.4); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(4.8, -3.0); c.lineTo(3.2, -7.2); c.lineTo(1.4, -3.4); c.closePath(); c.fill();
+  }
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  ell(c, -1.4, -1.8, 0.9, 1.0); c.fill(); ell(c, 2.4, -1.8, 0.9, 1.0); c.fill();
+  c.restore();
+  c.strokeStyle = 'rgba(124,74,47,0.22)'; c.lineWidth = 0.8;
+  roundRect(c, -8.5, -9.5, 17, 17, 1.4); c.stroke();
+  c.restore();
+}
+
+/**
+ * A found thing. `id` is a BALANCE.walk.finds entry; anything unknown draws a
+ * small wrapped parcel rather than nothing, so a future find can never render
+ * as an invisible reward.
+ */
+export function drawFind(c, id, x, y, s = 1, t = 0) {
+  c.save();
+  c.translate(x, y);
+  c.scale(s, s);
+  switch (id) {
+    case 'daisy': stemFlower(c, WC.petal, WC.yolk, 7, 7.0); break;
+    case 'buttercup': stemFlower(c, '#f7d264', '#b98a2c', 5, 6.6); break;
+    case 'bluebell': {
+      c.strokeStyle = WC.stem; c.lineWidth = 2.0; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(2, 14); c.quadraticCurveTo(-1, 4, -2, -8); c.stroke();
+      for (let i = 0; i < 4; i++) {
+        const by = -6 + i * 4.6, bx = -2 + (i % 2 ? 4.2 : -3.4);
+        c.fillStyle = i % 2 ? WC.bluebell : '#7b83c0';
+        c.beginPath();
+        c.moveTo(bx, by); c.quadraticCurveTo(bx + 3.4, by + 2, bx + 1.6, by + 5.4);
+        c.quadraticCurveTo(bx - 1.2, by + 6.4, bx - 2.6, by + 4.2);
+        c.quadraticCurveTo(bx - 3.0, by + 1.4, bx, by); c.closePath(); c.fill();
+      }
+      break;
+    }
+    case 'stick': stickShape(c); break;
+    case 'pinecone': coneShape(c); break;
+    case 'tennis': {
+      const tg = c.createRadialGradient(-3, -4, 1, 0, 0, 11);
+      tg.addColorStop(0, '#e8f59a'); tg.addColorStop(0.5, '#cbe062'); tg.addColorStop(1, '#9ab73c');
+      c.fillStyle = tg; ell(c, 0, 1, 9.6, 9.6); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.86)'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(-8, 1, 9, -0.95, 0.95); c.stroke();
+      c.beginPath(); c.arc(8, 1, 9, Math.PI - 0.95, Math.PI + 0.95); c.stroke();
+      break;
+    }
+    case 'squeaky': duckShape(c); break;
+    case 'pebble': {
+      c.fillStyle = 'rgba(104,58,32,0.18)'; ell(c, 1, 9, 9, 3); c.fill();
+      const pg = c.createLinearGradient(-8, -6, 8, 8);
+      pg.addColorStop(0, WC.stoneL); pg.addColorStop(0.55, WC.stone); pg.addColorStop(1, WC.stoneD);
+      c.fillStyle = pg;
+      c.beginPath();
+      c.moveTo(-9, 1); c.quadraticCurveTo(-8, -7, 1, -7.4);
+      c.quadraticCurveTo(9.4, -7, 9, 1.6); c.quadraticCurveTo(6, 7.4, -1, 7.2);
+      c.quadraticCurveTo(-8, 6.6, -9, 1); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.42)'; c.lineWidth = 1.1;
+      c.beginPath(); c.moveTo(-6, -2.4); c.quadraticCurveTo(0, -5.6, 6, -2.6); c.stroke();
+      break;
+    }
+    case 'feather': {
+      c.save(); c.rotate(-0.42);
+      c.fillStyle = '#f3ead5';
+      c.beginPath();
+      c.moveTo(0, -13); c.quadraticCurveTo(7.4, -2, 1.4, 12);
+      c.quadraticCurveTo(-6.4, -1, 0, -13); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(146,120,90,0.6)'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(0, -13); c.quadraticCurveTo(2, 0, 1.4, 13); c.stroke();
+      c.strokeStyle = 'rgba(146,120,90,0.30)'; c.lineWidth = 0.7;
+      for (let i = 0; i < 6; i++) {
+        const yy = -10 + i * 3.6;
+        c.beginPath(); c.moveTo(0.6, yy); c.lineTo(-3.6 + i * 0.5, yy + 2.6); c.stroke();
+        c.beginPath(); c.moveTo(1.0, yy); c.lineTo(4.8 - i * 0.5, yy + 2.6); c.stroke();
+      }
+      c.restore();
+      break;
+    }
+    case 'conker': {
+      c.fillStyle = 'rgba(104,58,32,0.18)'; ell(c, 1, 9, 8, 2.8); c.fill();
+      const cg = c.createRadialGradient(-3, -4, 1, 0, 0, 11);
+      cg.addColorStop(0, '#a4602c'); cg.addColorStop(0.6, '#7c421c'); cg.addColorStop(1, '#5a2d12');
+      c.fillStyle = cg; ell(c, 0, 1, 9, 8.6); c.fill();
+      c.fillStyle = '#e6d3ae'; ell(c, -0.6, 4.4, 4.0, 3.0); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.42)'; ell(c, -3.6, -3.4, 2.6, 1.8, -0.5); c.fill();
+      break;
+    }
+    case 'glove': {
+      c.fillStyle = WC.woolD;
+      roundRect(c, -7, -2, 14, 15, 5); c.fill();
+      roundRect(c, -7, -9, 14, 9, 4.5); c.fill();
+      c.fillStyle = WC.wool;
+      roundRect(c, -6, -8, 12, 18, 4.5); c.fill();
+      c.fillStyle = WC.woolD; roundRect(c, -6, 8, 12, 4.4, 2.2); c.fill();
+      /* the thumb */
+      c.fillStyle = WC.wool;
+      c.save(); c.rotate(-0.5); roundRect(c, -11, -3, 5.6, 9, 2.8); c.fill(); c.restore();
+      c.strokeStyle = 'rgba(255,240,214,0.34)'; c.lineWidth = 0.9;
+      for (let i = 0; i < 3; i++) {
+        c.beginPath(); c.moveTo(-5, -4 + i * 4.4); c.lineTo(5, -5 + i * 4.4); c.stroke();
+      }
+      break;
+    }
+    case 'bell': {
+      const bg2 = c.createLinearGradient(-8, -9, 8, 9);
+      bg2.addColorStop(0, WC.brassL); bg2.addColorStop(0.5, WC.brass); bg2.addColorStop(1, WC.brassD);
+      c.fillStyle = bg2;
+      c.beginPath();
+      c.moveTo(-8.4, 6); c.quadraticCurveTo(-8, -8, 0, -9.4);
+      c.quadraticCurveTo(8, -8, 8.4, 6); c.closePath(); c.fill();
+      c.fillStyle = WC.brassD; roundRect(c, -9.4, 5, 18.8, 4.2, 2.1); c.fill();
+      c.fillStyle = '#6b4a14'; ell(c, 0, 9.6, 2.4, 2.4); c.fill();
+      c.strokeStyle = WC.brassD; c.lineWidth = 1.6;
+      c.beginPath(); c.arc(0, -10.4, 3.0, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.5)'; ell(c, -3.4, -3.4, 1.8, 3.4, -0.2); c.fill();
+      break;
+    }
+    case 'ribbon': {
+      const rw = 0.5 + 0.5 * Math.sin(t * 2.1);
+      c.fillStyle = '#cf6e58';
+      c.beginPath();
+      c.moveTo(0, 0); c.quadraticCurveTo(-11, -8 - rw, -12, 0);
+      c.quadraticCurveTo(-11, 7 + rw, 0, 0); c.closePath(); c.fill();
+      c.beginPath();
+      c.moveTo(0, 0); c.quadraticCurveTo(11, -8 + rw, 12, 0);
+      c.quadraticCurveTo(11, 7 - rw, 0, 0); c.closePath(); c.fill();
+      c.fillStyle = '#b85a48';
+      c.beginPath(); c.moveTo(-1.4, 1); c.quadraticCurveTo(-5, 9, -7.6, 13); c.lineTo(-3.4, 12); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(1.4, 1); c.quadraticCurveTo(5, 9, 7.6, 13); c.lineTo(3.4, 12); c.closePath(); c.fill();
+      c.fillStyle = '#e08067'; ell(c, 0, 0, 3.2, 3.0); c.fill();
+      break;
+    }
+    case 'metBeagle': photoShape(c, '#a97141', 'long'); break;
+    case 'metPoodle': photoShape(c, '#6b5a4a', 'floppy'); break;
+    case 'metSpaniel': photoShape(c, '#c98a52', 'floppy'); break;
+    case 'metLurcher': photoShape(c, '#8a8378', 'prick'); break;
+    default: {
+      /* a wrapped parcel: an unknown find must still look like a present */
+      c.fillStyle = 'rgba(104,58,32,0.18)'; ell(c, 1, 10, 9, 3); c.fill();
+      c.fillStyle = PC.teal; roundRect(c, -8.5, -7, 17, 16, 3); c.fill();
+      c.fillStyle = '#cf6e58'; c.fillRect(-2, -7, 4, 16);
+      c.fillStyle = '#cf6e58'; c.fillRect(-8.5, -1, 17, 3.6);
+      c.fillStyle = '#e08067'; ell(c, -3.2, -8.4, 3.6, 2.6, -0.4); c.fill();
+      ell(c, 3.2, -8.4, 3.6, 2.6, 0.4); c.fill();
+      break;
+    }
+  }
+  c.restore();
+}
+
+/** a paw print, for the absence beat's trail */
+export function drawPawPrint(c, x, y, s, rot = 0, alpha = 1) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.translate(x, y);
+  c.rotate(rot);
+  c.scale(s, s);
+  c.fillStyle = 'rgba(120,72,44,0.55)';
+  ell(c, 0, 1.6, 3.4, 2.9); c.fill();
+  for (let i = -1; i <= 1; i++) {
+    ell(c, i * 3.0, -2.4, 1.25, 1.55, i * 0.32); c.fill();
+  }
   c.restore();
 }
 
@@ -289,4 +661,8 @@ export function drawDropRing(c, x, y, r, t, hot = 0, alpha = 1) {
   c.restore();
 }
 
-export default { drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawBall, drawBone, drawDropRing, PC };
+export default {
+  drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawBall, drawBone, drawDropRing, PC,
+  /* stage 4 */
+  drawLeash, drawCollar, drawFind, drawPawPrint, inkLine, WC,
+};

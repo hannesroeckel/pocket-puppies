@@ -23,6 +23,7 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, smooth, roundRect } from '../engine/draw.js';
+import { capitalise } from '../state/game.js';
 
 const W = BALANCE.view.W;
 const M = BALANCE.ui.meter;
@@ -49,11 +50,19 @@ export function createHud(game, opts = {}) {
     setHint(t) { hintText = t; hintFade = 0; },
     set visible(v) { visible = !!v; },
     get visible() { return visible; },
-    /** progressive hints — these describe the dog, they don't score her */
+    /** progressive hints — these describe the dog, they don't score her.
+        PRONOUN-PARAMETERISED (swept in stage 4): the gift puppy is male, so
+        "Try her chin" was wrong on screen. `game.pron` is resolved per dog. */
     bumpHint(affection) {
       const at = BALANCE.ui.hintAt;
-      if (hintStage === 0 && affection > at[0]) { hintStage = 1; hud.setHint('Try her chin, her chest, behind her ears'); }
-      else if (hintStage === 1 && affection > at[1]) { hintStage = 2; hud.setHint('She leans into your hand'); }
+      const P = game.pron;
+      if (hintStage === 0 && affection > at[0]) {
+        hintStage = 1;
+        hud.setHint(`Try ${P.their} chin, ${P.their} chest, behind ${P.their} ears`);
+      } else if (hintStage === 1 && affection > at[1]) {
+        hintStage = 2;
+        hud.setHint(`${capitalise(P.they)} lean${P.s} into your hand`);
+      }
     },
     /** show the word-scale needs panel for a few seconds */
     showNeeds() { statusT = 0; },
@@ -80,7 +89,8 @@ export function createHud(game, opts = {}) {
       /* ---- name pill: the only persistent chrome, and only once named --- */
       c.save();
       c.font = '700 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const label = named ? d.name : 'How is she?';
+      const P = game.pron;
+      const label = named ? d.name : `How ${P.is} ${P.they}?`;
       const nw = c.measureText(label).width + 26;
       box = { x: left, y: top, w: nw, h: M.h };
       c.globalAlpha = named ? 0.30 : 0.22;

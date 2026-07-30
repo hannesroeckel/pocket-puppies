@@ -515,6 +515,12 @@ export function createToy(rig, opts = {}) {
   }
 
   /* ================================================================== */
+  /* WHICH toy is on the rug. Stage 4's walks are the only thing that adds to
+     `inventory.toys`, so whatever he carried home from the woods is what he
+     now fetches — which is what makes a find a real unlock. Unknown ids fall
+     back to the ball inside drawBall(). */
+  const variant = () => (game && game.activeToy ? game.activeToy : 'ball');
+
   function draw(g) {
     const c = g.ctx;
     if (!toy.visible) return;
@@ -523,7 +529,7 @@ export function createToy(rig, opts = {}) {
       const P = rig.pose;
       const mx = rig.x + P.muzX * rig.s;
       const my = rig.y + (P.muzY + 6) * rig.s * (rig.sy || 1);
-      drawBall(c, mx, my, 0.72 * rig.s / rig.home.s * (rig.sy || 1), toy.spin);
+      drawBall(c, mx, my, 0.72 * rig.s / rig.home.s * (rig.sy || 1), toy.spin, undefined, variant());
       return;
     }
     const held = toy.held ? 1 : 0;
@@ -538,7 +544,7 @@ export function createToy(rig, opts = {}) {
       c.beginPath(); c.arc(toy.x, toy.y, 44, 0, TAU); c.fill();
       c.restore();
     }
-    drawBall(c, toy.x, toy.y - held * 4, toy.scale * (1 + held * 0.06), toy.spin, toy.floor);
+    drawBall(c, toy.x, toy.y - held * 4, toy.scale * (1 + held * 0.06), toy.spin, toy.floor, variant());
   }
 
   /* ================================================================== */

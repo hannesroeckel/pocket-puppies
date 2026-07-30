@@ -21,6 +21,7 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, smooth, roundRect } from '../engine/draw.js';
+import { drawText } from './text.js';
 
 const NA = BALANCE.ui.naming;
 const VW = BALANCE.view.W;
@@ -258,12 +259,25 @@ export function createNaming(opts = {}) {
 
     const line = lines[stage] || lines[0];
     const fade = smooth(clamp(t / NA.lineFade, 0, 1));
-    c.globalAlpha = a * fade * 0.96;
-    c.fillStyle = '#fff3d8';
-    c.shadowColor = 'rgba(30,14,6,0.72)'; c.shadowBlur = 12; c.shadowOffsetY = 2;
-    c.font = '500 21px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    c.fillText(line.text, VW / 2, line.ask ? LINE_Y.ask : LINE_Y.line);
-    c.shadowBlur = 0;
+    /* THE TITLE, through ui/text.js (retrofitted in stage 4).
+       It was `fillText(..., VW/2, ...)` with a drop shadow, and it read as
+       off-centre because VW/2 is the centre of the DESIGN SPACE while the
+       scrim's pool of light — the thing the eye actually measures "centred"
+       against — is a radial gradient centred elsewhere. Going through the
+       helper also clamps the line inside the SAFE horizontal band and shrinks
+       it to fit rather than letting a long name run to the edges, which
+       `maxLen: 14` alone does not guarantee at every viewport.
+       `plate: 'none'` because the beat already draws its own warm scrim and a
+       second plate on top of it would be chrome over the one moment in the
+       game that must have none. */
+    drawText(g, line.text, {
+      x: VW / 2, y: line.ask ? LINE_Y.ask : LINE_Y.line,
+      size: 21, weight: 500, ink: '#fff3d8',
+      plate: 'none', fade: a * fade * 0.96,
+      maxWidth: VW - 56,
+    });
+    /* drawText save/restores, so textAlign/textBaseline are still the
+       centre/middle set at the top of this block */
 
     if (line.ask) {
       /* the underline is drawn by the DOM field; here we only add the two

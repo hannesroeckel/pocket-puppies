@@ -156,6 +156,10 @@ export const BALANCE = {
       trickBonus: 0.005,
       /* the first time she gets a trick right on a NEW cue: a real milestone */
       learnBonus: 0.010,
+      /* per completed walk (repeatable, still day-capped). Being taken out and
+         brought home safe is worth more than a fetched ball and less than a
+         whole care action. */
+      walkBonus: 0.008,
     },
     idleDrainPerSec: 0,         // the fast drift lives on MOOD now, not here
     floorRatio: 0.62,           // continuous ratchet: floor >= affection * this
@@ -201,7 +205,17 @@ export const BALANCE = {
     dirt: {
       perThrow: 0.028,          // one toy throw
       perPlaySecond: 0.0020,    // while actually running about
-      perWalk: 0.10,            // stage 4 pays this
+      /* WALKS ARE THE MAIN SOURCE OF DIRT (SCOPE stage 4). Paid by
+         dog/walk.js at `progress x BALANCE.walk.cost.dirtRoute[route]`, so a
+         full trip through the river comes home properly filthy and a two-minute
+         turn round the high street barely shows. Raised from stage 2's
+         placeholder 0.10 after measuring: at 0.10 the mean dirt is below the
+         first ink pass and a "muddy" dog rendered clean. */
+      /* MEASURED, not guessed: a dirt ladder (0 / 0.25 / 0.45 / 0.7 / 1.0) was
+         rendered and looked at. 0.42 puts a full walk in the park at "Normal"
+         and a full walk along the river at "Dirty" — a visibly different dog
+         from the one that left, which is the whole point of coming back muddy. */
+      perWalk: 0.42,
     },
     /* exertion: play makes her hungrier and more tired (research §4) */
     exert: {
@@ -361,6 +375,224 @@ export const BALANCE = {
     hit: { r: 46, flinch: 1.0, retreat: 7.0, cd: 1.2 },
     /* teasing: flicks that never leave her feet */
     tease: { window: 6.0, at: 3 },
+  },
+
+  /* ---- WALKS ----------------------------------------------------------
+     REFRAMED (SCOPE.md stage 4, research §8 judgement 1). There is NO
+     side-profile rig and none is being built. The beat is:
+
+         PREPARE  ->  ROUTE  ->  ABSENCE  ->  RETURN
+
+     anticipation -> absence -> return, which is emotionally stronger than a
+     side-scroller and costs a fraction of the art. Not one frame of walking
+     animation exists anywhere in this feature, and if a later stage finds
+     itself wanting one it must stop and re-read SCOPE.md.
+
+     PREPARE is the payload: the leash comes out and he goes *electric*. It is a
+     frontal animation the existing rig does beautifully and it should be the
+     most joyful thing in the game after the reunion, so most of the numbers
+     below belong to it.
+
+     ABSENCE must survive the app being FULLY CLOSED (iOS suspends JS entirely
+     — docs/PLATFORM-RISKS.md risk 3). Progress is therefore a pure function of
+     `now - startedAt` computed on resume, never an accumulating tick, and
+     state/walks.js carries the clock-tamper guard.
+     ------------------------------------------------------------------- */
+  walk: {
+    /* A dog "should go for a walk at least once a day" (research §8). Past
+       this he still goes — REFUSING IS A PUNISHMENT AND PUNISHING IS OFF-BRIEF
+       (SCOPE principle 5) — he is simply less fizzy and finds less. */
+    perDay: 3,
+    fade: 0.42,                 // seconds for the walk layer to blend in/out
+
+    /* ---- BEAT 1: PREPARE. Spend the effort here. -------------------- */
+    prep: {
+      /* The lead swings in from off the top of the frame, then hangs — it
+         reads as her having taken it off a hook rather than as a UI element
+         appearing, and there is no arm to draw.
+
+         PLACED BY LOOKING. The first pass hung it at x=300, which put the clip
+         and collar INSIDE the window pane: it read as a red ring hanging in the
+         window rather than as a lead in the room. x=104 hangs it over plain
+         wall to his left, clear of the window and the sill, and far enough from
+         him that dragging it onto his collar is a real gesture across the
+         screen rather than a twitch. */
+      from: [104, -70], rest: [104, 306], scale: 1.0,
+      /* FIZZ 0..1 is the anticipation envelope, and everything visible in this
+         beat is a function of it. It rises just from the leash being out, rises
+         faster while it is near him, and rises fastest while she waggles it. */
+      fizzRise: 0.30,           // per second, leash merely visible
+      fizzNear: 0.62,           // extra per second while within `nearR`
+      fizzPerUnit: 0.0021,      // per virtual unit the leash is moved
+      fizzFall: 0.22,           // ebbs if she puts it down and walks off
+      nearR: 170,
+      /* stages, so the pose escalates in readable steps rather than smearing */
+      up: 0.30,                 // paws start leaving the floor
+      electric: 0.62,           // bouncing, spinning, cannot keep still
+      /* he is tired: fizz is capped (still keen, just less springy) */
+      tiredAt: 0.28, tiredCap: 0.62,
+      /* ...and so is the fifth walk of the day */
+      overCap: 0.78,
+      /* The bounce. A hop, not a gait cycle — `hop` is an existing channel.
+         MEASURED, not guessed: `hop` is [128, 12.5], i.e. zeta 0.55, so a kick
+         of 11 peaks at only 0.43 and moved the body 15 rig units — visible, but
+         it read as a contented dog shifting its weight. 1.9 peaks at ~0.8 and
+         moves him ~29 units, which is a dog leaving the floor. */
+      hopEvery: [0.28, 0.54], hopHeight: [0.5, 1.9],
+      spinEvery: [1.7, 3.1],
+      /* clip it on: drop the leash within this of his collar */
+      clipR: 96,
+      clipHold: 0.85,           // the snap, the wiggle, then the map
+      hintAfter: 3.2,
+      /* WHERE THE ANTICIPATION LINE SITS, measured DOWN FROM THE SAFE-AREA TOP
+         EDGE rather than from the top of the frame. It used to be a hard y=82,
+         which on the target device (20px top inset) left it crowding the
+         status bar, and it was cream drawn straight onto the cream wall at
+         1.22:1 — see ui/text.js for why that is now impossible. */
+      hintTop: 72,
+      /* he is *still* going after this long — offer to just set off */
+      offerAfter: 22,
+      /* the collar ring he is drawn wearing while the leash is on */
+      collar: { y: -0.30, w: 0.62 },
+    },
+
+    /* ---- BEAT 2: ROUTE ---------------------------------------------
+       She picks OR DRAWS a route. Drawing is the distinctive, memorable half
+       of the original mechanic and it needs no dog rig at all (research §8).
+       The STAMINA-GATED REDRAW IS CUT — "frustrating and it teaches nothing".
+       A drawn path is never rejected; it is simply matched to whatever it
+       passes through, and its length sets the duration. */
+    map: {
+      /* duration in REAL seconds, from how far she drew */
+      dur: [100, 300],
+      /* path length in virtual units that reaches `dur[1]` */
+      lenFull: 900,
+      minLen: 40,               // shorter than this and it was a tap, not a draw
+      sample: 7,                // virtual units between recorded path points
+      maxPts: 90,
+      /* how strongly a drawn path's region coverage biases the mix. A path
+         that only clips a corner of the woods still counts a little. */
+      touchR: 58,
+      /* a tap inside a route's blob picks that route outright */
+      tapR: 74,
+    },
+
+    /* ---- BEAT 3: ABSENCE -------------------------------------------
+       The room is empty and DELIBERATELY A LITTLE MELANCHOLY. She may close
+       the app entirely; nothing here ticks. */
+    away: {
+      /* the cool wash over the empty room */
+      chill: 0.34, dim: 0.22, moteSlow: 0.45,
+      /* The paw-print trail that fills as the walk runs. Decoration, not a
+         bar — the word line above it is what actually says how long.
+         PLACED BY LOOKING: at y=812 it was behind the nav pills and, in the
+         brown of the print colour, invisible on a darkened rug. 596 is bare
+         floorboards just below the skirting, and the prints are drawn cream. */
+      prints: 9, printY: 596,
+      /* words, never a countdown clock (SCOPE principle 2's spirit) */
+      words: [[0.92, 'any moment now'], [0.72, 'back very soon'],
+              [0.42, 'back in a little while'], [0, 'off up the road']],
+      /* the centre of the three-line absence block, measured DOWN FROM THE
+         SAFE-AREA TOP EDGE (ui/text.js). The three lines share one backing
+         plate, because three abutting plates leave seams. */
+      panelTop: 121,
+      /* She can always end it early and is NEVER penalised for it. Sits BELOW
+         his empty spot rather than on top of it — at y=690 the button covered
+         the dent in the rug, which is the one thing the beat is about. */
+      bringHome: { x: 195, y: 744, w: 214, h: 46, r: 23 },
+    },
+
+    /* ---- BEAT 4: RETURN --------------------------------------------
+       Muddier, tireder, happier, and CARRYING SOMETHING. On this rig depth is
+       scale (ARCHITECTURE §12.6): he arrives small and grows. No gait cycle. */
+    home: {
+      beats: { in: 1.55, drop: 2.35, proud: 3.55, settle: 5.6 },
+      fromScale: 0.40, fromY: -104,   // where he starts, relative to home
+      strideRate: 7.4, strideAmp: 4.2,
+      /* The thing he is carrying, in his mouth and then on the rug. `carryAt`
+         hangs it BELOW the muzzle: at +10 it sat over his open mouth and read
+         as him chewing a stamp. His mouth is also held shut while he carries
+         it, which is what a dog carrying something actually looks like. */
+      carryAt: [2, 26],               // rig-local offset from the muzzle
+      carryScale: 1.35,
+      dropTo: [196, 726],             // where it lands, virtual space
+      dropSpread: 34,
+      dropScale: 1.25,
+      dropArc: 44,
+      /* the proud look up at the camera: a bid, and it should read as one */
+      proudLift: 0.42,
+      pantFor: [2.2, 4.6],
+      hearts: [2, 7],
+    },
+
+    /* ---- what a walk COSTS ------------------------------------------
+       All scaled by progress, so bringing him home early costs less and is
+       therefore never a penalty. Dirt is the headline: RETURNING DIRTY IS A
+       FEATURE — it is what gives her a reason to run a bath. */
+    cost: {
+      dirtRoute: { park: 1.0, high: 0.72, river: 1.38, woods: 1.24 },
+      energy: 0.30, hunger: 0.15, thirst: 0.23,
+      /* he had a lovely time. Mood is the fast axis; the bond gets its own
+         once-a-day award through state/game.js's ledger. */
+      mood: 0.44,
+      /* trust grows a little from being taken out and brought home safe */
+      trust: 0.010,
+    },
+
+    /* ---- DISCOVERY: the whole point of the feature ------------------
+       "Discovery lives entirely in what he brings home." Route biases what
+       comes back; walk length gates the rarer tiers, which is the original's
+       "presents get rarer the farther from home" gradient (research §8)
+       translated from map distance to walk length.
+
+       HE ALWAYS COMES HOME WITH SOMETHING. `count.base` is 1 and nothing can
+       reduce it — a short walk yields one common thing, never nothing, because
+       an empty-mouthed return would make skipping feel like a punishment. */
+    find: {
+      count: { base: 1, at: [0.50, 0.88], bonusChance: 0.45 },
+      /* tier gates by progress: tier 0 always, then these */
+      tierAt: [0, 0.46, 0.84],
+      /* past `perDay` walks the top tier stops appearing */
+      overCapTier: 1,
+      /* a `toy` find only pays out as a new toy once; after that it is a
+         pleasant duplicate and the coin value goes up instead */
+      dupCoins: 3,
+      /* coins in his collar / dropped in the street. Stage 5 spends these. */
+      coins: { per: [2, 10], route: { park: 1.0, high: 1.7, river: 0.85, woods: 1.05 } },
+      /* the running collection kept in state.walks.found */
+      logCap: 40,
+    },
+    /* THE TABLE. `w` is the per-route weight — this is the route bias, and it
+       is deliberately readable as a matrix so it can be tuned by eye.
+       `tier` gates on walk length. `toy` names the fetch toy it unlocks. `met`
+       records the dog he met, which is what makes a photo a photo. */
+    finds: [
+      { id: 'daisy', kind: 'flower', tier: 0, w: { park: 40, high: 8, river: 20, woods: 14 } },
+      { id: 'buttercup', kind: 'flower', tier: 0, w: { park: 26, high: 5, river: 26, woods: 10 } },
+      { id: 'bluebell', kind: 'flower', tier: 1, w: { park: 8, high: 2, river: 10, woods: 30 } },
+      { id: 'stick', kind: 'toy', tier: 0, w: { park: 18, high: 4, river: 22, woods: 38 }, toy: 'stick' },
+      { id: 'pinecone', kind: 'toy', tier: 0, w: { park: 6, high: 2, river: 6, woods: 34 }, toy: 'pinecone' },
+      { id: 'tennis', kind: 'toy', tier: 1, w: { park: 26, high: 16, river: 8, woods: 8 }, toy: 'tennis' },
+      { id: 'squeaky', kind: 'toy', tier: 2, w: { park: 6, high: 22, river: 6, woods: 3 }, toy: 'squeaky' },
+      { id: 'pebble', kind: 'keep', tier: 0, w: { park: 10, high: 6, river: 40, woods: 8 } },
+      { id: 'feather', kind: 'keep', tier: 0, w: { park: 12, high: 6, river: 30, woods: 16 } },
+      { id: 'conker', kind: 'keep', tier: 1, w: { park: 12, high: 3, river: 6, woods: 30 } },
+      { id: 'glove', kind: 'keep', tier: 1, w: { park: 6, high: 30, river: 6, woods: 4 } },
+      { id: 'bell', kind: 'gift', tier: 2, w: { park: 5, high: 26, river: 4, woods: 3 } },
+      { id: 'ribbon', kind: 'gift', tier: 2, w: { park: 12, high: 20, river: 6, woods: 5 } },
+      { id: 'metBeagle', kind: 'photo', tier: 0, w: { park: 30, high: 10, river: 8, woods: 6 }, met: 'beagle' },
+      { id: 'metPoodle', kind: 'photo', tier: 0, w: { park: 8, high: 32, river: 6, woods: 4 }, met: 'poodle' },
+      { id: 'metSpaniel', kind: 'photo', tier: 1, w: { park: 8, high: 6, river: 30, woods: 8 }, met: 'spaniel' },
+      { id: 'metLurcher', kind: 'photo', tier: 1, w: { park: 6, high: 4, river: 8, woods: 30 }, met: 'lurcher' },
+    ],
+    /* the four places, in the order they are laid out on the map */
+    routes: ['park', 'high', 'river', 'woods'],
+    /* THE WINDOW SILL. What he has brought home is displayed in the room — the
+       slow-drip decor reward research §1.10 asks for, and the reason a find is
+       a real unlock rather than a line of text. The sill was chosen by looking:
+       it is sunlit, it is the composition's focal point, and it is the one
+       horizontal surface nothing else already stands on. */
+    shelf: { at: [204, 318], step: 25, max: 7, scale: 0.92 },
   },
 
   /* ---- TRAINING + TRICKS ----------------------------------------------
@@ -799,6 +1031,15 @@ export const BALANCE = {
        under-damped, so he arrives with a little momentum rather than sliding
        into place — that overshoot is most of what makes it read as eager. */
     call:     [46, 9.5],
+    /* ---- stage 4: walks ----
+       `fizz` is the anticipation envelope and it is deliberately the springiest
+       thing in the game after the reunion: low damping so it overshoots, which
+       is what "he cannot contain himself" looks like as a number. */
+    walkW:    [40, 12],     // walk-layer blend weight
+    fizz:     [58, 9.0],
+    leash:    [120, 14],    // the dangled leash settling
+    homeIn:   [44, 11],     // how far up the road he still is, 1 -> 0
+    carry:    [130, 13],    // the found thing, in his mouth and then dropped
   },
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },
 
@@ -982,6 +1223,63 @@ export const BALANCE = {
        row is a signal she knows and the trick SHE thinks it means, in words.
        That is what makes a mis-association visible instead of mysterious. */
     train: { hintY: 82, legendTop: 132, rowH: 19, glyphR: 11, maxRows: 8 },
+    /* the route map. A CUTE HAND-DRAWN MAP, not a UI: the paper, the wobble in
+       the ink and the little house are the whole charm of the beat. */
+    map: {
+      top: 96, bottom: 700, pad: 16,
+      /* the title and the hint sit INSIDE the paper: above it they were dark
+         brown drawn over the dimmed room, which is the cream-on-cream mistake
+         in the other direction */
+      titleY: 102, hintY: 123, choiceY: 706,
+      wobble: 1.9,          // how far the "hand-drawn" ink strays, virtual units
+      wobbleRate: 3.1,
+      house: [196, 640],
+      setOff: { y: 754, w: 218, h: 50, r: 25 },
+      back: { x: 40, y: 62, r: 20 },
+      /* where each route's blob sits on the paper, and how big */
+      blobs: {
+        park: { at: [104, 250], r: [64, 52] },
+        high: { at: [278, 214], r: [58, 48] },
+        river: { at: [286, 424], r: [66, 50] },
+        woods: { at: [96, 442], r: [62, 54] },
+      },
+    },
+    /* the find card that names what he brought home */
+    findCard: { y: 148, w: 260, h: 96, r: 20, dur: 4.6, fade: 0.42 },
+
+    /* ---- CANVAS TEXT (ui/text.js) --------------------------------------
+       Three legibility failures shipped before this block existed, all of them
+       cream copy drawn straight over cream art. `contrast` is the promise the
+       helper keeps: the backing plate's alpha is SOLVED so that the ink clears
+       this ratio against the worst background that could ever be behind it —
+       pure black or pure white showing through the plate. It is not a number
+       anyone eyeballed, so raising it here really does make everything more
+       legible rather than just darker.
+
+       4.5 is WCAG AA for body text. Deliberately applied to display copy too:
+       this is a phone held at arm's length in whatever light she is in. */
+    text: {
+      contrast: 4.5,
+      /* the two plates. Warm, because a neutral grey scrim in a warm room
+         reads as a UI element pasted on top of the art. */
+      plateDark: '#241309',
+      plateLight: '#fff6e4',
+      /* above this luminance an ink counts as "light" and gets the dark plate */
+      lightInkAt: 0.34,
+      ink: '#fff0d4',
+      size: 13, weight: 600,
+      lineScale: 1.32,        // box height as a multiple of the font size
+      padX: 9, padY: 4,
+      radius: 11,
+      feather: 7,             // how far the plate's edge fades out
+      gap: 5,                 // between stacked lines
+      /* SAFE AREA. The target device reports 20px top / 40px bottom; this is
+         the extra breathing room ON TOP of the reported inset, because copy
+         that sits exactly on the notch boundary still looks like a mistake. */
+      margin: 10,
+      /* type never shrinks below this, and ellipsises instead */
+      minSize: 9.5,
+    },
   },
 
   /* ---- reduced motion ------------------------------------------------ */

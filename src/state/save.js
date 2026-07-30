@@ -12,6 +12,8 @@
    ========================================================================== */
 import BALANCE from './balance.js';
 import { SCHEMA_VERSION, newState, DIRT_REGIONS, newTrick, trickLevelFromReps } from './game.js';
+import { FIND_BY_ID, walkState } from './walks.js';
+import { dayIndex } from './time.js';
 
 const KEY = BALANCE.save.key;
 
@@ -103,6 +105,56 @@ export const MIGRATIONS = {
     s.v = 3;
     return s;
   },
+
+  /* ---- v3 -> v4 : stage 4 (walks + discovery) -------------------------
+     Adds the ACTIVE-WALK record — the three numbers that let a walk survive
+     the app being killed (`startedAt`, `dur`, `seed`; see state/walks.js) —
+     plus the day index `walksToday` belongs to, a lifetime total, and
+     `inventory.activeToy`, which is how a found toy becomes the toy he
+     actually fetches.
+
+     A stage-1/2/3 save has `walks: {lastWalkAt, walksToday, found:[]}` from
+     §4's original shape. It keeps all three. `walksToday` is deliberately NOT
+     trusted across the bump: it belonged to a day index that was never
+     recorded, so it is stamped with today rather than silently counting an old
+     day's walks against this one. Nothing is lost — the worst case is one
+     extra walk being available on the day of the update, which is a gift. */
+  4: (s) => {
+    if (!s.walks || typeof s.walks !== 'object') s.walks = {};
+    const w = s.walks;
+    if (typeof w.lastWalkAt !== 'number' || !Number.isFinite(w.lastWalkAt)) w.lastWalkAt = 0;
+    if (!Array.isArray(w.found)) w.found = [];
+    /* the log used to be undefined-shaped; normalise the entries we can read
+       and drop anything that is not a find this build knows about */
+    w.found = w.found.map((it) => {
+      if (typeof it === 'string') return { at: 0, id: it, route: '' };
+      if (it && typeof it === 'object' && typeof it.id === 'string') {
+        return { at: Math.max(0, +it.at || 0), id: it.id, route: typeof it.route === 'string' ? it.route : '' };
+      }
+      return null;
+    }).filter((it) => it && FIND_BY_ID[it.id]);
+    if (typeof w.total !== 'number' || !Number.isFinite(w.total)) {
+      /* best available estimate of a lifetime count: what is in the log */
+      w.total = w.found.length;
+    }
+    w.day = dayIndex(Date.now());
+    w.walksToday = 0;
+    if (w.active === undefined) w.active = null;
+
+    if (!s.inventory || typeof s.inventory !== 'object') s.inventory = {};
+    if (!Array.isArray(s.inventory.toys) || !s.inventory.toys.length) s.inventory.toys = ['ball'];
+    if (typeof s.inventory.activeToy !== 'string'
+      || s.inventory.toys.indexOf(s.inventory.activeToy) < 0) {
+      s.inventory.activeToy = s.inventory.toys[0] || 'ball';
+    }
+    if (!s.unlocks || typeof s.unlocks !== 'object') s.unlocks = { breeds: [], items: [], rooms: ['room'] };
+    if (!Array.isArray(s.unlocks.items)) s.unlocks.items = [];
+    /* anything already in the log counts as collected, so an old save's shelf
+       is populated rather than starting empty */
+    for (const it of w.found) if (s.unlocks.items.indexOf(it.id) < 0) s.unlocks.items.push(it.id);
+    s.v = 4;
+    return s;
+  },
 };
 
 export function migrate(raw) {
@@ -163,6 +215,18 @@ function fillDefaults(s) {
     if (!d.bond.care || typeof d.bond.care !== 'object') d.bond.care = {};
   }
   if (!out.dogs.some((d) => d.id === out.activeDogId)) out.activeDogId = out.dogs[0].id;
+  /* ---- stage 4 fields ----
+     `walkState` repairs the whole walks block, including an active-walk record
+     with a poisoned duration or a start time in the future, and rolls the day
+     boundary. It is called here so a hand-edited or imported save can never put
+     a walk the progress function cannot read in front of the first frame. */
+  walkState(out);
+  if (!Array.isArray(out.inventory.toys) || !out.inventory.toys.length) out.inventory.toys = ['ball'];
+  if (typeof out.inventory.activeToy !== 'string'
+    || out.inventory.toys.indexOf(out.inventory.activeToy) < 0) {
+    out.inventory.activeToy = out.inventory.toys[0] || 'ball';
+  }
+  if (!Array.isArray(out.unlocks.items)) out.unlocks.items = [];
   out.v = SCHEMA_VERSION;
   return out;
 }

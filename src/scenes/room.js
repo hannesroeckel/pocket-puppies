@@ -24,6 +24,7 @@ import { createToy } from '../dog/toy.js';
 import { createReunion } from '../dog/reunion.js';
 import { createTraining } from '../dog/train.js';
 import { createVoice } from '../dog/voice.js';
+import { createWalk } from '../dog/walk.js';
 import { capitalise } from '../state/game.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
@@ -31,7 +32,7 @@ import { createToasts } from '../ui/toast.js';
 import { createSheet } from '../ui/sheet.js';
 import { createNaming } from '../ui/naming.js';
 import { heartPath } from '../ui/meter.js';
-import { drawBowl } from './props.js';
+import { drawBowl, drawFind } from './props.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
 import { decayLive, describeGap } from '../state/time.js';
 
@@ -274,7 +275,7 @@ export function createRoomScene() {
   let app = null;
   let rig = null, dog = null, idle = null, pet = null;
   let care = null, toy = null, reunion = null, naming = null;
-  let train = null, voice = null;
+  let train = null, voice = null, walk = null;
   let hud = null, nav = null, toasts = null, sheet = null;
   let roomCv = null, ovCv = null;
   const rng = createRng(BALANCE.rng.seed).fork(3);
@@ -286,6 +287,7 @@ export function createRoomScene() {
   let pressedNav = null;
   let pendingNaming = false;
   let sheetKind = '';           // 'care' | 'settings'
+  let hintBeforeWalk = '';      // the hint line, parked while he is out
 
   const POI = [
     { x: 66, y: 608, w: 1.3 },    // food bowl
@@ -519,6 +521,18 @@ export function createRoomScene() {
     c.fillStyle = ts; c.fillRect(-BX, -BY, VW + BX * 2, 120 + BY);
   }
 
+  /* ---- copy swept in passing (stage 4) ---------------------------------
+     These are stage-1/2 strings that hardcoded "her". The gift puppy is a MALE
+     Schnoodle, so "Stroke her" was simply wrong on screen — caught by looking
+     at a stage-4 screenshot. Parameterised here the way stage 3 did with its
+     one inherited string (ARCHITECTURE §13.5); the rest of the older copy is
+     still being swept separately. Stage 4's OWN copy is all in `COPY` at the
+     top of dog/walk.js. */
+  const strokeHint = () => {
+    const P = app.game.pron;
+    return app.game.isNamed ? `Stroke ${P.them}` : 'Stroke the puppy';
+  };
+
   /* ---- care sheet: THE INSPECT SCREEN ------------------------------
      Four actions, and beside each one the WORD-SCALE state of the need it
      serves — `Full`, `Quenched`, `Clean`, `Bouncy`. This is the original's
@@ -526,11 +540,12 @@ export function createRoomScene() {
   function openCare() {
     const g = app.game;
     sheetKind = 'care';
+    const P = g.pron;
     sheet.open({
-      title: 'How is she?',
+      title: `How ${P.is} ${P.they}?`,
       rows: [
         { id: 'feed', label: 'Feed', note: 'Pour a bowl', right: g.describeNeed('hunger') },
-        { id: 'water', label: 'Water', note: 'Fill her bowl', right: g.describeNeed('thirst') },
+        { id: 'water', label: 'Water', note: `Fill ${P.their} bowl`, right: g.describeNeed('thirst') },
         { id: 'wash', label: 'Wash', note: 'Scrub the dirt out', right: g.describeNeed('cleanliness') },
         { id: 'brush', label: 'Brush', note: 'With the grain', right: g.describeGloss() },
         { id: 'close', label: 'Done' },
@@ -539,13 +554,24 @@ export function createRoomScene() {
   }
 
   function navAction(a, n) {
+    /* HE IS OUT. Everything in-room is unavailable, said once and warmly —
+       never as an error, and the walk button is how you get him back. */
+    if (walk && walk.away && n.id !== 'settings' && n.id !== 'walk') {
+      toasts.show(walk.COPY.awayBusy(a.game.pron));
+      return;
+    }
     if (n.id === 'care') { openCare(); return; }
     if (n.id === 'settings') { openSettings(); return; }
     if (n.id === 'train') { startTrain(); return; }
+    if (n.id === 'walk') { startWalk(); return; }
     if (n.id === 'play') {
       /* Play is not a scene: the ball is in the room. Point at it and get out
          of the way — flicking it up-screen is the whole interface. */
-      if (toy.busy) { toasts.show('She has gone after it'); return; }
+      if (toy.busy) {
+        const P = a.game.pron;
+        toasts.show(`${capitalise(P.they)} ${P.has} gone after it`);
+        return;
+      }
       hud.setHint('Flick the ball up-screen');
       toasts.show('Flick the ball up — never sideways');
       return;
@@ -553,9 +579,80 @@ export function createRoomScene() {
     if (!a.nav.go(n.id)) toasts.show(n.label + ' — coming soon');
   }
 
+  /* ---- THE SURFACE ARBITER --------------------------------------------
+     ONE place decides who owns the whole screen, and every modal beat asks it
+     before taking over. It exists because a real defect got through without
+     it: on a fresh save `startWalk()` checked toy, care and training but not
+     the NAMING beat, so the leash-drop anticipation played underneath "He's
+     yours." — two modal states stacked, the first thing she would ever see.
+
+     The guard has to work in BOTH directions, and that is the part a per-site
+     `if` always gets wrong. It is not enough for the walk to refuse while
+     naming is open; naming must also refuse while the walk owns the surface,
+     or renaming from Settings while he is out at the park stacks the same two
+     layers the other way up.
+
+     THE SURFACE IS EXCLUSIVE. A first draft of this gave the layers a
+     precedence order so that "important" beats could displace lesser ones —
+     and that priority table immediately grew the very hole it was meant to
+     close: naming outranked the walk, so renaming from Settings while he was
+     out at the park opened the overlay on top of the absence panel. Verified
+     failing, then deleted.
+
+     There is no ranking now. If any layer owns the screen, no other layer may
+     take it. A beat that still wants to happen is QUEUED (see `openNaming`)
+     rather than allowed to barge, which is both simpler and the behaviour
+     every one of these cases actually wanted. */
+
+  /** who owns the whole surface right now, or '' */
+  function surfaceOwner() {
+    if (naming && naming.active) return 'naming';
+    if (reunion && reunion.active) return 'reunion';
+    if (walk && walk.modal) return 'walk';
+    if (walk && walk.away) return 'away';
+    return '';
+  }
+
+  /**
+   * May `who` take the surface? Returns '' if yes, otherwise the id of the
+   * layer standing in the way — so the caller can decide whether to toast,
+   * to queue, or to stay silent.
+   */
+  function surfaceBlockedFor(who) {
+    const owner = surfaceOwner();
+    if (!owner || owner === who) return '';
+    return owner;
+  }
+
+  /**
+   * Open the naming beat, but only if nothing else owns the screen. If
+   * something does, it is QUEUED rather than dropped: `pendingNaming` already
+   * exists for exactly this and is drained in update() the moment the surface
+   * frees up, so a rename asked for during a walk still happens — just after
+   * he is home, which is when she can see him anyway.
+   */
+  function openNaming(mode) {
+    if (!naming) return false;
+    if (surfaceBlockedFor('naming')) {
+      if (!app.game.isNamed) pendingNaming = true;
+      else toasts.show(walk && walk.away
+        ? walk.COPY.awayBusy(app.game.pron)
+        : 'One thing at a time');
+      return false;
+    }
+    naming.start(mode || 'first', app.view);
+    return true;
+  }
+
   /** start a care action, closing anything that would fight it */
   function startCare(kind) {
-    if (toy && toy.busy) { toasts.show('She is busy with the ball'); return false; }
+    if (naming && naming.active) return false;
+    if (walk && walk.busy) { toasts.show(walk.COPY.awayBusy(app.game.pron)); return false; }
+    if (toy && toy.busy) {
+      const P = app.game.pron;
+      toasts.show(`${capitalise(P.they)} ${P.is} busy with the ball`);
+      return false;
+    }
     if (train && train.modal) train.stop();
     if (care.mode === kind) { care.stop(); return false; }
     pet.cancel();
@@ -566,6 +663,8 @@ export function createRoomScene() {
   /** enter training mode, closing anything that would fight it */
   function startTrain() {
     if (!train) return false;
+    if (naming && naming.active) return false;
+    if (walk && walk.busy) { toasts.show(walk.COPY.awayBusy(app.game.pron)); return false; }
     if (train.modal) { train.stop(); return false; }
     if (toy && toy.busy) {
       const P = app.game.pron;
@@ -575,6 +674,64 @@ export function createRoomScene() {
     if (care.modal) care.stop();
     pet.cancel();
     return train.start();
+  }
+
+  /* ---- WALKS (stage 4) -------------------------------------------------
+     The walk is IN THE ROOM, like care and training, and for a stronger
+     version of the same reason: three of its four beats ARE the room. Prepare
+     is him going electric in front of the same rig, absence is this room with
+     him missing, and the return is him coming back into it. Only the map is a
+     full-surface overlay, and unmounting the room to draw it would throw away
+     the rig, the baked room canvas and the continuity between the beats.
+     `scenes/walk.js` is therefore not built — see ARCHITECTURE §14. */
+  function startWalk() {
+    if (!walk) return false;
+    /* THE GUARD THAT WAS MISSING. The naming beat and the greeting both own
+       the whole surface; starting the leash beat underneath either of them
+       stacks two modal states. Silent rather than toasted: during first-run
+       naming a toast would be chrome over the one moment that must have none. */
+    const blocked = surfaceBlockedFor('walk');
+    if (blocked === 'naming' || blocked === 'reunion') return false;
+    if (walk.away) return false;                 // the away panel owns this
+    if (walk.beat === 'prep' || walk.beat === 'map') { walk.stop(); return false; }
+    if (toy && toy.busy) {
+      const P = app.game.pron;
+      toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
+      return false;
+    }
+    if (care.modal) care.stop();
+    if (train.modal) train.stop();
+    pet.cancel();
+    return walk.start();
+  }
+
+  /** the reunion, in one place, because the walk's return can also trigger it */
+  function playReunion(intensity, hours) {
+    reunion.start(intensity, hours);
+    app.game.awardDay('reunion');
+    app.game.log('reunion', 'away ' + describeGap(hours || 8));
+    const P = app.game.pron;
+    const nm2 = app.game.isNamed ? app.game.dog.name : capitalise(P.they);
+    toasts.show(nm2 + ' missed you', 2.6);
+  }
+
+  /**
+   * WHAT HE HAS BROUGHT HOME, on the window sill. This is what makes a find a
+   * real unlock rather than a line of text: the collection is in the world, it
+   * grows, and it is the slow-drip decor reward research §1.10 asks for.
+   * Drawn live rather than baked, because it changes.
+   */
+  function drawSill(c) {
+    const SH = BALANCE.walk.shelf;
+    const items = Array.from(app.game.findCollection()).slice(-SH.max);
+    if (!items.length) return;
+    for (let i = 0; i < items.length; i++) {
+      const x = SH.at[0] + i * SH.step;
+      /* a soft contact shadow, or they float */
+      c.fillStyle = 'rgba(104,58,32,0.16)';
+      ell(c, x + 1, SH.at[1] + 11, 8, 2.6); c.fill();
+      drawFind(c, items[i], x, SH.at[1], SH.scale, time + i);
+    }
   }
 
   /* ---- settings sheet --------------------------------------------- */
@@ -612,8 +769,9 @@ export function createRoomScene() {
       rows: [
         {
           id: 'name',
-          label: g.isNamed ? 'Name: ' + g.dog.name : 'Name her',
-          note: g.isNamed ? 'Tap to rename' : 'She is still waiting for a name',
+          label: g.isNamed ? 'Name: ' + g.dog.name : `Name ${g.pron.them}`,
+          note: g.isNamed ? 'Tap to rename'
+            : `${capitalise(g.pron.they)} ${g.pron.is} still waiting for a name`,
         },
         { id: 'sound', label: app.game.state.settings.sound ? 'Sound: on' : 'Sound: off', note: 'Sounds arrive in a later update' },
         voiceRow(),
@@ -633,7 +791,10 @@ export function createRoomScene() {
     }
     if (id === 'name') {
       sheet.close();
-      naming.start('rename', app.view);
+      /* through the arbiter: Settings is reachable while he is out on a walk,
+         and renaming from there used to open the naming overlay on top of the
+         absence panel */
+      openNaming('rename');
       return;
     }
     if (id === 'sound') {
@@ -785,6 +946,22 @@ export function createRoomScene() {
            washed, or off after the ball */
         busyElsewhere: () => !!(care.modal || (toy && toy.busy) || reunion.active),
       });
+      /* ---- WALKS (stage 4) ------------------------------------------
+         Four beats, no gait cycle, and the absence beat is a pure function of
+         the wall clock so it survives the app being killed (state/walks.js). */
+      walk = createWalk(rig, {
+        game: app.game, pet, idle, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        busyElsewhere: () => !!(care.modal || train.modal || (toy && toy.busy) || reunion.active),
+      });
+      /* if she had been away long enough to earn a reunion AND he was out on a
+         walk, the walk's return lands first and the reunion follows it: he
+         trots in with something, drops it, and THEN realises she is there.
+         Playing both at once would have them fight for the same body. */
+      walk.onHome(({ after }) => { if (after > 0) playReunion(after, (app.elapsed || {}).hours || 8); });
+
       naming = createNaming({
         game: app.game, reduced: app.reduced,
         onName: (name) => {
@@ -801,14 +978,14 @@ export function createRoomScene() {
         },
         onDone: (name) => {
           if (name) toasts.show(name + ' it is');
-          hud.setHint(name ? 'Stroke her' : 'Stroke the puppy');
+          hud.setHint(strokeHint());
         },
       });
 
       nav = createNav([
-        /* care, play and training are in-room features, not separate scenes */
+        /* care, play, training and WALKS are in-room features, not scenes */
         { id: 'care', label: 'Care', available: true },
-        { id: 'walk', label: 'Walk', available: app.nav.has('walk') },
+        { id: 'walk', label: 'Walk', available: true },
         { id: 'train', label: 'Train', available: true },
         { id: 'play', label: 'Play', available: true },
         { id: 'shop', label: 'Shop', available: app.nav.has('shop') },
@@ -823,7 +1000,7 @@ export function createRoomScene() {
       rig.update(1 / 60);
       pet.computeZones();
 
-      hud.setHint(app.game.isNamed ? 'Stroke her' : 'Stroke the puppy');
+      hud.setHint(strokeHint());
 
       /* ---- THE SLOW AXIS PAYS FOR TURNING UP --------------------------
          "Bond is moved by distinct sessions rather than session length"
@@ -831,20 +1008,31 @@ export function createRoomScene() {
          what a whole session of petting can pay. */
       app.game.awardDay('showUp');
 
-      /* ---- the reunion ---------------------------------------------- */
-      if (params && params.reunion) {
-        const el = app.elapsed || {};
-        reunion.start(el.intensity !== undefined ? el.intensity : 0.5, el.hours || 8);
-        app.game.awardDay('reunion');
-        app.game.log('reunion', 'away ' + describeGap(el.hours || 8));
-        const nm = app.game.isNamed ? app.game.dog.name : 'She';
-        toasts.show(nm + ' missed you', 2.6);
+      /* ---- WAS HE OUT? --------------------------------------------------
+         THE "SURVIVES BEING FULLY CLOSED" PATH, and there is only one of it.
+         Nothing ticked while the app was shut; `walkProgress` derives where the
+         walk got to from the persisted `startedAt` and the wall clock. If it
+         finished while she was away, he is simply home — which is a lovely way
+         to open the app — and the walk's return plays instead of the standalone
+         reunion, absorbing it if one was due. */
+      const el = app.elapsed || {};
+      const wp = app.game.walkProgress();
+      if (wp.active) {
+        if (wp.done) {
+          walk.arrive({ after: params && params.reunion ? (el.intensity !== undefined ? el.intensity : 0.5) : 0 });
+          toasts.show(walk.COPY.homeWhileAway(app.game.pron, app.game.isNamed ? app.game.dog.name : ''), 2.4);
+        } else {
+          walk.resume();
+        }
+      } else if (params && params.reunion) {
+        /* ---- the reunion ---------------------------------------------- */
+        playReunion(el.intensity !== undefined ? el.intensity : 0.5, el.hours || 8);
       } else if (!app.game.isNamed) {
         /* first launch: she arrives and she has no name yet */
-        naming.start('first', app.view);
+        openNaming('first');
       }
       /* if she came back to an unnamed puppy, name it once the greeting lands */
-      if (!app.game.isNamed && reunion.active) pendingNaming = true;
+      if (!app.game.isNamed && (reunion.active || walk.active)) pendingNaming = true;
     },
 
     exit() {
@@ -854,6 +1042,9 @@ export function createRoomScene() {
       if (naming) naming.close();
       if (care) care.stop();
       if (train) train.stop();
+      /* `walk.stop()` tears the LAYER down and deliberately leaves an active
+         walk alone — he is still out, and the save says so. */
+      if (walk) walk.stop();
       /* the microphone must never outlive the scene that asked for it: a live
          mic indicator on a puppy game would be alarming, and correctly so */
       if (voice) voice.abort();
@@ -888,6 +1079,7 @@ export function createRoomScene() {
       care.update(dt, game.mood);
       toy.update(dt, game.mood);
       train.update(dt, game.mood);
+      walk.update(dt, game.mood);
 
       /* --- the pose pipeline, in order ---
          base -> idle -> pet -> care -> train -> toy -> reunion -> resolve
@@ -900,7 +1092,9 @@ export function createRoomScene() {
          reason the reunion skips it. */
       const mood = game.mood;
       rig.base(mood, dt);
-      if (!reunion.active) {
+      /* the idle director is skipped while he is OUT: an invisible dog quietly
+         playing clips would still spawn particles and call for sounds */
+      if (!reunion.active && !walk.hidesDog) {
         idle.update(dt, {
           affection: mood.mood,
           petLevel: pet.level,
@@ -911,13 +1105,20 @@ export function createRoomScene() {
       pet.apply(dt, mood);
       care.apply(dt, mood);
       train.apply(dt, mood);
-      if (!reunion.active && !train.busy) toy.apply(dt, mood);
+      /* the walk shares the care/train slot: prepare and return own the body
+         the way a care action does, and the three are mutually exclusive */
+      walk.apply(dt, mood);
+      /* `toy.apply` rewrites rig.x/y/s back to home every idle frame, which
+         would fight the return's arrival exactly as it fights the spin */
+      if (!reunion.active && !train.busy && !walk.busy) toy.apply(dt, mood);
       reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
 
-      /* the naming beat waits for the greeting to finish landing */
-      if (pendingNaming && !reunion.active) {
+      /* the naming beat waits for the greeting — and now for the walk too —
+         to finish landing. `surfaceBlockedFor` is the same check the other
+         direction uses, so the two can never disagree. */
+      if (pendingNaming && !surfaceBlockedFor('naming')) {
         pendingNaming = false;
         if (!game.isNamed) naming.start('first', a.view);
       }
@@ -926,9 +1127,13 @@ export function createRoomScene() {
       updateParts(dt);
       toasts.update(dt);
       sheet.update(dt);
+      /* the hint line belongs to a dog who is here. Saved and put back rather
+         than rebuilt, so the progressive hint stage is not lost. */
+      if (walk.away && hud.hint) { hintBeforeWalk = hud.hint; hud.setHint(''); }
+      else if (!walk.away && hintBeforeWalk && !hud.hint) { hud.setHint(hintBeforeWalk); hintBeforeWalk = ''; }
       hud.update(dt);
       /* chrome gets out of the way for the beats that need the whole screen */
-      hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active;
+      hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active && !walk.modal;
     },
 
     draw(a, g) {
@@ -950,7 +1155,14 @@ export function createRoomScene() {
       if (shaking) c.translate(sk.x, sk.y);
       c.lineJoin = 'round'; c.lineCap = 'round';
 
-      drawMotes(c, 1 / 60);
+      drawMotes(c, walk.hidesDog ? (1 / 60) * BALANCE.walk.away.moteSlow : 1 / 60);
+
+      /* what he has brought home, on the sill. Drawn before the melancholy
+         wash, so an empty room dims his collection along with everything else. */
+      drawSill(c);
+
+      /* the empty-room wash and today's treasures on the rug */
+      walk.drawBack(g);
 
       /* The resting bowls, hidden while a care action has picked one up. Both
          sit clear of the dog's silhouette — a bowl tucked behind her body is a
@@ -963,7 +1175,8 @@ export function createRoomScene() {
       const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
       if (toyBehind) toy.draw(g);
 
-      dog.draw(g, pet, a.game.moodLevel, care.coat);
+      /* HE IS NOT HERE. The room is the whole point of the absence beat. */
+      if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat);
       drawParts(c);
 
       if (!toyBehind) toy.draw(g);
@@ -971,6 +1184,8 @@ export function createRoomScene() {
       /* the treat, the reward ring and the ghost gesture hints sit in FRONT of
          her, the way the bowl does */
       train.drawFront(g);
+      /* the lead, the collar, and whatever he has in his mouth */
+      walk.drawFront(g);
 
       /* hand glow */
       const gl = pet.glow;
@@ -994,8 +1209,11 @@ export function createRoomScene() {
       care.drawOver(g);
       train.drawOver(g);
       hud.draw(g, view);
-      if (!naming.active && !care.modal && !train.modal && !reunion.active) nav.draw(g);
+      if (!naming.active && !care.modal && !train.modal && !reunion.active && !walk.modal) nav.draw(g);
       toasts.draw(g, nav.y - 22);
+      /* the map is a full-surface overlay, so it goes over the nav — and the
+         absence panel and the find card go over everything but the sheet */
+      walk.drawOver(g);
       sheet.draw(g);
       naming.draw(g, view);
     },
@@ -1014,6 +1232,11 @@ export function createRoomScene() {
           const row = sheet.hit(ev.x, ev.y);
           if (row) sheetAction(row.id);
           return;
+        }
+        /* THE WALK FIRST while it owns the surface: the leash beat, the map and
+           the return each own the whole screen for a few seconds. */
+        if (walk.owns) {
+          if (walk.pointer(ev, local())) { capture = 'walk'; return; }
         }
         /* CARE FIRST. Feed and water consume the drag; wash and brush pass it
            straight through, so the petting field still does the real work. */
@@ -1040,6 +1263,10 @@ export function createRoomScene() {
         if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.showNeeds(); return; }
         const n = nav.hit(ev.x, ev.y);
         if (n) { capture = 'nav'; pressedNav = n; nav.pressed = n.id; return; }
+        /* HE IS OUT. The chrome above still works — she can change a setting or
+           bring him home — but nothing else does: letting a touch fall through
+           to the petting field would register strokes on a dog who is not here. */
+        if (walk.away) { walk.pointer(ev, local()); capture = 'walk'; return; }
         /* the ball, before the dog: it sits in front of her on the floor */
         if (!reunion.active && toy.pointer(ev, local())) { capture = 'toy'; return; }
         capture = 'dog';
@@ -1052,6 +1279,7 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'move') {
+        if (capture === 'walk') { walk.pointer(ev, local()); return; }
         if (capture === 'toy') { toy.pointer(ev, local()); return; }
         if (capture === 'care') { care.pointer(ev, local()); return; }
         if (capture === 'train') { train.pointer(ev, local()); return; }
@@ -1066,6 +1294,7 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'up') {
+        if (capture === 'walk') { walk.pointer(ev, local()); capture = ''; return; }
         if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
         if (capture === 'care') { care.pointer(ev, local()); capture = ''; return; }
         if (capture === 'train') { train.pointer(ev, local()); capture = ''; return; }
@@ -1087,7 +1316,8 @@ export function createRoomScene() {
 
       if (ev.type === 'cancel') {
         nav.pressed = ''; pressedNav = null;
-        if (capture === 'toy') toy.pointer(ev, local());
+        if (capture === 'walk') walk.pointer(ev, local());
+        else if (capture === 'toy') toy.pointer(ev, local());
         else if (capture === 'care') care.pointer(ev, local());
         else if (capture === 'train') train.pointer(ev, local());
         else if (capture === 'dog') {
@@ -1123,8 +1353,13 @@ export function createRoomScene() {
         care: care.debug,
         toyState: toy.debug,
         train: train.debug,
+        walk: walk.debug,
         reunion: reunion.debug,
         naming: naming.debug,
+        /* who owns the whole screen. Two modal layers stacked is a defect that
+           is invisible in a number unless the number exists, so here it is. */
+        surface: surfaceOwner(),
+        pendingNaming,
         named: app.game.isNamed,
         name: app.game.dog.name,
         neck: +(rig.drive.neck || 0).toFixed(3),
@@ -1170,11 +1405,17 @@ export function createRoomScene() {
     get hud() { return hud; },
     get train() { return train; },
     get voice() { return voice; },
+    get walk() { return walk; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     startCare(kind) { return startCare(kind); },
     stopCare() { care.stop(); },
     startTrain() { return startTrain(); },
     stopTrain() { if (train) train.stop(); },
+    startWalk() { return startWalk(); },
+    /** the arbiter, exposed so main.js's drivers cannot route around it */
+    openNaming(mode) { return openNaming(mode); },
+    surfaceOwner() { return surfaceOwner(); },
+    stopWalk() { if (walk) walk.stop(); },
     playReunion(intensity, hours) {
       if (naming.active) naming.skip();
       return reunion.start(intensity, hours);

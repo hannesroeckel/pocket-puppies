@@ -331,22 +331,47 @@ export function createDogRenderer(rig) {
       const d = clamp(coat.dirt[i] || 0, 0, 1);
       if (d < 0.012) continue;
       const x = r.at[0] * hw, y = r.at[1] * hh;
-      /* three concentric passes: big+faint to small+solid. A single hard blob
-         reads as a sticker; this reads as ground-in muck. */
-      const rr = r.r * (0.55 + d * 0.62);
-      const passes = [[1.42, 0.22], [1.0, 0.42], [0.58, 0.56]];
-      for (const [grow, af] of passes) {
-        c.globalAlpha = clamp(d * af * wetK, 0, 0.85);
-        c.fillStyle = grow < 0.7 ? DIRT.b : DIRT.a;
-        ell(c, x, y, rr * grow, rr * grow * 0.82, i * 0.7); c.fill();
-      }
-      /* a few specks at the edge so it isn't a perfect oval */
-      c.globalAlpha = clamp(d * 0.34, 0, 0.6);
+      const rr = r.r * (0.58 + d * 0.80);
+      /* ---- STAGE 4 FIX: ONE FEATHERED SMUDGE, NOT THREE HARD PASSES -----
+         The original three concentric ellipse fills each had a hard alpha edge,
+         so between about 0.2 and 0.5 dirt they read as PALE CONCENTRIC RINGS —
+         at a glance, bald patches or ringworm rather than muck. Caught by
+         rendering a dirt ladder (0 / 0.25 / 0.45 / 0.7 / 1.0) and looking at
+         it: only 1.0 read as a muddy dog, and stage 4's walks live in exactly
+         the band that failed.
+
+         A single radial gradient has no interior edge to read as a ring, and
+         the alpha curve is raised so a half-dirty dog is visibly dirty rather
+         than faintly discoloured. The DATA and the erase mechanic are
+         untouched, so wash still works exactly as stage 2 built it. */
+      /* A PLATEAU, then a feather. All-gradient was too diffuse — 0.45 and
+         0.70 dirt rendered almost identically because the ink was spread over
+         too large a radius. Holding the peak flat to 52% of the radius gives
+         the smudge a solid middle (which is what makes it read as muck) while
+         the outer feather keeps it edgeless (which is what stops it reading as
+         a ring). Verified against the same ladder. */
+      const peak = clamp(Math.pow(d, 0.72) * wetK, 0, 0.94);
+      const R = rr * 1.16;
+      const gr = c.createRadialGradient(x, y, rr * 0.05, x, y, R);
+      gr.addColorStop(0, rgba(DIRT.b, peak));
+      gr.addColorStop(0.52, rgba(DIRT.b, peak * 0.94));
+      gr.addColorStop(0.74, rgba(DIRT.a, peak * 0.58));
+      gr.addColorStop(0.90, rgba(DIRT.a, peak * 0.20));
+      gr.addColorStop(1, rgba(DIRT.a, 0));
+      c.globalAlpha = 1;
+      c.fillStyle = gr;
+      c.save();
+      c.translate(x, y); c.scale(1, 0.86); c.rotate(i * 0.7); c.translate(-x, -y);
+      ell(c, x, y, R, R); c.fill();
+      c.restore();
+      /* specks around the edge, so the smudge is not a perfect oval */
+      c.globalAlpha = clamp(d * 0.46, 0, 0.7);
       c.fillStyle = DIRT.b;
-      for (let k = 0; k < 3; k++) {
-        const a = i * 1.7 + k * 2.3;
-        ell(c, x + Math.cos(a) * rr * 0.9, y + Math.sin(a) * rr * 0.72,
-          rr * 0.16, rr * 0.13, a); c.fill();
+      for (let k = 0; k < 4; k++) {
+        const a = i * 1.7 + k * 1.9;
+        ell(c, x + Math.cos(a) * rr * (0.86 + (k % 2) * 0.30),
+          y + Math.sin(a) * rr * (0.68 + (k % 2) * 0.26),
+          rr * 0.15, rr * 0.11, a); c.fill();
       }
     }
     c.globalAlpha = 1;
