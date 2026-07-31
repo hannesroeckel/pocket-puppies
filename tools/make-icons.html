@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pocket Puppies — icon generator</title>
+<style>
+  body{background:#2a1c14;color:#f1d9b4;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:22px;}
+  h1{font-size:15px;letter-spacing:.10em;text-transform:uppercase;margin-bottom:6px;}
+  p{max-width:62ch;opacity:.82;margin-bottom:16px;}
+  .row{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;}
+  figure{margin:0;text-align:center;}
+  canvas{background:#111;border-radius:6px;display:block;}
+  figcaption{font-size:11px;opacity:.7;margin-top:6px;}
+  a{color:#ffd9a0;}
+</style>
+</head>
+<body>
+<h1>Pocket Puppies — icon generator</h1>
+<p>
+  The home-screen icons are <strong>drawn in code</strong>, here, and committed as real PNGs in
+  <code>/icons</code>. iOS does not reliably use SVG or <code>data:</code> manifest icons for an
+  installed web app — a missing raster <code>apple-touch-icon</code> is why an installed PWA can
+  end up with a blank tile or a screenshot of the page. So: real files, right sizes, no network.
+</p>
+<p>
+  The face is deliberately <strong>breed-neutral</strong> (soft floppy ears, curly-suggestive
+  silhouette). The breed art is being reworked in parallel and the icon must not encode any
+  rig geometry. Regenerate with <code>tools/make-icons.py</code>, or click the links below.
+</p>
+<div class="row" id="out"></div>
+
+<script>
+/* ==========================================================================
+   drawIcon — the only definition of what the icon looks like.
+
+   `maskable` keeps every meaningful pixel inside the centred circle of 80%
+   diameter that the maskable-icon spec guarantees, because Android and some
+   launchers crop to it. iOS applies its own squircle to `apple-touch-icon`, so
+   that one is FULL BLEED with no rounding and no transparency of its own — a
+   pre-rounded icon under an OS mask gets its corners cut twice and looks
+   chipped.
+   ========================================================================== */
+function drawIcon(c, S, o = {}) {
+  const maskable = !!o.maskable;
+  const rounded = !!o.rounded;          // for the manifest 'any' icons
+  const u = S / 512;                    // everything below is authored at 512
+  c.save();
+  c.clearRect(0, 0, S, S);
+
+  /* ---- the tile ------------------------------------------------------- */
+  if (rounded) {
+    const r = 108 * u;
+    c.beginPath();
+    c.moveTo(r, 0); c.lineTo(S - r, 0); c.quadraticCurveTo(S, 0, S, r);
+    c.lineTo(S, S - r); c.quadraticCurveTo(S, S, S - r, S);
+    c.lineTo(r, S); c.quadraticCurveTo(0, S, 0, S - r);
+    c.lineTo(0, r); c.quadraticCurveTo(0, 0, r, 0);
+    c.closePath();
+    c.clip();
+  }
+  /* the game's own warm wall, lit from the top-left the way the room is */
+  const bg = c.createLinearGradient(0, 0, S * 0.35, S);
+  bg.addColorStop(0, '#f6d9ad');
+  bg.addColorStop(0.52, '#e8bf8d');
+  bg.addColorStop(1, '#d7a267');
+  c.fillStyle = bg;
+  c.fillRect(0, 0, S, S);
+  /* a soft pool of light behind him, so the tile has depth at 60px */
+  const pool = c.createRadialGradient(S * 0.5, S * 0.58, S * 0.04, S * 0.5, S * 0.58, S * 0.52);
+  pool.addColorStop(0, 'rgba(255,246,222,0.55)');
+  pool.addColorStop(1, 'rgba(255,246,222,0)');
+  c.fillStyle = pool;
+  c.fillRect(0, 0, S, S);
+
+  /* ---- layout: shrink and centre the face for a maskable crop --------- */
+  const k = (maskable ? 0.74 : 0.90);
+  c.translate(S / 2, S / 2);
+  c.scale(k * u, k * u);
+  c.translate(0, 6);                    // optical centre sits a hair low
+
+  const COAT = '#dfa460', COAT_HI = '#f0bd83', COAT_SH = '#b0743c';
+
+  const ell = (x, y, rx, ry, rot = 0) => {
+    c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  };
+  /* A deterministic wobble. Evenly spaced same-sized lobes read as a string of
+     beads, which is exactly what the first pass of the crown tuft looked like;
+     the cure is irregularity, not fewer of them. Fixed constants so the icon is
+     byte-identical every time it is regenerated. */
+  const jit = (i, salt) => {
+    const v = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    return (v - Math.floor(v)) * 2 - 1;                 // -1..1
+  };
+  /* a curly lobe cluster — the readable shorthand for a doodle coat */
+  const curls = (cx, cy, spread, n, r, fill, salt = 0) => {
+    c.fillStyle = fill;
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      const rr = r * (1 + jit(i, salt + 3) * 0.26);
+      const x = cx + (t - 0.5) * spread + jit(i, salt) * r * 0.30;
+      const y = cy + Math.sin(t * Math.PI) * -r * 0.55 + jit(i, salt + 1) * r * 0.34;
+      ell(x, y, rr, rr * (0.80 + jit(i, salt + 2) * 0.12), jit(i, salt + 4) * 0.5); c.fill();
+    }
+  };
+
+  /* ---- ears: LONG AND HANGING, drawn behind the head ------------------
+     Floppy is the right neutral choice: the gift puppy is a Schnoodle and the
+     saved-for reward is a Cockapoo, and both have dropped ears. A prick ear
+     would date the icon to the placeholder breed. A ROUND ear high on the
+     skull reads as a teddy bear — the first pass did exactly that — so these
+     start at the temple and hang well below the muzzle line. */
+  for (const s of [-1, 1]) {
+    c.save();
+    const eg = c.createLinearGradient(0, -110, 0, 150);
+    eg.addColorStop(0, COAT);
+    eg.addColorStop(0.55, '#c88a4c');
+    eg.addColorStop(1, '#9c6531');
+    c.fillStyle = eg;
+    c.beginPath();
+    c.moveTo(s * 96, -108);
+    c.bezierCurveTo(s * 178, -118, s * 200, -30, s * 186, 44);
+    c.bezierCurveTo(s * 176, 106, s * 140, 138, s * 104, 124);
+    c.bezierCurveTo(s * 74, 112, s * 78, 40, s * 74, -46);
+    c.closePath();
+    c.fill();
+    /* curls along the ear, low contrast: three thin lobes rather than one
+       wide one, the same reason dog/draw.js fans its fur strands */
+    c.save();
+    c.clip();
+    for (let i = 0; i < 5; i++) {
+      curls(s * (148 - i * 5), -76 + i * 50, 104, 3, 22,
+        i % 2 ? 'rgba(255,238,206,0.085)' : 'rgba(120,72,34,0.065)', i * 5 + (s > 0 ? 31 : 7));
+    }
+    c.restore();
+    c.restore();
+  }
+
+  /* ---- the crown tuft, TUCKED BEHIND the skull ------------------------
+     Only the top of it clears the head outline. Drawn proud of the skull it
+     read as a caterpillar sitting on his head. */
+  curls(0, -128, 138, 4, 34, COAT_SH, 11);
+  curls(-6, -136, 116, 4, 30, COAT, 19);
+  curls(4, -146, 78, 3, 25, COAT_HI, 23);
+
+  /* ---- head ----------------------------------------------------------- */
+  const hg = c.createLinearGradient(0, -170, 0, 140);
+  hg.addColorStop(0, COAT_HI);
+  hg.addColorStop(0.56, COAT);
+  hg.addColorStop(1, COAT_SH);
+  c.fillStyle = hg;
+  ell(0, -16, 138, 132); c.fill();
+  /* rim light along the top-left, matching the tile's light direction, and a
+     soft inner shade at the bottom-right so the skull has volume without an
+     outline. A drawn circle over the muzzle and ears is what made pass 1 read
+     as a sticker. */
+  c.save();
+  ell(0, -16, 138, 132); c.clip();
+  const rim = c.createLinearGradient(-116, -150, 30, 30);
+  rim.addColorStop(0, 'rgba(255,247,226,0.40)');
+  rim.addColorStop(1, 'rgba(255,247,226,0)');
+  c.fillStyle = rim;
+  c.fillRect(-190, -190, 380, 380);
+  const shade = c.createLinearGradient(40, 40, 150, 150);
+  shade.addColorStop(0, 'rgba(126,76,34,0)');
+  shade.addColorStop(1, 'rgba(126,76,34,0.30)');
+  c.fillStyle = shade;
+  c.fillRect(-190, -190, 380, 380);
+  /* cheek curls, so the head is coated rather than smooth */
+  for (const s of [-1, 1]) {
+    curls(s * 104, 48, 78, 3, 22, 'rgba(255,240,212,0.12)');
+    curls(s * 96, 84, 62, 2, 18, 'rgba(122,74,34,0.08)');
+  }
+  c.restore();
+
+  /* ---- muzzle: a SNOUT, not a saucer ---------------------------------
+     The bridge running up between the eyes is what makes a face canine; a
+     bare cream circle low on a round skull is a bear. */
+  c.fillStyle = 'rgba(120,72,36,0.11)';
+  ell(0, 66, 78, 58); c.fill();
+  const mg = c.createLinearGradient(0, -30, 0, 118);
+  mg.addColorStop(0, '#f6e3c4');
+  mg.addColorStop(0.45, '#fdf3e0');
+  mg.addColorStop(1, '#eddcbb');
+  c.fillStyle = mg;
+  c.beginPath();
+  c.moveTo(0, -46);
+  c.bezierCurveTo(30, -40, 46, 6, 62, 34);
+  c.bezierCurveTo(80, 66, 62, 112, 0, 112);
+  c.bezierCurveTo(-62, 112, -80, 66, -62, 34);
+  c.bezierCurveTo(-46, 6, -30, -40, 0, -46);
+  c.closePath();
+  c.fill();
+
+  /* ---- eyes: large, set LOW, catchlight high -------------------------- */
+  for (const s of [-1, 1]) {
+    c.fillStyle = 'rgba(90,52,26,0.15)';
+    ell(s * 64, -22, 29, 34); c.fill();
+    c.fillStyle = '#33241d';
+    ell(s * 64, -24, 25, 30); c.fill();
+    c.fillStyle = 'rgba(255,252,242,0.94)';
+    ell(s * 64 - 8 * s, -35, 9.5, 11); c.fill();
+    c.fillStyle = 'rgba(255,252,242,0.38)';
+    ell(s * 64 + 7 * s, -13, 4.5, 5); c.fill();
+    /* the brow dot both target breeds carry — and the thing that makes him
+       read as PLEASED rather than blank */
+    c.fillStyle = 'rgba(255,240,210,0.34)';
+    ell(s * 68, -68, 21, 11, s * 0.24); c.fill();
+  }
+
+  /* ---- nose + mouth: PLEASED, never sly or sad ----------------------- */
+  c.fillStyle = '#3b2a22';
+  c.beginPath();
+  c.moveTo(-27, 40);
+  c.quadraticCurveTo(0, 24, 27, 40);
+  c.quadraticCurveTo(27, 66, 0, 73);
+  c.quadraticCurveTo(-27, 66, -27, 40);
+  c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,250,238,0.28)';
+  ell(-10, 43, 8, 5.5, -0.3); c.fill();
+
+  c.strokeStyle = '#4a3327';
+  c.lineWidth = 8.5; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(0, 74); c.lineTo(0, 88); c.stroke();
+  /* two UPWARD arcs. Downward arcs are the fastest way to make a dog look
+     sad, which GIFT-READY 2.1 names explicitly. */
+  c.beginPath(); c.moveTo(-2, 88); c.quadraticCurveTo(-24, 103, -43, 84); c.stroke();
+  c.beginPath(); c.moveTo(2, 88); c.quadraticCurveTo(24, 103, 43, 84); c.stroke();
+
+  c.restore();
+}
+
+/* ---- render every size, and offer them as downloads ------------------ */
+const SPEC = [
+  { name: 'apple-touch-icon-180.png', size: 180, rounded: false, maskable: false },
+  { name: 'icon-192.png', size: 192, rounded: true, maskable: false },
+  { name: 'icon-512.png', size: 512, rounded: true, maskable: false },
+  { name: 'icon-maskable-512.png', size: 512, rounded: false, maskable: true },
+];
+const out = document.getElementById('out');
+window.__icons = {};
+for (const s of SPEC) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s.size;
+  drawIcon(cv.getContext('2d'), s.size, s);
+  const fig = document.createElement('figure');
+  const a = document.createElement('a');
+  a.href = cv.toDataURL('image/png');
+  a.download = s.name;
+  a.appendChild(cv);
+  fig.appendChild(a);
+  const cap = document.createElement('figcaption');
+  cap.textContent = s.name + ' — ' + s.size + 'px';
+  fig.appendChild(cap);
+  out.appendChild(fig);
+  window.__icons[s.name] = cv.toDataURL('image/png').split(',')[1];
+}
+window.__iconsReady = true;
+</script>
+</body>
+</html>

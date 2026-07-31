@@ -1649,6 +1649,95 @@ export const BALANCE = {
     },
   },
 
+  /* ---- sound (stage 7) ------------------------------------------------
+     The DESIGN tunables only. The oscillator frequencies and envelope shapes
+     are art data and live in `engine/sfx.js`, by the precedent §11.1(G) set for
+     colour ramps: nobody adjusts a formant from a spreadsheet, and moving them
+     here would make this file unreadable without making anything tunable. */
+  audio: {
+    master: 0.62,          // the one output gain. Nintendogs was QUIET.
+    lead: 0.012,           // schedule this far ahead of `currentTime`; a sound
+                           // scheduled at exactly `now` can start mid-buffer
+                           // and click on the attack
+    /* a limiter after the master, so a dozen overlapping voices sound loud
+       rather than broken on a phone speaker */
+    limiter: { threshold: -9, knee: 7, ratio: 6, attack: 0.004, release: 0.16 },
+    maxVoices: 22,         // recipes allowed in flight per `window` seconds
+    window: 0.35,
+    /* PER-NAME RETRIGGER FLOOR, in seconds. Petting fires on every tap and a
+       stroke can tap faster than an ear enjoys; without this the pats
+       machine-gun. A trailing '-' matches a whole family. */
+    throttle: {
+      default: 0.035,
+      'pet-': 0.085,
+      'grumble-': 0.20,
+      scamper: 0.26,
+      crunch: 0.10,
+      lap: 0.11,
+      perk: 0.14,
+      cue: 0.06,
+      shake: 0.30,
+      suds: 0.34,
+      scrub: 0.16,
+      brush: 0.16,
+      'water-on': 0.60,
+      'water-pour': 0.40,
+      pant: 0.9,
+    },
+    /* per-name / per-family gain trims, for when one sound is a hair loud in
+       the mix and nothing else should move */
+    gain: { pet: 1.0, grumble: 1.0, trick: 1.0 },
+
+    /* ---- PER-DOG VOCAL IDENTITY ------------------------------------
+       Research §1.9: pitch-shifting a shared bank per dog "does enormous work
+       for individuality at near-zero asset cost". These are the spreads two
+       different dogs can sit apart by; the value for a given dog is derived
+       from his persisted id, so it is stable for ever and costs no save field.
+       `semis` is the headline: ±4.5 semitones is most of an octave of range
+       across dogs while keeping every one of them sounding like a puppy. */
+    voice: {
+      semis: 4.5,          // ± semitones of larynx pitch
+      bright: 0.22,        // ± formant placement (a small dog is not just high)
+      raspLo: 0.10, raspHi: 0.42,    // how much breath is in his voice
+      wobLo: 0.35, wobHi: 1.25,      // vibrato depth, most audible in a whine
+      lenLo: 0.90, lenHi: 1.12,      // speech rate, so two yips never share a grid
+    },
+
+    /* CONTENTED PANTING. Research §1.9 names it and no existing layer asked for
+       it, so `scenes/room.js` emits it off the rig's own `drive.pant` channel.
+       Sparse on purpose: this is the one sound that repeats without her doing
+       anything, which makes it the one sound that can become irritating. */
+    pant: { enabled: true, at: 0.34, every: [2.6, 4.8], gain: 0.85 },
+  },
+
+  /* ---- installing to the home screen (stage 7) ------------------------
+     NOT a growth banner. iOS ITP deletes all script-writable storage after
+     seven days of Safari use without a visit, and installed web apps are
+     exempt — so this is the mitigation for the highest-severity risk in the
+     project (docs/PLATFORM-RISKS.md Risk 1), and the copy says so honestly.
+     Every number here exists to stop it ever nagging. */
+  install: {
+    maxShows: 2,           // TOTAL, for the lifetime of the save. Not per week.
+    /* WHEN. Naming him is the moment she has something to lose, so that is the
+       floor — but the first launch is a one-shot moment (GIFT-READY §4: "no UI
+       clutter, no tutorial in front of it"), so the first ask waits a long time
+       and lets her have the dog to herself first.
+       An EARLIER draft gated this on `affection >= 0.34`, which was wrong in a
+       way worth recording: affection is metered per session and per day (§12.1),
+       so 0.34 is about four days of play — i.e. the prompt would have arrived
+       AFTER the seven-day storage window it exists to beat. The gate that
+       protects a save must not be slower than the thing that deletes it. */
+    firstDelay: 80,        // seconds in-scene on the FIRST launch
+    delay: 22,             // seconds in-scene on any later launch
+    gapDays: 3,            // days between the first showing and the second
+    /* The card, in virtual units. `h` is generous on purpose: at 178 the
+       "Tap Share, then Add to Home Screen" line — the only ACTIONABLE line on
+       the card — ran underneath the buttons and was unreadable. Caught by
+       rendering it and looking; invisible in any amount of state inspection. */
+    card: { w: 318, h: 216, y: 186, r: 22, pad: 22, btnH: 40, btnGap: 9 },
+    fade: 0.42,            // seconds to slide/fade in and out
+  },
+
   /* ---- reduced motion ------------------------------------------------ */
   reducedMotion: {
     stiffScale: 0.74,     // calmer springs

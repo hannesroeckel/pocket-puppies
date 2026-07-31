@@ -10,6 +10,7 @@ import { clamp, createG } from './engine/draw.js';
 import { createLoop } from './engine/loop.js';
 import { createInput } from './engine/input.js';
 import { createAudio } from './engine/audio.js';
+import { names as sfxNames, voiceFor as sfxVoiceFor } from './engine/sfx.js';
 import { rng } from './engine/rng.js';
 import { createGame, newState } from './state/game.js';
 import { load, createSaver, requestPersistence, isStandalone, exportSave, importSave, writeNow, clear as clearSave } from './state/save.js';
@@ -64,6 +65,141 @@ function resolveReduced(settings) {
   catch (e) { return false; }
 }
 
+/* ==========================================================================
+   THE SERVICE WORKER, AND THE UPDATE HANDSHAKE (stage 7)
+
+   The worker itself is `/sw.js` and its header explains the caching rules. This
+   half is the part that has to be right for HER: a build pushed while she is
+   playing must never leave her on a half-old, half-new set of ES modules, and
+   must never touch her save.
+
+   THE RULE: THE SWAP HAPPENS WHILE NOBODY IS LOOKING.
+     - The worker never calls `skipWaiting()` on its own, so a new version sits
+       in `waiting` and the current session finishes entirely on the version it
+       started with. What she is playing cannot change under her.
+     - When the app goes HIDDEN we flush the save first, THEN tell the waiting
+       worker to take over. The controller change therefore lands on a
+       backgrounded page.
+     - If we asked for that swap, we reload on the controller change — but only
+       while hidden, and only if there was already a controller (the very first
+       registration claiming the page is not an update and must not reload).
+       Anything still pending is retried on the next hide.
+
+   Why a reload is safe here: the save is already flushed to localStorage, which
+   no cache operation can reach, and the game's whole model of elapsed time is a
+   pure function of the wall clock (§5), so a reload is indistinguishable from
+   her having closed and reopened the app — which is the most-tested path in the
+   project.
+   ========================================================================== */
+function createPWA({ flush }) {
+  const pwa = {
+    supported: 'serviceWorker' in navigator,
+    registered: false,
+    updateWaiting: false,
+    controlled: false,
+    swVersion: '',
+    error: '',
+    askedSkip: false,
+    reloading: false,
+    lastCheck: 0,
+  };
+  if (!pwa.supported) return pwa;
+
+  let reg = null;
+  /* did the page already have a controller when we started? If not, the first
+     `controllerchange` is this very first install claiming us, which is normal
+     and must not trigger a reload. */
+  const hadController = !!navigator.serviceWorker.controller;
+  pwa.controlled = hadController;
+
+  function noteWaiting() {
+    /* a worker in `installed` with a controller present means "there is a newer
+       version, and it is ready" */
+    pwa.updateWaiting = !!(reg && reg.waiting && navigator.serviceWorker.controller);
+  }
+
+  /**
+   * ASK WHICH GENERATION IS ACTUALLY SERVING US. This is the difference between
+   * "a new version is deployed" and "a new version is what she is running", and
+   * only the worker can answer it. Called after registration AND on every
+   * controller change, because on a first-ever load neither a controller nor an
+   * active worker exists yet at registration time — the first attempt lands on
+   * nothing, which is exactly what it did before this function existed.
+   */
+  function askVersion() {
+    const w = navigator.serviceWorker.controller || (reg && reg.active);
+    if (!w) return false;
+    try { w.postMessage({ type: 'version' }); } catch (e) { return false; }
+    return true;
+  }
+
+  function takeUpdate() {
+    if (!reg || !reg.waiting) return false;
+    pwa.askedSkip = true;
+    try { reg.waiting.postMessage({ type: 'skip-waiting' }); } catch (e) { return false; }
+    return true;
+  }
+
+  navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' })
+    .then((r) => {
+      reg = r;
+      pwa.registered = true;
+      noteWaiting();
+      r.addEventListener('updatefound', () => {
+        const w = r.installing;
+        if (!w) return;
+        w.addEventListener('statechange', () => {
+          if (w.state === 'installed') noteWaiting();
+        });
+      });
+      askVersion();
+    })
+    .catch((e) => {
+      /* A FAILED REGISTRATION IS NOT FATAL. Offline still works for this session
+         out of the HTTP cache, the game is unaffected, and the next launch tries
+         again. It must not warn: iOS clears the registration on its own after a
+         storage sweep, which is a normal thing that will happen. */
+      pwa.error = (e && e.message) || 'registration failed';
+    });
+
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.type === 'version') pwa.swVersion = d.version || '';
+  });
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    pwa.controlled = true;
+    pwa.updateWaiting = false;
+    askVersion();
+    if (!pwa.askedSkip || !hadController) return;   // the first claim, not an update
+    if (!document.hidden) return;                   // never reload in front of her
+    pwa.reloading = true;
+    try { location.reload(); } catch (e) { /* nothing sensible to do */ }
+  });
+
+  /** called on visibilitychange -> hidden, AFTER the save is flushed */
+  pwa.onHidden = () => {
+    try { flush(); } catch (e) { /* the saver already guards itself */ }
+    if (pwa.updateWaiting) takeUpdate();
+  };
+
+  /** called on visibilitychange -> visible: is there a new deploy? */
+  pwa.checkForUpdate = () => {
+    const now = Date.now();
+    if (!reg || now - pwa.lastCheck < 4 * 3600e3) return false;
+    pwa.lastCheck = now;
+    /* the ONLY network request the app ever makes, it is same-origin, it is to
+       `sw.js` alone, and it fails silently with no signal */
+    try { reg.update().catch(() => {}); } catch (e) { /* offline */ }
+    return true;
+  };
+
+  pwa.takeUpdate = takeUpdate;
+  pwa.askVersion = askVersion;
+  pwa.get = () => reg;
+  return pwa;
+}
+
 /* ---- boot ------------------------------------------------------------- */
 async function boot() {
   resize();
@@ -79,7 +215,12 @@ async function boot() {
   const elapsed = applyElapsed(game, Date.now());
 
   const reduced = resolveReduced(state.settings);
-  const audio = createAudio(state.settings);
+  /* HIS VOICE IS DERIVED FROM HIS ID. `engine/sfx.js voiceFor` pitch-shifts a
+     shared vocal bank per dog, which research §1.9 calls the cheapest large win
+     for individuality — and because it comes from the persisted `id` it needs no
+     save field, no schema bump, and it travels with an imported save. Passed as
+     a getter so a later stage's kennel switching dogs switches the voice too. */
+  const audio = createAudio(state.settings, { getDogId: () => game.dog.id });
   const g = createG(ctx, view);
 
   /* scene registry — stages 2..6 register their scenes here */
@@ -123,6 +264,62 @@ async function boot() {
     requestPersistence().then((ok) => { app.storagePersisted = ok; });
   });
 
+  /* ---- THE AUDIO UNLOCK, AND ITS RETRY -------------------------------
+     On iOS an AudioContext starts SUSPENDED and must be resumed inside a real
+     user gesture; get it wrong and every sound in the game fails silently for
+     ever (docs/PLATFORM-RISKS.md — confirmed on the target device). One attempt
+     is not enough, because the first touch of a session can land while the page
+     is still becoming interactive and a resume that quietly did not take leaves
+     no trace. So: try on EVERY gesture until the context is genuinely `running`,
+     verified by re-reading `ctx.state`, then stop listening.
+
+     `capture: true` so it runs before the canvas handler swallows the event, and
+     `touchend` as well as `pointerdown` because older WebKit has honoured the
+     two differently. */
+  const unlockOnGesture = () => {
+    if (audio.ready) { stopUnlockRetry(); return; }
+    audio.unlock();
+    if (audio.ready) stopUnlockRetry();
+  };
+  function stopUnlockRetry() {
+    window.removeEventListener('pointerdown', unlockOnGesture, true);
+    window.removeEventListener('touchend', unlockOnGesture, true);
+  }
+  window.addEventListener('pointerdown', unlockOnGesture, true);
+  window.addEventListener('touchend', unlockOnGesture, true);
+
+  /* ---- the service worker + the update handshake --------------------- */
+  const pwa = createPWA({ flush: () => saver.flush() });
+  app.pwa = pwa;
+
+  /* ---- lifecycle -----------------------------------------------------
+     iOS suspends JavaScript outright when the app is backgrounded and can kill
+     a backgrounded web app with no further events, so `visibilitychange` and
+     `pagehide` are the only reliable save points (PLATFORM-RISKS Risk 3;
+     `beforeunload` is not trustworthy here). The service-worker swap is
+     deliberately bolted to the same moment, AFTER the flush. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pwa.onHidden();
+    } else {
+      /* iOS also suspends the AudioContext when the app is backgrounded, and a
+         context that comes back `suspended` or (Safari-only) `interrupted` is
+         the second way sound dies silently. Coming back is a user action, so
+         this is not autoplay; if the platform refuses, the next touch retries. */
+      audio.resumeIfNeeded();
+      if (!audio.ready) {
+        window.addEventListener('pointerdown', unlockOnGesture, true);
+        window.addEventListener('touchend', unlockOnGesture, true);
+      }
+      pwa.checkForUpdate();
+    }
+  });
+  /* `pagehide` is NOT hooked here: `state/save.js createSaver` already flushes
+     on it (and on visibilitychange). `pwa.onHidden` flushes again itself as its
+     first act, which is what guarantees the ordering that matters — the save is
+     on disk before the worker is told to take over, regardless of which
+     listener the browser runs first. */
+
   window.addEventListener('resize', () => { resize(); loop.resize(); });
   window.addEventListener('orientationchange', () => setTimeout(() => { resize(); loop.resize(); }, 120));
 
@@ -135,8 +332,8 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 5,
-    app, loop, view, saver, BALANCE,
+    version: 7,
+    app, loop, view, saver, BALANCE, pwa,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
     get elapsed() { return elapsed; },
@@ -912,6 +1109,112 @@ async function boot() {
     },
     /** fill him up so the entry gate is clear, without running a care action */
     setNeed(key, v) { game.setNeed(key, v); return game.dog.needs[key]; },
+
+    /* ---- stage 7 drivers: SOUND ---------------------------------------
+       Audibility cannot be verified in headless Chromium, so everything here
+       exists to verify sound STRUCTURALLY: that the graph is built, that a
+       recipe actually schedules nodes, that the context only reaches `running`
+       after a gesture, and that the toggle really disconnects. */
+    audio: () => app.audio.debug,
+    /** what the bank can answer, and what the game has asked for and been owed */
+    soundNames: () => sfxNames(),
+    /** fire one sound by name. Returns false when it was genuinely refused. */
+    playSound: (name, opts) => app.audio.play(name, opts),
+    /**
+     * COUNT THE NODES A RECIPE ACTUALLY CREATES. `play()` returning true only
+     * proves nothing threw; this wraps the context's factory methods and counts
+     * real oscillators, buffer sources, filters and gains, which is the closest
+     * a headless run can get to "a sound happened".
+     */
+    countNodes(name, opts) {
+      const c = app.audio.ctx;
+      if (!c) return null;
+      const kinds = ['createOscillator', 'createBufferSource', 'createBiquadFilter',
+        'createGain', 'createDynamicsCompressor'];
+      const seen = {};
+      const orig = {};
+      let started = 0;
+      for (const k of kinds) {
+        seen[k] = 0;
+        orig[k] = c[k];
+        c[k] = function patched(...a) {
+          seen[k]++;
+          const node = orig[k].apply(c, a);
+          if (node && typeof node.start === 'function') {
+            const s = node.start.bind(node);
+            node.start = (...b) => { started++; return s(...b); };
+          }
+          return node;
+        };
+      }
+      let ok = false;
+      try { ok = app.audio.play(name, opts); } finally {
+        for (const k of kinds) c[k] = orig[k];
+      }
+      const total = kinds.reduce((s, k) => s + seen[k], 0);
+      return { name, ok, started, total, nodes: seen };
+    },
+    /** the toggle, through the real mutator + the real audio call */
+    soundOn(on = true) {
+      game.setSetting('sound', !!on);
+      app.audio.setEnabled(!!on);
+      return app.audio.debug;
+    },
+    /** his voice — the five axes, derived from the persisted dog id */
+    voiceOf: (id) => sfxVoiceFor(id === undefined ? game.dog.id : id),
+
+    /* ---- stage 7 drivers: PWA + INSTALL -------------------------------- */
+    /** registration, which generation is serving us, and whether one waits */
+    pwaState: () => ({
+      supported: pwa.supported, registered: pwa.registered,
+      controlled: pwa.controlled, updateWaiting: pwa.updateWaiting,
+      swVersion: pwa.swVersion, error: pwa.error, askedSkip: pwa.askedSkip,
+      controller: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
+    }),
+    /** take a waiting update NOW, the way going-hidden would */
+    takeUpdate: () => pwa.takeUpdate(),
+    /** what the sw says its version is */
+    askSwVersion() {
+      const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!c) return false;
+      c.postMessage({ type: 'version' });
+      return true;
+    },
+    /** the install card's whole policy, as numbers */
+    installState: () => (loop.scene.install ? loop.scene.install.debug : null),
+    /** open it regardless of the cadence (what the Settings row does) */
+    showInstall() {
+      if (!loop.scene.install) return false;
+      const ok = loop.scene.install.force();
+      loop.stepFixed(1 / 60, 20);
+      return ok;
+    },
+    /** press one of its three doors: 'add' | 'later' | 'never' | 'scrim' */
+    installTap(which = 'later') {
+      const sc = loop.scene;
+      if (!sc.install || !sc.install.isOpen) return false;
+      /* through the real pointer path, so the geometry that was DRAWN is the
+         geometry that is HIT — the lesson of §15.4 defect 5 */
+      const B = BALANCE.install.card;
+      const w = Math.min(B.w, V.W - 28);
+      const x = (V.W - w) / 2;
+      const y = Math.max(view.safe.top / view.vs + 14, B.y);
+      const bh = 40, gap = 9, bw = (w - 52 - gap) / 2;
+      const pt = which === 'add' ? [x + 26 + bw / 2, y + B.h - 26 - bh / 2]
+        : which === 'later' ? [x + 26 + bw + gap + bw / 2, y + B.h - 26 - bh / 2]
+          : which === 'never' ? [x + w / 2, y + B.h + 21]
+            : [V.W / 2, 40];
+      sc.pointer(app, { type: 'down', x: pt[0], y: pt[1], id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+      sc.pointer(app, { type: 'up', x: pt[0], y: pt[1], id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+      loop.stepFixed(1 / 60, 30);
+      return sc.install.debug;
+    },
+    /** pretend she is running installed, to prove the card never appears */
+    fakeStandalone(on = true) {
+      app.standalone = !!on;
+      loop.stepFixed(1 / 60, 4);
+      return { standalone: app.standalone, install: loop.scene.install.debug };
+    },
 
     exportSave: () => exportSave(state),
     importSave: (s) => importSave(s),

@@ -32,6 +32,7 @@ import { createNav } from '../ui/nav.js';
 import { createToasts } from '../ui/toast.js';
 import { createSheet } from '../ui/sheet.js';
 import { createNaming } from '../ui/naming.js';
+import { createInstall } from '../ui/install.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
@@ -277,8 +278,14 @@ export function createRoomScene() {
   let rig = null, dog = null, idle = null, pet = null;
   let care = null, toy = null, reunion = null, naming = null;
   let train = null, voice = null, walk = null, contest = null;
-  let hud = null, nav = null, toasts = null, sheet = null;
+  let hud = null, nav = null, toasts = null, sheet = null, install = null;
   let roomCv = null, ovCv = null;
+  /* CONTENTED PANTING (research §1.9). Driven off the rig's own `drive.pant`
+     channel rather than by a clip, because panting is a STATE he is in, not an
+     event that happens. Sparse and jittered: this is the only sound in the game
+     that repeats without her doing anything, which makes it the only one that
+     can become irritating. */
+  let pantIn = 0;
   const rng = createRng(BALANCE.rng.seed).fork(3);
   const roomRng = createRng(BALANCE.rng.roomSeed);
   const parts = [];
@@ -619,6 +626,13 @@ export function createRoomScene() {
     if (contest && contest.modal) return 'contest';
     if (walk && walk.modal) return 'walk';
     if (walk && walk.away) return 'away';
+    /* STAGE 7: the install card. LAST in this list on purpose — it is the least
+       important thing on the screen and must never be able to displace a beat.
+       It is here rather than behind a private `if` for the same reason the ring
+       is (§14.1): being in the list is what makes the guard work in BOTH
+       directions, so care, training, the walk, the trial and the naming beat all
+       refuse to open over it without a line being added to any of them. */
+    if (install && install.modal) return 'install';
     return '';
   }
 
@@ -820,6 +834,44 @@ export function createRoomScene() {
     return { id: 'voice', label: 'Voice cues: off', note: 'Optional extra — every trick works by hand alone' };
   }
 
+  /**
+   * The sound row. Its note names the iPhone silent switch, because iOS applies
+   * it to WebAudio too: a muted phone gives a silent, seemingly-broken pet, and
+   * the research recommends telling her once rather than letting her conclude
+   * the game is broken (docs/nintendogs-design-reference.md §3, audio autoplay).
+   */
+  function soundRow() {
+    const on = !!app.game.state.settings.sound;
+    return {
+      id: 'sound',
+      label: on ? 'Sound: on' : 'Sound: off',
+      note: on ? 'Yips, paws and water. Your phone’s silent switch mutes it too'
+        : 'Everything is silent',
+    };
+  }
+
+  /**
+   * The install row, and it exists so the CARD never has to nag. The card asks
+   * at most twice; this row is here for ever, so "Don't ask again" costs her
+   * nothing and the honest reason stays one tap away. Hidden entirely when she
+   * is already installed — a row telling her to do what she has done reads as
+   * the game not knowing where it is.
+   */
+  function installRow() {
+    if (app.standalone) {
+      return {
+        id: 'installed',
+        label: 'Saved to your home screen',
+        note: `${capitalise(app.game.pron.they)} ${app.game.pron.is} safe here`,
+      };
+    }
+    return {
+      id: 'install',
+      label: 'Add to home screen',
+      note: 'In a browser tab, iPhone tidies away saved games after a week',
+    };
+  }
+
   function openSettings() {
     const g = app.game;
     sheetKind = 'settings';
@@ -832,8 +884,9 @@ export function createRoomScene() {
           note: g.isNamed ? 'Tap to rename'
             : `${capitalise(g.pron.they)} ${g.pron.is} still waiting for a name`,
         },
-        { id: 'sound', label: app.game.state.settings.sound ? 'Sound: on' : 'Sound: off', note: 'Sounds arrive in a later update' },
+        soundRow(),
         voiceRow(),
+        installRow(),
         { id: 'export', label: 'Copy save code', note: 'Keep a backup of your bond' },
         { id: 'import', label: 'Load save code', note: 'Paste a code from another device' },
         { id: 'close', label: 'Done' },
@@ -860,7 +913,22 @@ export function createRoomScene() {
       const on = !app.game.state.settings.sound;
       app.game.setSetting('sound', on);
       app.audio.setEnabled(on);
+      /* one sound, so "on" is audibly on rather than a word on a screen. It is
+         inside a tap, so the context is unlocked by definition. */
+      if (on) app.audio.play('yip');
       openSettings();
+      return;
+    }
+    /* ---- the install explanation, reachable for ever ------------------
+       Through the layer's own `force()`, not by poking `open`, so the one
+       "never when standalone" check still runs. */
+    if (id === 'install') {
+      sheet.close();
+      if (install) install.force();
+      return;
+    }
+    if (id === 'installed') {
+      /* a statement, not a switch — the same shape as the `voice-off` row */
       return;
     }
     /* ---- the microphone: opt-in, and it degrades in silence -----------
@@ -1068,6 +1136,32 @@ export function createRoomScene() {
         },
       });
 
+      /* ---- INSTALLING TO THE HOME SCREEN (stage 7) --------------------
+         The card is the mitigation for the highest-severity risk in the project
+         (PLATFORM-RISKS Risk 1: ITP deletes all script-writable storage after
+         seven days of Safari use, and installed web apps are exempt). It is
+         handed the room's own arbiter rather than deriving its own guard, and
+         `standalone` is passed as a LIVE getter — a cached boolean would be
+         read once at boot and the card would appear inside the installed app,
+         which is the one place it must never be. */
+      install = createInstall({
+        game: app.game,
+        reduced: app.reduced,
+        standalone: () => !!app.standalone,
+        /* THE ARBITER, PLUS THE SHEET. `surfaceOwner()` deliberately does not
+           know about the bottom sheet — the sheet's own rows call `startCare`
+           and `startTrain`, so putting it in the arbiter would have it block
+           the things it exists to launch. But the install card CAN otherwise
+           drift open on top of an open Settings sheet and then swallow every
+           touch meant for it, which is the same "two modal states stacked"
+           defect §14.1 was written for. Caught by rendering the sheet and
+           looking. So the extra term lives HERE, at this one caller, rather
+           than in the shared arbiter. `force()` (the Settings row) does not
+           consult this, and the row closes the sheet before opening the card. */
+        blocked: (who) => (sheet && sheet.isOpen ? 'sheet' : surfaceBlockedFor(who)),
+        toast: (msg) => toasts.show(msg),
+      });
+
       nav = createNav([
         /* care, play, training and WALKS are in-room features, not scenes */
         { id: 'care', label: 'Care', available: true },
@@ -1097,6 +1191,14 @@ export function createRoomScene() {
          (research §2). Showing up at all on a new day is worth about half of
          what a whole session of petting can pay. */
       app.game.awardDay('showUp');
+
+      /* ---- HOW MANY TIMES SHE HAS OPENED IT --------------------------
+         One integer in `flags`, which the save already merges forward, so no new
+         required field and no schema bump. `ui/install.js` is the only reader:
+         the first launch is a one-shot moment and the install card waits a long
+         time on it, but from the second launch on she has already met him and
+         the seven-day storage clock is running, so the wait is short. */
+      app.game.setFlag('launches', (+(app.game.state.flags.launches) || 0) + 1);
 
       /* ---- WAS HE OUT? --------------------------------------------------
          THE "SURVIVES BEING FULLY CLOSED" PATH, and there is only one of it.
@@ -1140,6 +1242,8 @@ export function createRoomScene() {
       /* the microphone must never outlive the scene that asked for it: a live
          mic indicator on a puppy game would be alarming, and correctly so */
       if (voice) voice.abort();
+      /* the install card holds a `beforeinstallprompt` listener on `window` */
+      if (install) install.destroy();
     },
 
     resize(a) {
@@ -1220,9 +1324,35 @@ export function createRoomScene() {
       }
       naming.update(dt);
 
+      /* ---- CONTENTED PANTING ------------------------------------------
+         Off `rig.drive.pant`, which stage 2 already drives from exertion and
+         mood, so this needs no new state and cannot desynchronise from the
+         animation: if his sides are moving, he is breathing audibly. Skipped
+         while he is out of the room, and while anything owns the surface for a
+         beat that wants quiet. */
+      const PA7 = BALANCE.audio.pant;
+      if (PA7.enabled && !walk.hidesDog && !naming.active && !contest.modal) {
+        const p = rig.drive.pant || 0;
+        if (p > PA7.at) {
+          pantIn -= dt;
+          if (pantIn <= 0) {
+            a.audio.play('pant', { gain: PA7.gain * Math.min(1, p) });
+            pantIn = rng.range(PA7.every[0], PA7.every[1]);
+          }
+        } else {
+          /* re-arm with a partial delay, so he does not pant the instant he
+             crosses the threshold after resting */
+          pantIn = Math.min(pantIn <= 0 ? PA7.every[0] : pantIn, PA7.every[1]);
+        }
+      }
+
       updateParts(dt);
       toasts.update(dt);
       sheet.update(dt);
+      /* the install card. Its own `eligible()` is the whole cadence policy, and
+         it consults the arbiter, so there is nothing to guard here. */
+      install.update(dt, a.view);
+      install.tick();
       /* the hint line belongs to a dog who is here. Saved and put back rather
          than rebuilt, so the progressive hint stage is not lost. */
       if (walk.away && hud.hint) { hintBeforeWalk = hud.hint; hud.setHint(''); }
@@ -1230,7 +1360,7 @@ export function createRoomScene() {
       hud.update(dt);
       /* chrome gets out of the way for the beats that need the whole screen */
       hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active
-        && !walk.modal && !contest.modal;
+        && !walk.modal && !contest.modal && !install.modal;
     },
 
     draw(a, g) {
@@ -1310,7 +1440,7 @@ export function createRoomScene() {
       train.drawOver(g);
       hud.draw(g, view);
       if (!naming.active && !care.modal && !train.modal && !reunion.active
-        && !walk.modal && !contest.modal) nav.draw(g);
+        && !walk.modal && !contest.modal && !install.modal) nav.draw(g);
       toasts.draw(g, nav.y - 22);
       /* the map is a full-surface overlay, so it goes over the nav — and the
          absence panel and the find card go over everything but the sheet */
@@ -1318,6 +1448,10 @@ export function createRoomScene() {
       /* the judge's board, the chips and the result card, likewise */
       contest.drawOver(g);
       sheet.draw(g);
+      /* the install card sits over the sheet (it is opened FROM the sheet) and
+         under the naming beat, which the arbiter already makes mutually
+         exclusive — the ordering is belt and braces, not a second guard */
+      install.draw(g, view);
       naming.draw(g, view);
     },
 
@@ -1328,6 +1462,17 @@ export function createRoomScene() {
 
       /* the naming beat owns the whole surface while it is up */
       if (naming.active) { naming.pointer(ev, a.view); return; }
+
+      /* THE INSTALL CARD, and it consumes EVERYTHING while it is up — including
+         a touch that lands on him. A touch falling through a scrim to the
+         petting field is the same defect the ring had to fix (§15.4 defect 1),
+         and here it would also mean she can pet a dog she cannot see. */
+      if (install.isOpen) {
+        install.pointer(ev);
+        capture = install.isOpen ? 'install' : '';
+        return;
+      }
+      if (capture === 'install') { capture = ''; if (ev.type !== 'down') return; }
 
       if (ev.type === 'down') {
         if (sheet.isOpen) {
@@ -1472,6 +1617,8 @@ export function createRoomScene() {
         contest: contest.debug,
         reunion: reunion.debug,
         naming: naming.debug,
+        install: install ? install.debug : null,
+        audio: app.audio && app.audio.debug ? app.audio.debug : null,
         /* who owns the whole screen. Two modal layers stacked is a defect that
            is invisible in a number unless the number exists, so here it is. */
         surface: surfaceOwner(),
@@ -1523,6 +1670,7 @@ export function createRoomScene() {
     get voice() { return voice; },
     get walk() { return walk; },
     get contest() { return contest; },
+    get install() { return install; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     startCare(kind) { return startCare(kind); },
     stopCare() { care.stop(); },

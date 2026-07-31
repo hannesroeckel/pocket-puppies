@@ -1368,3 +1368,376 @@ Full numbers, including the per-round marks and the hold ladder, in `docs/STAGE5
   copy goes through `ui/text.js`, which anchors to the safe band.
 - Real audio: `audio.pending` now also owes the ring's `perk`, `cue`, `praise` and
   `proud-yip` uses (all names stage 3 already registered).
+
+---
+
+## 16. Stage 7 (PWA + sound) — as built
+
+Stage 7 clears **four of the eight gift blockers**: 1.2 (progress cannot be silently
+deleted), 1.3 (installable, with an honest reason), 1.4 (sound exists) and 1.5 (works fully
+offline). This section is **authoritative** where it differs from anything above.
+
+### 16.1 Contract deviations
+
+**1. `engine/sfx.js` is a new file, and `engine/audio.js` is now only policy.**
+§2's file layout lists `audio.js` alone. It is split because the two halves are different
+kinds of thing: `audio.js` is *plumbing and policy* (the graph, the gesture unlock, the
+toggle, the throttle, the polyphony cap), and `sfx.js` is the **bank** — 43 synth recipes plus
+the family resolvers, which is closer to art data than to engine code. Keeping them together
+made one 900-line file in which the one genuinely dangerous part (the unlock) was buried.
+Both are precached.
+
+**2. The synth frequencies are ART DATA and live in `engine/sfx.js`, not `balance.js`.**
+This is the same call §11.1(G) made for colour ramps in `dog/breeds.js` and marking geometry
+in `dog/draw.js`. `BALANCE.audio` holds every number a *designer* would turn — master volume,
+the per-name retrigger floors, the per-family gain trims, how far apart two dogs' voices can
+sit, the panting cadence, the limiter. The bandpass centre frequencies and envelope shapes are
+in the recipes, because nobody adjusts a formant from a spreadsheet and moving ~200 of them
+into `balance.js` would make that file unreadable without making anything tunable.
+
+**3. `createAudio` takes a second argument. Additive; §11.2's published surface still holds.**
+`createAudio(settings, { getDogId })`. Passing a *getter* rather than an id is deliberate:
+stage 6's kennel will switch the active dog, and the voice must switch with it.
+
+**4. There is NO `SCHEMA_VERSION` bump. `SCHEMA_VERSION` stays 5.**
+Nothing stage 7 added is a new *required* field:
+- **His voice is derived, not stored.** `voiceFor(dog.id)` hashes the already-persisted id, so
+  the voice costs zero save bytes, is identical in every session for ever, and travels
+  correctly with an exported/imported save.
+- **The install card's state is three keys in `flags`** (`installShown`, `installAskedAt`,
+  `installNever`) plus one (`launches`) written by the room. `flags` is a free-form dict that
+  `fillDefaults` already merges forward, so a v1–v5 save gains them by default on load and an
+  older build reading a newer save simply ignores them. A bump with an empty migration would
+  have been ceremony.
+- `settings.sound` already existed and was already persisted and defaulted.
+
+Verified: v1, v2, v3, v4 and v5 all still load, migrate, keep the dog / name / ratchet / coins
+/ trick ledger, drop `agility`, get a voice, make a sound, register the worker, and can still
+be petted. **42/42 checks.**
+
+**5. The install card is a SURFACE, and it is in `surfaceOwner()`.**
+Routed through `surfaceBlockedFor()` exactly as §14.1 requires, and placed **last** in the
+owner list so it is the least important thing on screen and can never displace a beat. Being
+in the list is what makes the guard work in both directions: the naming beat, the reunion, the
+walk, care, training and the trial all refuse to open over it without a line being added to
+any of them. Measured: during the reunion the card reports `eligible: false`,
+`blockedBy: 'reunion'`.
+
+**6. `main.js` gained a lifecycle section and an unlock RETRY.**
+`input.onFirstGesture` alone was not enough — see 16.4. A capture-phase `pointerdown` /
+`touchend` pair on `window` re-attempts the unlock until `ctx.state` is genuinely `running`,
+then removes itself.
+
+**7. `main.js` makes exactly one network request at runtime, and it is same-origin.**
+`reg.update()` on foreground, throttled to once every four hours, to notice a deploy while an
+installed PWA sits in the app switcher for days. It is `sw.js` and nothing else, it fails
+silently offline, and it is the mechanism §1's "a `git push` is a deploy" depends on. Zero
+*external* requests remains true and is asserted in every run.
+
+**8. `tools/` is a new directory and is NOT part of the shipped game.**
+`tools/make-icons.html` (the icon generator — the icons are drawn in code and committed as
+real PNGs) and `tools/check-precache.py` (diffs the hand-written PRECACHE list in `sw.js`
+against the tree). Both are excluded from the precache; `check-precache.py` knows the
+exclusions.
+
+### 16.2 The service worker, and why the update path is shaped this way
+
+`/sw.js`. Three rules, each load-bearing, all explained at length in its header:
+
+- **One generation per cache, and a page load never straddles two.** Everything is precached
+  into `pp-cache-v<VERSION>` during `install`, and **nothing is ever added to a cache at
+  runtime.** Runtime caching is exactly the mechanism that mixes generations, and with ~40
+  unbundled ES modules "half old, half new" would be `room.js` from v3 calling into `train.js`
+  from v4 — a throw somewhere deep that looks like a broken puppy.
+- **Install is all-or-nothing.** Each asset is fetched individually with `cache: 'reload'` and
+  a single failure throws, which fails the install, deletes the partial cache and leaves the
+  **previous** worker active with the **previous** cache. So a deploy she catches mid-flight
+  (GitHub Pages publishes files one at a time) cannot produce a broken generation.
+- **The update lands between sessions, never during one.** There is deliberately **no
+  unconditional `skipWaiting()`**. A new worker waits; the current session finishes entirely on
+  the version it started with, so what she is playing cannot change under her. `main.js` posts
+  `skip-waiting` only on `visibilitychange` → hidden, **after** flushing the save, and reloads
+  on the resulting `controllerchange` **only while hidden** and **only if there was already a
+  controller** (the first-ever registration claiming the page is not an update). A reload there
+  is safe because the save is already on disk and all offline progression is a pure function of
+  the wall clock (§5) — indistinguishable from her closing and reopening the app.
+
+`caches.delete` is only ever called on keys carrying the `pp-cache-v` prefix, so a cache
+belonging to anything else on the origin is left alone. The save lives in localStorage, which
+no cache operation can reach. **There is no `push` and no `notificationclick` handler and
+there must never be one** (GIFT-READY §3).
+
+`VERSION` in `sw.js` must be bumped on every deploy. That one string is the whole update path.
+
+### 16.3 Icons — what iOS actually does, measured against the docs
+
+The manifest previously carried **inline SVG data-URI icons**. iOS does not reliably use
+manifest icons for an installed web app and does not support SVG or `data:` for them at all;
+with no raster `apple-touch-icon` it falls back to **a screenshot of the page**, which on a
+canvas game is a picture of a half-drawn room. That alone would have made the gift feel
+unfinished. Now:
+
+- `icons/apple-touch-icon-180.png` — linked from `index.html`, full-bleed, deliberately **not**
+  pre-rounded (iOS applies its own squircle; a pre-rounded icon under an OS mask gets its
+  corners cut twice and looks chipped).
+- `icons/icon-192.png`, `icons/icon-512.png` — manifest `any`, rounded tile.
+- `icons/icon-maskable-512.png` — manifest `maskable`, face inside the guaranteed 80% circle.
+
+Drawn in code in `tools/make-icons.html` and committed as real files, same-origin, no network.
+The face is **breed-neutral** (floppy ears, curly-suggestive coat, a crown tuft) because the
+breed art is being reworked in parallel and the icon must encode no rig geometry — and because
+both target breeds (Schnoodle, Cockapoo) have dropped ears, a prick ear would have dated the
+icon to the placeholder Shiba. Two art passes were needed: pass 1 read as a **teddy bear**
+(round high ears, a hard outline circle drawn over the muzzle) and pass 2's crown tuft read as
+**a row of beads** until the lobes were jittered and tucked behind the skull.
+
+### 16.4 THE LANDMINE, and the three things that actually defuse it
+
+`AudioContext` starts **suspended** on iOS and must be `resume()`d inside a real user gesture,
+or every sound in the game fails **silently, for ever**. Confirmed on the target device.
+
+1. **Nothing is constructed before a gesture.** Measured: before any touch the context is
+   `state: 'none'`, `built: false`, and **all 66 names refuse to play** — and trying does not
+   create a context. There is no ambience to autoplay.
+2. **`unlock()` does not trust `resume()`.** It re-reads `ctx.state` afterwards. A resolved
+   promise is not a running context on iOS.
+3. **It retries on every gesture until it takes.** The first touch of a session can land while
+   the page is still becoming interactive, and a resume that quietly failed leaves no trace.
+
+Plus: on `visibilitychange` → visible the context is resumed (iOS suspends it when
+backgrounded, and Safari has its own `interrupted` state), and if that is refused the gesture
+listeners are re-armed. Measured: `none` → one tap → `running`, `connected: true`,
+`masterGain: 0.62`.
+
+**The toggle genuinely silences, three independent ways**: `play()` returns early before
+building anything, the master gain goes to 0, **and the master node is disconnected from the
+output**. Measured with sound off: nothing plays, and `countNodes` reports **0 nodes even
+built**. It survives a reload (`settings.sound`) and the graph comes back disconnected.
+
+**No haptics anywhere.** `navigator.vibrate` is confirmed absent on the target device, which is
+why `boop`, `sit-thump`, `flop` and `land` carry the physical thump in the sound itself.
+
+### 16.5 The sound bank
+
+**43 recipes; 65 names resolve.** All synthesised — no asset files (§1). Sparse and
+foley-forward: there is **no music in the game and there should never be**. Even the moment a
+trick lands (`trick-done`) is him being pleased plus his tail hitting the floor, not a chime —
+a reward jingle would be the one musical thing in a foley game and would turn "he did it" into
+"you scored".
+
+| family | names |
+|---|---|
+| **vocal** (all per-dog) | `yip` `bark` `whine` `huff` `yelp` `praise` `proud-yip` `sneeze` `nip` `pant` `grumble` |
+| **body foley** | `sit-thump` `flop` `land` `launch` `scamper` `shake` `shake-big` `boop` `perk` `paw-offer` |
+| **her hand** | `pat` `pat-sweet` `pat-soft` `cue` |
+| **food & water** | `bowl-lift` `bowl-set` `kibble-pour` `eat-start` `crunch` `lick` `lap` `water-on` `water-pour` |
+| **bath & brush** | `scrub` `suds` `brush` `grumble-brush` |
+| **the toy** | `toy-pick` `toy-grab` `toy-drop` `toy-throw` `toy-land` |
+| **the payoff** | `trick-done` |
+| **families** | `pet-<10 zones>` · `grumble-<muz\|tail\|paw\|brush>` · `trick-<8 tricks>` |
+
+Research §1.9's shopping list is covered item by item: yips, whines, contented panting, **the
+claw-click of paws on floorboards** (`scamper` — 5–8 irregular claw transients, uneven on
+purpose because a metronome reads as a machine), **a toy squeak** (a fast pitch rise is what
+makes rubber read as rubber), **the slop of drinking water** (`lap`), the crunch of eating, the
+swish of a brush, and water in the bath.
+
+`audio.pending` — the ledger every earlier stage used to record what it was owed — is now
+**empty**. Nothing is outstanding.
+
+**PER-DOG VOICE IDENTITY.** Every vocal goes through one `vocal()` function, and the per-dog
+voice is applied **inside it and nowhere else** — which is what makes "his voice" a property of
+the animal rather than of 40 recipes that would drift apart. Five axes, derived from a
+mulberry32 PRNG seeded with an FNV-1a hash of the dog's persisted `id`:
+
+| axis | spread | what it does |
+|---|---|---|
+| `pitch` | ±4.5 semitones | the obvious one |
+| `bright` | ±0.22 | formant placement — a small dog is not just a high dog |
+| `rasp` | 0.10–0.42 | how much breath is in his voice |
+| `wob` | 0.35–1.25 | vibrato depth, most audible in a whine |
+| `len` | 0.90–1.12 | speech rate, so two dogs' yips never share a grid |
+
+Measured over five ids: five distinct voices, **5.86 semitones of pitch spread**, and the same
+id gives a bit-identical voice every call and across a service-worker update.
+
+**Contented panting** is the one sound that repeats without her doing anything, so it is the
+one that could become irritating. It is driven off `rig.drive.pant` — a state stage 2 already
+animates, so it cannot desynchronise from his sides moving — gated above 0.34, jittered
+2.6–4.8s apart, and skipped while he is out of the room or while a beat wants quiet.
+
+Safety: a **retrigger floor** per name (petting taps faster than an ear enjoys), a **polyphony
+cap** of 22 recipes per 0.35s, a **DynamicsCompressor** limiter after the master (a dozen
+overlapping voices on a phone speaker do not sound loud, they sound broken), and `play()`
+swallows every throw because it is reached from the animation clips and a thrown synth would
+be a dropped frame at best.
+
+### 16.6 The install prompt
+
+`src/ui/install.js`. It is allowed to exist only because it is **true**: in a browser tab ITP
+really does delete her save, and installing really is the fix. `"Keep Pip safe"` /
+`"Add him to your home screen and he stays put."` / `"In a browser tab, iPhone tidies away
+saved games after a week."` / `"Tap Share, then Add to Home Screen."` All copy is in one `COPY`
+block, all of it goes through `ui/text.js`, and every pronoun comes from `game.pron`.
+
+Three doors, none of them punished: **Got it**, **Not now**, **Don't ask again** — and tapping
+the scrim is the same as Not now. It appears **at most twice, ever**, `gapDays` apart, never
+when standalone (checked live, every frame — it even closes itself if she installs while it is
+up), and never over another surface. On Chromium a captured `beforeinstallprompt` makes the
+primary button really install; on iOS there is no such path, which is why the copy names the
+Share sheet.
+
+**An `Add to home screen` row in Settings is there for ever**, which is what lets "Don't ask
+again" cost her nothing: the card never has to nag because the honest reason stays one tap
+away. When standalone that row becomes a statement (`Saved to your home screen`).
+
+**A design error worth recording.** The first draft gated the card on `affection >= 0.34`.
+Affection is metered per session and per day (§12.1), so that threshold is roughly **four days
+of play** — the prompt would have arrived *after* the seven-day storage window it exists to
+beat. **A gate that protects a save must never be slower than the thing that deletes it.** It
+now triggers on him being **named** (before that there is nothing to protect and the naming
+beat must own the screen), after 80s in-scene on the first launch and 22s on any later one,
+using a new `flags.launches` counter.
+
+**A layout defect only the render caught.** At the original card height the "Tap Share, then
+Add to Home Screen." line — the only *actionable* line on the card — ran **underneath the
+buttons**. The button row is now placed first and the copy laid out in what is left, so a line
+cannot end up under a button. Same lesson as §15.4 defect 5, third time on this project.
+
+### 16.7 Measured
+
+Headless Chromium, 390x844, `--enable-gpu`, safe insets forced to the target device's
+20px top / 40px bottom, **dark mode**. DPR capped at 2.25 by design.
+
+| beat | DPR | work median | work p95 | work max | frame median | frame p95 |
+|---|---|---|---|---|---|---|
+| room idle, sound on | 2 | 2.2 ms | 3.5 ms | 5.9 ms | 16.70 | 16.80 |
+| bath + scrubbing (loudest) | 2 | 2.1 ms | 3.0 ms | 5.3 ms | 16.70 | 16.80 |
+| install card over the room | 2 | 1.9 ms | 2.6 ms | 3.8 ms | 16.70 | 16.70 |
+| room idle, sound on | 3 | 1.9 ms | 3.3 ms | 4.6 ms | 16.70 | 16.80 |
+| bath + scrubbing (loudest) | 3 | 2.2 ms | 3.4 ms | 8.5 ms | 16.70 | 16.70 |
+| install card over the room | 3 | 1.7 ms | 2.5 ms | 3.0 ms | 16.70 | 16.80 |
+
+**Worst frame p95 across every beat: 16.80 ms — vsync-locked at 60fps throughout.**
+
+**An honesty note about that table, because the number moved.** A later re-run of the identical
+script on the same machine reported work medians of 2.6–4.1 ms and occasional `frame p95` of
+33.3 ms (exactly 2x vsync). That is **host noise, not the game** — and rather than assert it,
+it was measured. `C:\tmp\pp7\perfab.py` interleaves sound-ON and sound-OFF samples three times
+each **inside one process**, so host drift cannot masquerade as a difference between the two
+conditions:
+
+| | work median | best frame p95 |
+|---|---|---|
+| sound ON | 2.80 ms | 16.70 ms |
+| sound OFF | 2.70 ms | 16.80 ms |
+
+**Sound costs +0.10 ms of frame work.** The 33 ms outliers appear in **both** conditions, which
+is what identifies them as the host rather than the feature — a real regression cannot be
+absent from the condition that triggers it. WebAudio synthesis runs off the main thread; all
+this file's `play()` does on the main thread is build a handful of nodes.
+
+**Offline — the load-bearing gate. 11/11.** Load online, precache 48 entries into
+`pp-cache-v7.0.0`, then `context.set_offline(True)` (verified genuinely dead with a
+cross-origin probe) and reload. The game boots, the dog is still named, the bond survived,
+petting works (`pet` 0.996), a feed action runs, sound plays, **zero requests reach the
+network**, zero console errors.
+
+**The update path. 15/15.** v1 installed and serving → deploy v2 (a changed module *and* a
+bumped `VERSION`) under a live client → the update is detected as waiting, **the live session
+stays entirely on v1 modules and the v1 worker**, both generations sit in separate caches,
+and she can still play mid-deploy → `skip-waiting` → the old cache is deleted → next launch is
+wholly v2 → **her name, bond, coins, trick ledger and his voice all survive** → and the new
+generation works offline too.
+
+**Sound. 24/24.** Silent before a gesture (all 66 names refuse; no context created), `running`
+after one tap, every name in the bank schedules real nodes (**307 source nodes started across
+the bank**; `shake-big` is the richest at 20), `audio.pending` empty, five dogs get five
+voices, the same dog gets the same voice, the toggle disconnects and builds no nodes, it
+survives a reload, gameplay fires sounds for real with zero failures, and a sound repeated in
+the same frame is refused.
+
+**The install prompt. 16/16.** Not eligible on a fresh save, blocked by the arbiter during the
+reunion, appears after the first-launch wait, all three doors work, it does not come straight
+back, "Don't ask again" is permanent even with the counters reset, the Settings row still
+opens it, it never drifts open over an open sheet, and it is never eligible when standalone.
+Rendered and eyeballed in dark mode, light mode and `prefers-reduced-motion`.
+
+**A second defect the render caught, and the distinction it taught.** Screenshotting the
+Settings sheet showed the card sitting **on top of it**, swallowing every touch meant for its
+rows. Two fixes, and they are not the same fix: the sheet is now a term in the `blocked`
+predicate at install's one call site (it is deliberately *not* in the shared `surfaceOwner()`,
+because the sheet's own rows call `startCare`/`startTrain` and putting it in the arbiter would
+have it block the very things it exists to launch) — **and** the card now **retracts** when
+something else takes the surface, rather than only refusing to open. `eligible()` gating
+*opening* is not the same guarantee as not being stacked; a card that was already up needed the
+second rule. Retracting is deliberately not counted as one of the two asks: she never saw it.
+
+**Legacy saves. v1, v2, v3, v4, v5 → all load.** See 16.1 §4.
+
+### 16.8 Not built in stage 7, and one thing left broken
+
+- **AUDIBILITY IS UNVERIFIED.** Nothing in a headless browser can tell you whether a synth
+  patch sounds like a dog. Everything above is *structural*: the graph exists, nodes start,
+  the state transitions correctly, the toggle disconnects. **A human has to put this on the
+  real phone with the ringer up and listen.** Expect to retune `BALANCE.audio.master`, the
+  per-family `gain` trims and possibly a few formants by ear. The most likely candidates for
+  sounding wrong are `whine` (easy to make plaintive rather than asking), `grumble` (must read
+  as annoyed, never as a growl — principle 1 in a sound) and `pant` (the only repeating sound).
+- **The iPhone silent switch mutes WebAudio too.** Not worked around — the workarounds are
+  hacks. Instead the Settings sound row says so in words, once. Worth a human check.
+- **No `prefers-reduced-motion` variant of the panting cadence.** Sound is not motion, so it is
+  unchanged; the card's slide travel *is* reduced (26 → 6 virtual units).
+- **`BALANCE.audio.maxVoices` counts RECIPES, not nodes.** 22 recipes in 0.35s is generous for
+  real play, but `shake-big` alone is 42 nodes, so a pathological pile-up is ~880 nodes. The
+  per-name retrigger floors make that unreachable in practice; it is not defended against
+  directly.
+- **THE FLOATING BOWL DURING FEED AND WATER IS NOT FIXED.** Diagnosed and measured, not
+  repaired — see 16.9.
+
+### 16.9 The floating bowl — diagnosis, and the trap for whoever fixes it
+
+Reported by the human: during feeding and drinking the bowl hangs in mid-air at chest height.
+Confirmed, and it is **worse than reported: both stage-2 failure modes are present at once.**
+
+Stepped frame by frame (247 feed frames, 243 water frames — `C:\tmp\pp7\bowl.py`):
+
+| | feed | water |
+|---|---|---|
+| bowl y, throughout | 644 (fixed) | 644 (fixed) |
+| paw / floor contact | ~690 | ~690 |
+| **frames with head-bottom below body-bottom** | **184 / 247** | **164 / 243** |
+
+So the bowl's base floats roughly 40 virtual units clear of the floor, **and** the head has
+already sunk into the torso for three quarters of the animation — the very bug the 74-unit
+compromise was meant to avoid. §12.6's account is accurate about *why* 132 units failed, but 74
+did not actually escape it; it made it milder and bought a floating bowl in exchange. `wash`
+and `brush` are **clean** — neither floats a prop nor loses the neck. The defect is specific to
+the two bowl-presenting actions.
+
+**What the fix has to be** (per the human's guidance, and I agree after measuring): the bowl
+goes on the floor between the front paws, and the **body / chest / shoulders** drive down and
+forward as the primary motion with neck extension and head pitch secondary. Head travel alone
+cannot get there — that is exactly what 132 units proved.
+
+**THE TRAP, and it is not obvious.** `scenes/room.js` has
+
+```js
+if (!reunion.active && !train.busy && !walk.busy && !contest.busy) toy.apply(dt, mood);
+```
+
+`care.modal` is **not** in that list, and `toy.apply` **rewrites `rig.x/y/s` back to home every
+idle frame** and runs *after* `care.apply` in the pipeline. So any attempt to lower the body by
+writing `rig.y` from `care.js` will be silently overwritten every frame and will look like the
+pose code simply not working. Stages 3, 4 and 5 each hit this and each added their layer to
+that guard; care must do the same. Everything must stay **pose targets only** (§6) — no
+final-value writes — and care must spring the rig back to `rig.home` on the way out, which the
+`w` weight blend already gives it.
+
+Useful starting numbers: `BALANCE.care.stage.bowlTarget` is `[178, 644]` and wants to go to
+roughly `[178, 700]`; `placedScale` 1.15 wants to go **up** (a bowl on the floor is nearer the
+camera, and §12.6's "depth is scale" applies to props too); and `headDown` should come **down**
+from 74, not up, once the body is carrying the travel. Verify with `C:\tmp\pp7\bowl.py`, which
+already reports both failure modes per frame and crops screenshots at the deepest part of the
+action — the endpoints look fine in both the broken and the working case, which is why it steps
+rather than samples.
