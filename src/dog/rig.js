@@ -66,6 +66,14 @@ export function resolveDims(breed) {
     cheekY: A.cheekY * headHH,
     legLen: P.legLen, legW: P.legW,
     neckRuff: P.neckRuff, tailCurl: P.tailCurl, tailLen: P.tailLen,
+    /* TAIL CARRIAGE, declarative. `tailCarry` shifts the base angle: negative
+       carries the tail higher. `tailPlume` scales the soft floof at the tip,
+       which is what turns a whip tail into a spaniel's plume. Both default to
+       the Shiba's behaviour when a breed omits them. */
+    tailCarry: P.tailCarry || 0,
+    tailPlume: P.tailPlume === undefined ? 1 : P.tailPlume,
+    /* oversized paws are a real breed tell on the doodle crosses */
+    pawScale: P.pawScale === undefined ? 1 : P.pawScale,
   };
 }
 
@@ -102,12 +110,39 @@ export function createRig(opts = {}) {
   const T = R.tail;
   const tail = {
     rel: new Array(T.n), vel: new Array(T.n), dev: new Array(T.n),
-    base: T.base, curl: T.curl * (dims.tailCurl / 0.72),
+    base: T.base + dims.tailCarry, curl: T.curl * (dims.tailCurl / 0.72),
   };
   for (let i = 0; i < T.n; i++) {
     tail.rel[i] = i === 0 ? tail.base : tail.curl;
     tail.vel[i] = 0; tail.dev[i] = 0;
   }
+
+  /* ==================================================================
+     HANGING-EAR SPRING CHAINS (declarative: BALANCE.rig.earChain[breed.ear])
+
+     A prick ear is a rigid triangle: `earChain` is null and every line below
+     is skipped, so a prick-eared breed behaves EXACTLY as it did before.
+
+     A hanging ear is the best secondary-motion opportunity on the animal, so
+     it gets the tail's treatment: a chain where each joint inherits the
+     previous joint's deviation, driven by the SAME `earL`/`earR`/`earBack`
+     springs that every clip, every petting response and the reunion already
+     kick. Nothing else in the codebase had to change to make ears flop.
+
+     Angles live in a canonical per-ear frame: +x is OUTWARD from the head,
+     +y is DOWN. dog/draw.js mirrors x for the left ear.
+     ================================================================== */
+  const EC = R.earChain ? R.earChain[breed.ear] : null;
+  const earChain = EC ? [0, 1].map(() => ({
+    rel: EC.hang.slice(), vel: new Array(EC.n).fill(0), dev: new Array(EC.n).fill(0),
+  })) : null;
+  /* segment lengths sum to the breed's authored ear height */
+  const earSeg = EC ? (() => {
+    const w = [];
+    let tot = 0;
+    for (let i = 0; i < EC.n; i++) { const v = 1 - i * 0.06; w.push(v); tot += v; }
+    return w.map((v) => v / tot * P.earH);
+  })() : null;
 
   /* ---- fur clump slots (persistent springs; positions resolved live) - */
   const fur = { body: [], head: [] };
@@ -132,6 +167,9 @@ export function createRig(opts = {}) {
     yaw: 0, pitch: 0,
     muzX: 0, muzY: 0,
     tailNodes: [], eyeOpenEff: 1, sit: 0, breathe: 0,
+    /* per-ear chain node positions in the canonical (outward, down) ear frame.
+       Empty for a prick-eared breed — dog/draw.js then uses the rigid path. */
+    earNodes: earChain ? [[], []] : null,
     pupilX: 0, pupilY: 0,
     neckX: 0, neckY: 0,
     lastHX: undefined, lastHY: undefined, lastHR: undefined,
@@ -141,6 +179,8 @@ export function createRig(opts = {}) {
 
   const rig = {
     breed, dims, pal, sil, springs: s, pawLift, tail, fur, pose, gaze, reduced,
+    /* null for prick ears; a spring chain per ear otherwise */
+    earChain, earSeg, earSpec: EC,
     /* placement in virtual space */
     x: R.place.x, y: R.place.y, s: R.place.scale,
     /* Non-uniform vertical scale, default 1. This is how the frontal rig fakes
@@ -310,12 +350,65 @@ export function createRig(opts = {}) {
       const hvy = pose.headY - (pose.lastHY === undefined ? pose.headY : pose.lastHY);
       const hvr = pose.headRot - (pose.lastHR === undefined ? pose.headRot : pose.lastHR);
       pose.lastHX = pose.headX; pose.lastHY = pose.headY; pose.lastHR = pose.headRot;
+      /* published so hanging furniture (a beard, a moustache, a topknot) can
+         TRAIL the head. Painted-on furniture is the tell that a face is a
+         decal; a beard that swings a frame behind the jaw is not. */
+      pose.headVX = hvx; pose.headVY = hvy; pose.headVR = hvr;
       const inv = dt > 0.0001 ? 1 / dt : 0;
       const K = R.earKick;
       const swingL = clamp(-hvx * inv * K.lateral - hvr * inv * K.rotation + hvy * inv * K.vertical, -K.clamp, K.clamp);
       const swingR = clamp(hvx * inv * K.lateral + hvr * inv * K.rotation + hvy * inv * K.vertical, -K.clamp, K.clamp);
       s.earL.kick(swingL * dt * K.gain);
       s.earR.kick(swingR * dt * K.gain);
+
+      /* --- hanging ears: resolve the chains -------------------------------
+         The root joint is driven by the ear spring everything else already
+         kicks, so this inherits every existing ear impulse in the game. The
+         driving swing decays down the chain while each joint ALSO inherits
+         its parent's deviation — which is what makes the tip overshoot,
+         lag and settle last instead of the whole ear rotating as one board. */
+      if (earChain) {
+        const back = s.earBack.x;
+        /* a big head shake (measured, not scripted) adds real flop */
+        const flop = clamp(Math.abs(hvr * inv) * 0.06 + Math.abs(hvx * inv) * 0.0016,
+          0, 1.6) * EC.flop;
+        for (let e = 0; e < 2; e++) {
+          const ch = earChain[e];
+          const sd = e === 0 ? -1 : 1;
+          /* the ear's own spring: left ear reads earL, right reads earR. They
+             have different stiffness by construction, so the pair can never
+             move in lockstep. */
+          const drive = (e === 0 ? s.earL.x : s.earR.x) * EC.swing;
+          const nodes = pose.earNodes[e];
+          nodes.length = 0;
+          let ang = 0, x = 0, y = 0;
+          nodes.push(pt(0, 0));
+          for (let i = 0; i < EC.n; i++) {
+            const wave = drive * Math.exp(-i * EC.waveLag);
+            let tgt = EC.hang[i] + wave;
+            /* earBack sweeps the whole ear up and back off the cheek */
+            if (i === 0) tgt -= back * EC.backSweep;
+            /* the tip carries the flop, the root barely notices it */
+            if (i > 0) tgt += ch.dev[i - 1] * EC.inherit + flop * (i / EC.n) * sd * 0.5;
+            const k = i === 0 ? EC.k[0] : EC.k[1];
+            const d = i === 0 ? EC.d[0] : EC.d[1];
+            const h1 = Math.min(dt, T.subDt);
+            ch.vel[i] += ((tgt - ch.rel[i]) * k - ch.vel[i] * d) * h1;
+            if (dt > T.subDt) {
+              const rest = dt - T.subDt;
+              ch.vel[i] += ((tgt - ch.rel[i] - ch.vel[i] * rest) * k - ch.vel[i] * d) * rest;
+            }
+            ch.rel[i] += ch.vel[i] * dt;
+            ch.dev[i] = ch.rel[i] - EC.hang[i];
+            ang += ch.rel[i];
+            /* earBack also shortens the visible ear (it swings behind the head) */
+            const seg = earSeg[i] * (1 - back * 0.16);
+            x += Math.cos(ang) * seg;
+            y += Math.sin(ang) * seg;
+            nodes.push(pt(x, y));
+          }
+        }
+      }
 
       /* --- tail: spring chain + travelling wave + inherited deviation --- */
       rig.wagPhase += dt * s.wagSpd.x * Math.PI;

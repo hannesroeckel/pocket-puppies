@@ -40,6 +40,15 @@ const K_KIBBLE = 0, K_WATER = 1, K_FOAM = 2, K_DROP = 3, K_TUFT = 4, K_SPARK = 5
 
 export function createCare(rig, opts = {}) {
   const game = opts.game;
+  /* PRONOUNS COME FROM THE DOG, NOT FROM THE COPY.
+     The naming beat already reads game.dog.sex — it asks "What will you call
+     HIM?" for a male puppy (see ui/naming.js). Every hint in this file then
+     hard-coded "her", so the Schnoodle — who is male, and is the puppy this
+     game exists to hand over — was misgendered by the first sentence of the
+     first care action, one beat after being named. Same source, same answer. */
+  const male = () => !!(game && game.dog && game.dog.sex === 'm');
+  const HIS = () => (male() ? 'his' : 'her');
+  const HE = () => (male() ? 'He' : 'She');
   const pet = opts.pet;
   const idle = opts.idle;
   const rng = opts.rng || sharedRng;
@@ -161,7 +170,7 @@ export function createCare(rig, opts = {}) {
       const ph = kind === 'feed' ? C.feed.sackHome : C.water.jugHome;
       pourer.x = ph[0]; pourer.y = ph[1];
       goPhase('place');
-      setHint(kind === 'feed' ? 'Slide her bowl over' : 'Slide her water bowl over');
+      setHint(kind === 'feed' ? `Slide ${HIS()} bowl over` : `Slide ${HIS()} water bowl over`);
     } else if (kind === 'wash') {
       sp.wet.to(1); sp.suds.set(0);
       for (let i = 0; i < coat.foam.length; i++) coat.foam[i] = 0;
@@ -171,7 +180,7 @@ export function createCare(rig, opts = {}) {
     } else if (kind === 'brush') {
       sp.gloss.set(game.gloss);
       goPhase('brush');
-      setHint('Brush the way her coat lies');
+      setHint(`Brush the way ${HIS()} coat lies`);
     }
     /* she notices something is happening, whatever it is */
     if (idle) idle.cancel(2.4);
@@ -409,7 +418,7 @@ export function createCare(rig, opts = {}) {
          never a score penalty. She is not sulking; she just moved. */
       if (idle) idle.play('pawPull');
       s.sit.to(1);
-      setHint('She likes it downward, the way it lies');
+      setHint(`${HE()} likes it downward, the way it lies`);
     }
   }
 
@@ -471,7 +480,7 @@ export function createCare(rig, opts = {}) {
   function updateFeed(dt) {
     const F = C.feed;
     if (phase === 'place') {
-      if (phaseT > 4 && !bowl.held) setHint('Slide her bowl over — drag it to the ring');
+      if (phaseT > 4 && !bowl.held) setHint(`Slide ${HIS()} bowl over — drag it to the ring`);
       return;
     }
     if (phase === 'pour') {
@@ -565,7 +574,7 @@ export function createCare(rig, opts = {}) {
   function updateWater(dt) {
     const W = C.water;
     if (phase === 'place') {
-      if (phaseT > 4 && !bowl.held) setHint('Slide her water bowl over');
+      if (phaseT > 4 && !bowl.held) setHint(`Slide ${HIS()} water bowl over`);
       return;
     }
     if (phase === 'pour') {

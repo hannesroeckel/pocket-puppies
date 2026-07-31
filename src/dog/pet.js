@@ -31,6 +31,7 @@ import BALANCE from '../state/balance.js';
 import { Spring, approach, makeSprings } from '../engine/spring.js';
 import { clamp, lerp, pt } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
+import { EAR_STYLE } from './draw.js';
 
 const B = BALANCE.pet;
 const PR = B.press;
@@ -120,18 +121,61 @@ export function createPetting(rig, opts = {}) {
         return { x: t.x + 4, y: t.y + 4, hx: 1, hy: 1 };
       }
       case 'paw': return { x: P.bodyX, y: -8, hx: P.bodyHW, hy: 1 };
+      /* THE HANGING-EAR ANCHOR. Resolves to the middle of the live ear chain,
+         so the sweet spot sits on the ear itself wherever the ear has swung
+         to. Only used by breeds whose ear capability declares a chain. */
+      case 'ear': {
+        const en = P.earNodes;
+        let midY = 0;
+        if (en && en[1] && en[1].length) {
+          const n = en[1];
+          midY = n[Math.floor(n.length / 2)].y;
+        }
+        return { x: P.headX, y: P.headY + D.earY + midY, hx: D.headHW, hy: D.headHH };
+      }
       default: return { x: 0, y: 0, hx: 1, hy: 1 };
     }
   }
+  /* THE EAR ZONE FOLLOWS THE EAR CAPABILITY.
+     BALANCE's zone table describes a PRICKED ear: a circle on the crown,
+     which is where both ear bases are on a Shiba. Hang the ears down beside
+     the face and that circle stops covering the thing the player will
+     obviously reach for — the flap — so `pointerdown` on the most prominent
+     feature of a Cockapoo would resolve to no zone at all and register as a
+     miss. The ear style therefore declares its own zone offset and radius
+     scale. `prick` declares [0,0] x1, so the Shiba is bit-identical. */
+  const earZone = (EAR_STYLE[rig.breed.ear] || EAR_STYLE.prick);
+  const earAt = earZone.zoneAt || [0, 0];
+  const earR = earZone.zoneR || 1;
+  const earPri = earZone.zonePri || 1;
+  const earChained = !!earZone.chain;
+
   function computeZones() {
     zoneList.length = 0;
     for (const id of ZONE_IDS) {
       const z = ZONES[id];
-      const a = anchor(z.part);
+      const isEar = id === 'ear';
+      /* A CHAINED EAR RE-ANCHORS ITS ZONE ONTO THE EAR.
+         Measured on the cockapoo: the ear hangs 84 rig units below its
+         attachment, and the crown circle balance.js describes covered only
+         the top third of it — so stroking the lower half of the breed's most
+         prominent feature resolved to NO zone and fired onMiss. Anchoring to
+         the live chain midpoint puts the sweet spot on the ear, wherever the
+         ear has swung to. A prick ear keeps the crown anchor exactly. */
+      const usesEarAnchor = isEar && earChained;
+      const a = anchor(usesEarAnchor ? 'ear' : z.part);
+      const ax = usesEarAnchor ? earAt[0] : z.at[0] + (isEar ? earAt[0] : 0);
+      const ay = usesEarAnchor ? earAt[1] : z.at[1] + (isEar ? earAt[1] : 0);
       zoneList.push({
-        id, kind: z.kind, gain: z.gain, r: z.r, pri: z.pri || 1,
-        x: a.x + z.at[0] * a.hx,
-        y: a.y + z.at[1] * a.hy,
+        /* A hanging ear is drawn after the tail and hangs in front of the
+           flank, so where the two zones overlap the ear must win — priority
+           mirrors DRAW ORDER, which is what the player actually sees. Without
+           this, stroking a cockapoo's ear where his raised tail passes behind
+           it resolved to `tail`, a BAD spot, and irritated him. */
+        id, kind: z.kind, gain: z.gain, r: z.r * (isEar ? earR : 1),
+        pri: (z.pri || 1) * (isEar ? earPri : 1),
+        x: a.x + ax * a.hx,
+        y: a.y + ay * a.hy,
       });
     }
   }

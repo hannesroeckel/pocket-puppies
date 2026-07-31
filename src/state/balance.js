@@ -36,13 +36,19 @@ export const BALANCE = {
   },
 
   /* ---- the gift puppy ------------------------------------------------
-     She arrives UNNAMED — the naming moment is the emotional centre of
-     first launch (SCOPE.md stage 6). Breed and sex are not yet confirmed
-     by the human, so they live here as a ONE-LINE change.
+     The puppy arrives UNNAMED — the naming moment is the emotional centre
+     of first launch (SCOPE.md stage 6).
+     CONFIRMED by the human: the gift puppy is a male SCHNOODLE. He is the
+     dog she meets on first launch and names, so he is the hero asset — the
+     beard, moustache and eyebrows in dog/breeds.js get the polish budget.
+     The cockapoo is the second dog, offered later via the kennel.
+     NOTE: feminine copy is still hardcoded in several strings across
+     care.js / room.js / hud.js / game.js. That pronoun sweep is tracked
+     separately; nothing added for these breeds assumes a gender.
      ------------------------------------------------------------------- */
   gift: {
-    breedId: 'shiba',
-    sex: 'f',          // 'f' | 'm' — drives pronouns in ui/copy.js
+    breedId: 'schnoodle',
+    sex: 'm',          // 'f' | 'm' — drives pronouns
   },
 
   /* ---- time & decay -------------------------------------------------- */
@@ -562,6 +568,45 @@ export const BALANCE = {
     eyeLead: { shiftX: 0.26, shiftY: 0.19, catchlight: 0.55, brow: 0.30 },
     /* ear angular-velocity kicks measured from the head's REAL per-frame rotation */
     earKick: { lateral: 0.0022, rotation: 0.06, vertical: 0.0011, clamp: 0.5, gain: 46 },
+    /* ---- hanging-ear spring chains (declarative, keyed by breed.ear) ----
+       A prick ear is one rigid triangle and needs no chain. A HANGING ear is
+       the best secondary-motion opportunity on the whole animal: it has
+       weight, it lags, it swings past the head and comes back. So a floppy
+       ear is a spring chain exactly like the tail — each joint inherits the
+       previous joint's deviation — driven by the SAME `earL`/`earR`/`earBack`
+       springs everything already kicks. That is why every existing clip,
+       petting response and the reunion get floppy motion for free.
+
+         n          joints in the chain
+         k / d      per-joint stiffness / damping ([root, rest])
+         inherit    how much of joint i-1's deviation joint i picks up
+         waveLag    phase lag of the driving swing down the chain
+         hang       RELATIVE resting angle per joint, in the canonical ear
+                    frame where +x is outward from the skull and +y is down.
+                    Cumulative sum = the hanging curve.
+         swing      how much of the earL/earR spring the root joint takes
+         backSweep  how far `earBack` sweeps the whole ear up and off the cheek
+         flop       extra tip deviation from a big MEASURED head shake
+         spread     base offset outward, x ear half-width
+       ------------------------------------------------------------------- */
+    earChain: {
+      /* A LONG SPANIEL EAR. It hangs FLAT AND CLOSE against the cheek — a
+         cockapoo ear standing away from the head like a running spaniel is a
+         named amateur tell — so the rest curve is very nearly vertical, with
+         only a slight outward set at the attachment. */
+      floppy: {
+        n: 5, k: [128, 152], d: [12.5, 11.2], inherit: 0.42, waveLag: 0.34,
+        hang: [1.26, 0.11, 0.07, 0.04, 0.03], swing: 0.95, backSweep: 0.52,
+        flop: 0.30,
+      },
+      /* A BUTTON EAR: a lifted cartilaginous base that FOLDS forward and
+         hangs to the cheekbone. Stiff root, loose tip, short chain. */
+      semi: {
+        n: 4, k: [186, 138], d: [14.0, 11.0], inherit: 0.34, waveLag: 0.28,
+        hang: [-0.40, 1.52, 0.30, 0.18], swing: 0.62, backSweep: 0.40,
+        flop: 0.24,
+      },
+    },
     /* idle weight shift (organic noise, not a loop) */
     wobble: { rate1: 0.24, rate2: 0.17, y: 0.8, x: 1.4, rot: 0.008 },
     gazeDrift: { yawRate: 0.33, yawAmp: 0.14, pitchRate: 0.29, pitchAmp: 0.10, tiltRate: 0.21, tiltAmp: 0.035 },
