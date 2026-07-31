@@ -83,6 +83,35 @@ const FUR_TYPE = {
     curl: { arcs: 4, sweep: 3.5, alpha: 0.28, width: 1.4, radius: 0.50 },
     fly: { n: 20, len: 0.048, alpha: 0.26, width: 1.3, sweep: 3.1 },
   },
+  /* TOUSLED — loose soft curls, shaggy and irregular. The Schnoodle's coat.
+     ---------------------------------------------------------------------
+     He used to be `wiry`, and `wiry` is a clipped harsh jacket: its whole job is
+     to keep the head SMOOTH (tuft headScale 0.42, fringe headScale 0.28) so a
+     rectangular skull can read. That is the correct capability for an adult
+     schnauzer in a show trim, and it was actively fighting the target — a bare
+     hard-edged skull is severe, and the reference is a shaggy young doodle whose
+     head outline is broken curl all the way round.
+
+     It is not `curly` either: `curly` is a tight springy ringlet (4 arcs at
+     sweep 3.5, alpha 0.28) and the reference is explicit that the curls are
+     loose and soft, not tightly crimped.
+
+     So this sits between the Cockapoo's `wavy` and `curly`, and is deliberately
+     SCRUFFIER than `wavy` in the two places you can actually see it: the tuft
+     profile is coarser and less regular (amp 3.6 vs 3.1, warp 0.040 vs 0.026,
+     mod 0.55 vs 0.40), and the curl arcs are twice as pronounced (sweep 2.1 /
+     alpha 0.19 vs 1.55 / 0.15). Head tufting is near-full, which is what rounds
+     and softens the skull that `wiry` was keeping bare. That difference in
+     texture is one of the four things keeping the two dogs apart. */
+  tousled: {
+    scallop: 0.60, lobe: 1.34, alpha: 1.0, resample: 8,
+    tuft: { cycles: 14, pow: 0.66, amp: 3.6, warp: 0.040, mod: 0.55, cyc2: 29, oct2: 0.40,
+      headScale: 0.92, bodyScale: 1.42 },
+    fringe: { n: 44, r: 0.052, out: 0.15, alpha: 0.42, jitter: 0.88, headScale: 1.0 },
+    /* wider and fainter than `curly`: a loose open curl, not a crimp */
+    curl: { arcs: 3, sweep: 2.1, alpha: 0.19, width: 2.2, radius: 0.62, shade: 0.5 },
+    fly: { n: 18, len: 0.058, alpha: 0.26, width: 1.35, sweep: 1.9 },
+  },
   /* Harsh and scruffy: fewer, pointier, less regular tufts. A wiry coat does
      not curl into ringlets, it breaks into uneven wisps.
      `skirt` keeps the back sleek and hangs the coat low, and `headScale` is
@@ -143,13 +172,30 @@ const EAR_STYLE = {
     inner: 0.16,        // barely a sliver: a hanging ear shows almost no lining
     feather: 1.35,      // the ear coat is the LONGEST on the dog
   },
-  /* A BUTTON EAR: small, set high, broad at the base, folding forward to a
-     tip on the cheekbone. Short-coated inside a schnauzer jacket, so it
-     barely alters the head outline — hence the low `feather`. */
+  /* A SEMI-FLOPPED DOODLE EAR: broad through the middle and ROUNDED at the
+     tip, hanging beside the face.
+     The width profile used to be [0.78, 1.00, 0.74, 0.42, 0.18] — peaking at
+     the top and tapering to a point — which is a clipped adult button ear, and
+     rendered together with the old outward-lifted hang angles it gave two hard
+     pointed flaps standing off the head. A pointed taper is also the same
+     "tapering triangle" fault this table already calls out by name for the
+     spaniel ear directly above.
+     So it now peaks LOW and stays wide to a rounded tip, like the floppy
+     profile, just shorter. `inner` drops from 0.34 to 0.12 because a curly ear
+     hanging beside the face shows almost no lining, and the visible sliver was
+     drawing a pale line down the middle of each ear. */
+  /* `behind: true`, copied from the spaniel ear above, and it is what finally
+     made these read as ears rather than as flaps. Drawn in FRONT (as they were)
+     the attachment is a visible ribbon end laid over the side of the skull, and
+     there is nothing you can do to that seam: it is a hard edge across the head
+     where no edge belongs. Drawn behind, the head's own scalloped fur boundary
+     covers the root completely, and what you see is the part that hangs clear of
+     the skull — which is also the part that frames the face. Combined with a
+     narrow root (width[0] 0.34) there is simply no seam left to notice. */
   semi: {
-    chain: true, behind: false, back: 0.16, zoneAt: [0, 0.06], zoneR: 1.45,
-    width: [0.78, 1.00, 0.74, 0.42, 0.18], flatten: 0.24,
-    inner: 0.34, feather: 0.45, rim: 0.30,
+    chain: true, behind: true, back: 0.16, zoneAt: [0, 0.06], zoneR: 1.45,
+    width: [0.34, 0.62, 0.88, 1.00, 0.92, 0.62], flatten: 0.24,
+    inner: 0.12, feather: 0.45, rim: 0.18,
     /* A CLIPPED EAR IS A SCALLOPED EDGE, NOT A ROW OF BEADS. `feather` is
        already low, which means few and small lobes — and a small lobe pushed
        most of the way outside the leather is exactly a nub, whereas a large
@@ -160,8 +206,13 @@ const EAR_STYLE = {
     /* GENTLY. At amp 0.30 / 4.5 cycles the hem stopped being fur and became a
        POLYGON — long straight facets meeting in a deep concave notch near the
        root that read as a bite out of the ear. A fur edge is a small, frequent,
-       shallow undulation; anything you can count the sides of is a shape. */
-    scallop: { cycles: 7, pow: 0.75, amp: 0.13, sub: 7 },
+       shallow undulation; anything you can count the sides of is a shape.
+       Nudged up to 11 cycles / amp 0.16 with more subdivision now that the coat
+       is `tousled` rather than clipped `wiry`: still small and frequent (which is
+       the rule above), just enough that the ear edge reads as curl and not as
+       leather. More cycles, not more amplitude — that is what keeps it off the
+       polygon. */
+    scallop: { cycles: 11, pow: 0.72, amp: 0.16, sub: 9 },
   },
 };
 
@@ -1115,8 +1166,16 @@ export function createDogRenderer(rig) {
   function drawEyePair(c, e) {
     const px = R.parallax;
     const [eX, fEye, eYv, fl, fr, open, smi, lead] = e;
-    drawEye(c, -eX + fEye, eYv, D.eyeW * (1 - fl * px.farShrink), D.eyeH, open, smi, R.eyeTilt, -1, lead);
-    drawEye(c, eX + fEye, eYv, D.eyeW * (1 - fr * px.farShrink), D.eyeH, open, smi, R.eyeTilt, 1, lead);
+    /* `face.eyeTilt` — OPT-IN, exactly like `face.eyeHi` above it.
+       BALANCE.rig.eyeTilt is 0.05 rad of outer-corner lift, and its own comment
+       in balance.js reads "higher reads as a stern glare". It is a global, and it
+       is right for the Shiba; a breed that has to read as sweet rather than keen
+       can flatten its own eyes toward round without touching anyone else's.
+       Omitting the key resolves to the global, so the Shiba and the Cockapoo
+       render byte-identically to before. */
+    const tilt = faceCap.eyeTilt === undefined ? R.eyeTilt : faceCap.eyeTilt;
+    drawEye(c, -eX + fEye, eYv, D.eyeW * (1 - fl * px.farShrink), D.eyeH, open, smi, tilt, -1, lead);
+    drawEye(c, eX + fEye, eYv, D.eyeW * (1 - fr * px.farShrink), D.eyeH, open, smi, tilt, 1, lead);
   }
 
   /**
@@ -1544,6 +1603,138 @@ export function createDogRenderer(rig) {
     }
   }
 
+  /**
+   * ONE furnishing side's MASS — contact shadow, dark rim, fill, form shade —
+   * in head-local coordinates.
+   *
+   * Pulled out of drawFurnishings so that the live path and the pre-baked path
+   * below run the exact same drawing code and cannot drift apart. Everything
+   * here is static in head-local space (see buildFluff), which is precisely
+   * what makes the bake possible.
+   */
+  function fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha) {
+    /* CONTACT SHADOW — what stops a furnishing reading as a decal.
+       A pale mass laid on the face with no shadow under it has no stated
+       relationship to the head: it hovers in front of the face. A brow
+       physically OVERHANGS the brow ridge, so it throws a soft shadow down onto
+       the lid — and drawing that shadow is what drops it back ONTO the lid
+       without moving it down over the eye and re-crushing it (the opposite
+       failure). Traced round the SMOOTH base contour, offset down, and mostly
+       hidden behind the mass itself: all that shows is the crescent below the
+       lower edge. */
+    if (f.contact) {
+      const CT = f.contact;
+      const passes = CT.soft === false ? 1 : 2;
+      for (let q = passes; q >= 1; q--) {
+        c.globalAlpha = alpha * (CT.alpha || 0.20) / passes;
+        c.save();
+        c.translate((CT.dx || 0) * hw * sd, (CT.dy === undefined ? 0.06 : CT.dy) * hh * (q / passes));
+        c.beginPath(); crClosed(c, geo.base, 1);
+        c.fillStyle = pal[CT.color] || dark; c.fill();
+        c.restore();
+      }
+      c.globalAlpha = alpha;
+    }
+    c.beginPath(); crClosed(c, geo.dark, 1);
+    c.fillStyle = dark; c.fill();
+    c.beginPath(); crClosed(c, geo.fill, 1);
+    c.fillStyle = main; c.fill();
+    /* a soft inner shade so the mass has volume rather than reading as a
+       flat paper cutout stuck on the face */
+    if (f.shadeIn || f.shadeUnder) {
+      c.beginPath(); crClosed(c, geo.fill, 1);
+      c.save(); c.clip();
+      /* `shadeIn` shades from the TOP down, which is right for a beard
+         hanging in the shadow of the jaw. It is backwards for a brow: an
+         overhanging mass is LIT on top and dark underneath, and shading it
+         the other way lights it from below — one more reason the brows read
+         as pasted on rather than as part of the skull. `shadeUnder` runs the
+         ramp the other way, and over the furnishing's OWN extent rather than
+         the head's, so a shape only a fifth of a head deep actually gets the
+         full ramp instead of a flat slice of it. */
+      const sg = f.shadeUnder
+        ? c.createLinearGradient(0, geo.y1, 0, geo.y0 - (geo.y1 - geo.y0) * 0.25)
+        : c.createLinearGradient(0, -hh * 0.2, 0, hh * 0.5);
+      sg.addColorStop(0, rgba(dark, f.shadeUnder || f.shadeIn));
+      sg.addColorStop(1, rgba(dark, 0));
+      c.fillStyle = sg;
+      c.fillRect(-hw, -hh, hw * 2, hh * 2);
+      c.restore();
+    }
+  }
+
+  /* ---- THE FURNISHING BAKE -------------------------------------------
+     MEASURED, at 390x844 DPR 3: drawFurnishings emitted 1072 of the
+     Schnoodle's 2001 bezierCurveTo calls per frame — 54% of all the curve
+     segments in the whole picture, for four small pale shapes. It is the single
+     most expensive thing in the game, and it is entirely redundant work: a
+     furnishing's tufted geometry is built ONCE at construction and is static in
+     head-local space, so every frame was re-tracing the same ~1000 Catmull-Rom
+     segments and rebuilding the same two-stop gradient to get the same pixels.
+
+     So each side of each furnishing is rasterised once into a small offscreen
+     canvas and blitted thereafter. Per frame that turns ~1072 bezierCurveTo,
+     18 fills, 18 saves and 7 gradients into 7 drawImage calls.
+
+     Correctness rules, so this can never change what the dog looks like:
+       - the bake is keyed on the resolved COLOURS, so dirt and wet (which
+         re-mix them) simply produce a different key;
+       - it is only used when the entry is fully opaque, because overlapping
+         internal layers composite differently under a group alpha;
+       - when dirt or wet are active the live path runs instead, so a muddy or
+         soaking dog is drawn exactly as before — that is the rare case and it
+         is not where the frame budget is spent;
+       - the raster scale is read back out of the live transform, so it is
+         always 1 baked pixel per device pixel, and the only per-frame scaling
+         applied to it (yaw foreshortening, wet cling) is < 1, i.e. a downscale.
+     -------------------------------------------------------------------- */
+  const bakes = new Map();
+  const BAKE_MAX = 512;      // device px per side; a furnishing is far smaller
+
+  function fluffBake(ent, i, sd, main, dark, K) {
+    const key = i + '|' + sd + '|' + K.toFixed(3) + '|' + main + '|' + dark;
+    const hit = bakes.get(key);
+    if (hit !== undefined) return hit;
+    const f = ent.f, geo = ent.geo[sd];
+    const hw = D.headHW, hh = D.headHH;
+    /* bounds: the dark rim is the outermost path, plus wherever the contact
+       shadow is pushed to, plus a pixel of margin for the antialiased edge */
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of geo.dark) {
+      if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
+      if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;
+    }
+    for (const q of geo.base) {
+      if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
+      if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;
+    }
+    if (f.contact) {
+      const CT = f.contact;
+      const dx = (CT.dx || 0) * hw * sd, dy = (CT.dy === undefined ? 0.06 : CT.dy) * hh;
+      x0 = Math.min(x0, x0 + dx); x1 = Math.max(x1, x1 + dx);
+      y0 = Math.min(y0, y0 + dy); y1 = Math.max(y1, y1 + dy);
+    }
+    const pad = 2 / K + 1;
+    x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+    const wpx = Math.ceil((x1 - x0) * K), hpx = Math.ceil((y1 - y0) * K);
+    if (!(wpx > 0 && hpx > 0) || wpx > BAKE_MAX || hpx > BAKE_MAX) {
+      bakes.set(key, null);            // implausible size: stay on the live path
+      return null;
+    }
+    const cv = document.createElement('canvas');
+    cv.width = wpx; cv.height = hpx;
+    const bc = cv.getContext('2d');
+    if (!bc) { bakes.set(key, null); return null; }
+    bc.setTransform(K, 0, 0, K, -x0 * K, -y0 * K);
+    fluffMass(bc, f, geo, sd, main, dark, hw, hh, 1);
+    const out = { cv, x0, y0, w: x1 - x0, h: y1 - y0 };
+    /* the key space is bounded in practice (7 sides x one scale x the pristine
+       palette), but never let a resize storm grow it without limit */
+    if (bakes.size > 64) bakes.clear();
+    bakes.set(key, out);
+    return out;
+  }
+
   function drawFurnishings(c, layer, coat) {
     if (!furnish.length) return;
     const P = rig.pose, s = rig.springs, px = R.parallax, mo = rig.mo.parallax;
@@ -1554,6 +1745,19 @@ export function createDogRenderer(rig) {
     /* the head's real per-frame velocity, published by rig.js — a beard that
        does not trail the head reads as a painted-on bib */
     const vx = P.headVX || 0, vr = P.headVR || 0;
+    /* THE RASTER SCALE for the bake, sampled ONCE here — before any per-side
+       transform. Read off the live matrix so it tracks dpr and window size by
+       itself, and taken here rather than inside the loop because the per-side
+       transform carries the yaw foreshortening, which changes every frame: keying
+       the cache on that would rebake continuously and cost more than it saves.
+       Rotation does not affect the magnitude, so hypot of the first column is the
+       local->device scale. */
+    let baseK = 0;
+    if (c.getTransform) {
+      const m = c.getTransform();
+      const k = Math.hypot(m.a, m.b);
+      if (k > 0.05 && k < 64) baseK = k;
+    }
     /* furniture gets dirty too: a spotless white beard on a muddy dog is the
        same failure the dirt mask was written to fix, in miniature */
     let dirtK = 0;
@@ -1619,55 +1823,14 @@ export function createDogRenderer(rig) {
         c.translate(ax, ay);
         c.scale(shrink * cling * (f.scale || 1), (f.scale || 1));
         c.globalAlpha = alpha;
-        /* CONTACT SHADOW — what stops a furnishing reading as a decal.
-           A pale mass laid on the face with no shadow under it has no stated
-           relationship to the head: it hovers in front of the face, and the
-           Schnoodle's brows read as torn paper stuck above the eyes for exactly
-           this reason. A brow physically OVERHANGS the brow ridge, so it throws
-           a soft shadow down onto the lid — and drawing that shadow is what
-           drops it back ONTO the lid without moving it down over the eye and
-           re-crushing it (the opposite failure). Traced round the SMOOTH base
-           contour, offset down, and mostly hidden behind the mass itself: all
-           that shows is the crescent below the lower edge. */
-        if (f.contact) {
-          const CT = f.contact;
-          const passes = CT.soft === false ? 1 : 2;
-          for (let q = passes; q >= 1; q--) {
-            c.globalAlpha = alpha * (CT.alpha || 0.20) / passes;
-            c.save();
-            c.translate((CT.dx || 0) * hw * sd, (CT.dy === undefined ? 0.06 : CT.dy) * hh * (q / passes));
-            c.beginPath(); crClosed(c, geo.base, 1);
-            c.fillStyle = pal[CT.color] || dark; c.fill();
-            c.restore();
-          }
-          c.globalAlpha = alpha;
+        /* the pre-baked raster if this side is drawable from one — see the
+           bake notes above; otherwise the identical live path via fluffMass */
+        let bk = null;
+        if (baseK > 0 && alpha === 1 && dirtK <= 0.02 && wet <= 0.02) {
+          bk = fluffBake(ent, i, sd, main, dark, baseK * Math.max(1, f.scale || 1));
         }
-        c.beginPath(); crClosed(c, geo.dark, 1);
-        c.fillStyle = dark; c.fill();
-        c.beginPath(); crClosed(c, geo.fill, 1);
-        c.fillStyle = main; c.fill();
-        /* a soft inner shade so the mass has volume rather than reading as a
-           flat paper cutout stuck on the face */
-        if (f.shadeIn || f.shadeUnder) {
-          c.beginPath(); crClosed(c, geo.fill, 1);
-          c.save(); c.clip();
-          /* `shadeIn` shades from the TOP down, which is right for a beard
-             hanging in the shadow of the jaw. It is backwards for a brow: an
-             overhanging mass is LIT on top and dark underneath, and shading it
-             the other way lights it from below — one more reason the brows read
-             as pasted on rather than as part of the skull. `shadeUnder` runs the
-             ramp the other way, and over the furnishing's OWN extent rather than
-             the head's, so a shape only a fifth of a head deep actually gets the
-             full ramp instead of a flat slice of it. */
-          const sg = f.shadeUnder
-            ? c.createLinearGradient(0, geo.y1, 0, geo.y0 - (geo.y1 - geo.y0) * 0.25)
-            : c.createLinearGradient(0, -hh * 0.2, 0, hh * 0.5);
-          sg.addColorStop(0, rgba(dark, f.shadeUnder || f.shadeIn));
-          sg.addColorStop(1, rgba(dark, 0));
-          c.fillStyle = sg;
-          c.fillRect(-hw, -hh, hw * 2, hh * 2);
-          c.restore();
-        }
+        if (bk) c.drawImage(bk.cv, bk.x0, bk.y0, bk.w, bk.h);
+        else fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha);
         c.globalAlpha = 1;
         c.restore();
         /* a few wispy hairs sweeping out of the cluster — this is what makes

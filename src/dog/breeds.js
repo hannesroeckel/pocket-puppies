@@ -326,84 +326,120 @@ export const BREEDS = {
 
   /* ======================================================================
      SCHNOODLE — Miniature Schnauzer x Poodle. THE GIFT PUPPY.
-     The read is CHEEKY AND CHARACTERFUL, and it lives entirely in the
-     facial furniture: a squarer skull, a longer blunt muzzle, a BEARD that
-     hangs below the jaw, a moustache flaring off the muzzle, and bushy
-     EYEBROWS that project forward over the eyes. Coat is wiry-curly, so the
-     silhouette breaks into uneven wisps rather than round ringlets.
-     Semi-erect button ears: the base stands up off the skull and the leather
-     folds forward — which also keeps him instantly distinguishable from the
-     cockapoo in silhouette alone.
+
+     REDIRECTED, on direct feedback about this dog: "the problem with the
+     schnoodle is that it looks angry and not cute — we have to change that.
+     also I would not want to make it grey but rather a nice warm brown."
+
+     The read is now ROUND, SOFT, YOUNG AND SWEET — a warm auburn doodle puppy —
+     and every part of the old read (a squarer skull, a flat crown, a long blunt
+     muzzle, deep-set eyes under heavy pale brows, a harsh wiry jacket, a stark
+     silver furnishing mask) has been taken out rather than softened, because
+     each of those was a faithful rendering of the ADULT breed standard and the
+     adult breed standard describes a stern working terrier.
+
+     What still makes him a schnoodle and not the Cockapoo, all of it carried by
+     volume and silhouette rather than by colour:
+       - warmer and REDDER (auburn #b4703f vs her pale apricot #d9a56f);
+       - a SCRUFFIER coat (fur.type 'tousled' vs her 'wavy' — coarser, more
+         irregular tufting and twice the curl definition);
+       - a slightly LONGER muzzle (35 deep vs her 32) carrying a soft
+         same-colour beard that hangs just past the jaw and breaks the chin
+         silhouette;
+       - SEMI-FLOPPED ears — a folded knuckle at the base and half her length —
+         against her long straight curtains;
+       - brow tufts, which she has none of.
      ====================================================================== */
   schnoodle: {
     id: 'schnoodle',
     name: 'Schnoodle',
 
-    /* SALT-AND-PEPPER. Each hair is banded light/dark, which at any distance
-       averages to a cool mid grey — so the base coat is that average, and the
-       banding is implied by the curl texture rather than drawn hair by hair.
-       The furnishings (brows, beard, chest, legs) are markedly PALER, which
-       is the single most recognisable thing about the colour. */
+    /* WARM RED-BROWN — auburn/copper, and ONE COLOUR ALL OVER.
+       ------------------------------------------------------------------
+       This replaces salt-and-pepper, on direct feedback: "I would not want to
+       make it grey but rather a nice warm brown." Brown and apricot schnoodles
+       are entirely real, so nothing about the breed is given up.
+
+       It also fixes two things the grey was costing us:
+
+       1. THE ROOM. Three passes were spent warming a grey toward the amber
+          window because the dog "sat visibly apart from the scene" — a grey dog
+          in a warm room reads as cut out of a different picture, and no amount
+          of nudging the grey a few degrees toward the lamp fixes that. A coat
+          that is genuinely warm belongs in the space at the root, so all of
+          that compensation is now deleted rather than tuned.
+
+       2. THE FURNISHINGS. Four passes were spent on "the brows look like pale
+          patches stuck on his face", and every one of them treated it as an
+          edge-quality or a shading problem. It was neither: it was CONTRAST.
+          Stark `cream` (#e9e1cd, luminance ~226) laid on mid-grey (~142) is an
+          84-point step, and an 84-point step is a different material no matter
+          how its edge is drawn. The reference photo has no contrasting
+          furnishings at all — the face is one warm colour.
+          So `cream` here is not a cream. It is the coat's own hue, ~25 points
+          lighter: the beard, moustache and brows are still there as VOLUME and
+          SILHOUETTE, but they are the same dog. The whole "pale mask" problem
+          stops existing rather than getting another edge treatment.
+
+       And note what is NOT here any more: no coatHi/line/line2 overrides (the
+       derived ramp is already warm now), no `creamHi` (nothing on this dog
+       should be the whitest object in frame), and no muzHi/muzMid/muzSh. Those
+       three drew the DARK FACIAL MASK, and the reference has none — omitting
+       them lets derivePalette default the muzzle to the cream ramp, which is
+       exactly the "slightly lighter warm tone on the muzzle" of the photo. */
     palette: {
-      /* SALT-AND-PEPPER IN A WARM ROOM. The first pass took the breed standard
-         literally and used a neutral-cool grey; rendered in this room — which is
-         lit amber from a window — he read as a cut-out from a different picture
-         and sat visibly apart from the scene. Real banded grey hair under warm
-         light averages to a warm greige, so every grey here carries a little of
-         the room's amber. It is still unmistakably salt-and-pepper (compare the
-         Shiba's #e9954f), it just belongs in the space. */
-      /* WARMED AND LIFTED AGAIN. He was still sitting cooler and darker than
-         the room: a grey dog in an amber room reads as cut out of a different
-         picture and pasted in, however correct the grey is. Salt-and-pepper is
-         the breed and stays — this is the same hue family, moved a few degrees
-         toward the lamp and lifted about 8% in value, so the window light has
-         something to catch. Next to the Cockapoo's apricot he is still
-         unmistakably the grey dog. */
-      coat: '#968d7c',           // the optical AVERAGE of the banded hairs
-      coatShade: '#6b6355',      // spine / saddle
-      cream: '#e9e1cd',          // the pale furnishings — the recognisable bit
-      nose: '#211e1b',
-      eye: '#2b2119',            // warm near-black, not the old cool #231e1b
+      coat: '#b4703f',           // auburn / copper: the whole dog
+      coatShade: '#8a4a28',      // deeper auburn — spine, saddle, form shade
+      /* the furnishing tone: the SAME hue, only slightly lighter. Also drives
+         the muzzle ramp, the chest and the paws, which is the point — one
+         colour everywhere. */
+      cream: '#cd8a55',
+      nose: '#241b18',           // dark button nose
+      eye: '#2a1d16',            // warm near-black
       tongue: '#ee8d96',
-      blush: '#e0968c',
-      pad: '#b8a898',
+      blush: '#dd8878',
+      pad: '#c58a6c',
       extra: {
-        /* the highlight is what the window catches; keeping it cool was most of
-           why he looked lit by a different lamp than the room */
-        coatHi: '#c8bfa8',
-        /* the ink warmed too: a near-neutral outline on a warmed coat in an
-           amber room is the last thing holding him at a colder temperature */
-        line: '#39322a',
-        line2: '#4b4338',
-        /* THE BROWS ARE THE PERSONALITY, so they get their own pale. Drawn in
-           `cream` with a creamSh rim and an inner shade they came out grey and
-           washed into the mask — the one feature that has to shout was the
-           quietest thing on the face. On a real salt-and-pepper the brows and
-           beard are the whitest hair on the dog. */
-        creamHi: '#f7f1df',
-        /* THE FACIAL MASK, INVERTED. It used to run light at the bridge and
-           DARKEST at the lip (muzSh #474338) — so the one part of the muzzle
-           left visible between the moustache and the beard was the darkest
-           thing on the dog, framed by cream on three sides. Rendered, that
-           window read as a gaping black hole and it was the first thing the eye
-           landed on: the single biggest reason he looked miserable rather than
-           cheeky.
-           So the ramp now runs DARK AT THE BRIDGE (which is what the pale brows
-           need to contrast against, and what actually carries the salt-and-
-           pepper mask) and PALE AT THE LIP, where the beard hair starts on a
-           real dog. Any gap the swinging beard opens up now shows pale muzzle,
-           not a hole. */
-        muzHi: '#575046',        // top: the dark bridge, under the brows
-        muzMid: '#767060',
-        muzSh: '#a4998a',        // bottom: the pale lip field
+        /* THE FURNISHING TONE, on its own key.
+           The beard, moustache and brows want to be a few points lighter than
+           the coat than `cream` is, or they stop reading as masses at all and the
+           schnauzer character disappears entirely — and rendered at `cream` it
+           did: the face came back as a plain round doodle. But `cream` also
+           drives the MUZZLE ramp, the chest and the paws, and lightening those
+           by the same amount rebuilds the Cockapoo's pale muff on his face,
+           which is the one thing that has to stay different.
+           So the two are separated. This is 39 luminance points off the coat
+           (the old cream-on-grey was 84, i.e. more than twice as far), same hue,
+           so it reads as hair catching the light rather than as a patch. */
+        furn: '#d69a63',
+        furnSh: '#a86e3a',
+        /* AND THE BROW GETS ITS OWN, HALFWAY AGAIN. Four tones were rendered side
+           by side for this one shape — `furn` (39 points off the coat), `cream`
+           (25), this (12), and no brow at all — because it is the feature the
+           original feedback was actually about.
+             39pt: a discrete tan LOZENGE on the forehead. The old complaint in a
+                   quieter voice.
+             25pt: better, still legible as two applied ovals.
+             12pt: raised fur that happens to be catching a little more light —
+                   present, nameable as a brow, sitting IN the coat.
+             none: marginally the cleanest dome of the four, and the most faithful
+                   to the reference photo, but it costs the schnauzer note
+                   entirely and pushes him toward being a plain doodle, which is
+                   the one differentiation risk the brief calls out.
+           12 points it is. Reverting to no brow at all is a one-line change
+           (delete the brow entry in `furnishings`) if that call goes the other
+           way — the comparison render is at
+           C:	mp\ppworkrow-final3.png. */
+        browTone: '#c17d4a',
       },
     },
 
     /* the beard and moustache are drawn ON TOP of the face, so the mouth has to
        be drawn on top of THEM or there is no mouth at all — see face.mouthOver
-       in dog/draw.js. And this is the cheeky dog: the corners lift half again
-       as far as a Shiba's, the line is wider and the sag between centre and
-       corner is shallower, so the mouth arcs UP even at rest. */
+       in dog/draw.js. And the corners lift half again as far as a Shiba's, the
+       line is wider and the sag between centre and corner is shallower, so the
+       mouth arcs UP even at rest. That upturn is on the cute list and it is the
+       one thing on this face that never needed changing. */
     face: {
       mouthOver: true,
       noseOver: true,
@@ -415,45 +451,102 @@ export const BREEDS = {
          on the lash line (which is the anatomy) and the eye still renders whole.
          See face.eyesOver in dog/draw.js. */
       eyesOver: true,
-      /* AND THE GLINT STAYS A GLINT. 0.86 of the default, and it now narrows
-         with the lid, so a petting squint gets a small bright spot instead of a
-         white bar that reads as sclera. Big dark eye, small bright highlight —
-         the Cockapoo's balance, on a more almond eye. */
-      eyeHi: 0.86,
-      noseSize: 1.14,     // a schnauzer nose is large and blunt
+      /* AND THE GLINT STAYS A GLINT — the lid-narrowing guard is what stops a
+         squint turning the specular into a white bar that reads as sclera, and
+         it is active for any breed that sets this key at all. So the key STAYS;
+         only the scale comes up, 0.86 -> 0.94, because a clear catchlight in a
+         big dark eye is most of what makes an animal read as alive and young.
+         Still under 1.0 (the Cockapoo's implicit value), so his glint is a hair
+         tighter than hers. */
+      eyeHi: 0.94,
+      /* ROUND, NOT ALMOND. The global BALANCE.rig.eyeTilt lifts the outer corner
+         by 0.05 rad, and balance.js annotates that number as "higher reads as a
+         stern glare". Almond-rather-than-round is on the anger list and a stern
+         glare is the whole complaint, so this dog's eyes sit level. Opt-in
+         capability (see drawEyePair) — every other breed keeps the global. */
+      eyeTilt: 0,
+      /* down from 1.14. A large blunt nose is correct for an adult schnauzer and
+         it was pulling the muzzle heavy and long; the reference is a puppy with
+         a small dark BUTTON nose, and a small nose leaves the short muzzle
+         reading short. */
+      noseSize: 1.02,
+      /* THE SMILE IS NOT TOUCHED. It is the one thing on this face that already
+         reads right — a clear upturn at rest — and it is the game's primary mood
+         channel. Identical to the previous pass, deliberately. */
       mouth: { w: 1.34, lift: 1.85, dip: 0.58, philtrum: 0.45, weight: 1.15 },
     },
 
+    /* ---- proportions: THE CUTENESS GEOMETRY -----------------------------
+       The previous pass chased the adult breed standard — "strong and
+       rectangular, its width diminishing from ears to eyes" — and got what the
+       standard describes: a stern adult working terrier. The feedback is that
+       he "looks angry and not cute", and the reference is a PUPPY.
+
+       Neoteny is a short, closed list, and every item on it is a number in this
+       block. Large round eyes; set WIDE; set LOW on the face so there is a big
+       rounded dome above them; a SHORT muzzle; rounded everywhere. The Cockapoo
+       in this file already hits all of them and is well liked, so the numbers
+       below are deliberately read off her and then pushed a step further on eye
+       size, because the reference photo's eyes are enormous.
+
+       What still separates the two dogs after this: he is redder and warmer, his
+       muzzle is deeper (35 vs her 32) and carries a same-colour beard, his coat
+       is scruffier (fur.type 'tousled' vs her 'wavy'), his ears are SEMI-flopped
+       and half her length, and his skull is a touch taller than wide where hers
+       is wider than tall.
+       ------------------------------------------------------------------- */
     proportions: {
-      headScale: 1.10,
+      headScale: 1.12,
       bodyW: 104, bodyH: 88,
-      /* TALLER THAN WIDE. The number one error on this breed is a round head;
-         the front view has to read as a vertical rectangle. The flat crown is
-         in the silhouette, the corners are built by the brows and beard. */
-      headW: 92, headH: 96,
-      legLen: 35, legW: 12.8,    // square and leggier: the jacket is short
-      earH: 46, earW: 32,        // small V, folding forward
-      muzzleW: 44, muzzleH: 42,  // at least as long as the skull: the brick
-      /* AT 1.12/0.34 HE LOOKED WORRIED. Small close-set eyes under a heavy pale
-         brow is the anatomy of anxiety, and next to the cockapoo's 1.28 the
-         difference read as mood rather than as breed. These stay smaller and
-         more almond than the cockapoo's — that IS the breed — but only just. */
-      eyeSize: 1.34,             // oval and deep-set, but this is a PUPPY
-      eyeSpacing: 0.375,         // still closer than the cockapoo's 0.40
+      /* was 92x96 with a FLAT CROWN and straight sides. The flat crown was the
+         single most severe thing on the dog: it put hard angles at the top
+         corners of the head, and "no hard angles anywhere" is most of the
+         reference. Now near-square and fully rounded in the silhouette — still
+         a hair taller than wide, which is what keeps him off the Cockapoo's
+         wider-than-tall circle. */
+      headW: 94, headH: 95,
+      legLen: 33, legW: 12.8,
+      /* BIGGER AND LOWER-SET. Small ears perched on the crown left the head
+         outline bare at the sides, so the skull read as a standalone block; in
+         the reference the ears hang beside the face and FRAME it, and a framed
+         face is a rounder face. Still barely half the Cockapoo's 80 — he is
+         semi-flopped, she has curtains. */
+      earH: 60, earW: 34,
+      /* SHORT. 42 deep was "at least as long as the skull: the brick", i.e. the
+         long muzzle on the anger list. 35 is short and blunt — but still deeper
+         than the Cockapoo's 32, which is the "slightly longer muzzle carrying a
+         soft beard" that keeps them apart. */
+      muzzleW: 44, muzzleH: 35,
+      /* BIG AND ROUND. 1.34 was authored as "oval and deep-set" — deep-set is a
+         scowl, and the socket shadow that produced it is deleted from `markings`
+         below. This is now the largest eye of the three breeds, on purpose: the
+         reference has big round very dark eyes and they are the whole read. */
+      eyeSize: 1.44,
+      /* WIDE. 0.375 was explicitly "still closer than the cockapoo's 0.40" —
+         close-set eyes are an anger cue and there is no reason to want one. */
+      eyeSpacing: 0.425,
       tailCurl: 0.12,
       tailLen: 0.92,
       tailCarry: -0.44,          // set high, carried up, jaunty
-      tailPlume: 0.90,           // wiry coats carry a thin whippy tail
-      neckRuff: 1.08,
-      pawScale: 1.04,
+      tailPlume: 1.05,           // fuller than the old wiry whip
+      neckRuff: 1.22,            // fuller ruff: rounder, softer join
+      pawScale: 1.12,            // oversized puppy paws
       anchors: {
         neckDY: -0.35,
         neckOverlap: 12,
-        muzzleY: 0.34,           // set high: leaves the jaw free for the beard
-        eyeY: -0.03,             // dropped: a low eye is a puppy eye
-        browY: -0.34,
-        earX: 0.68,
-        earY: -0.62,             // set HIGH: a button ear folds from the skull
+        muzzleY: 0.42,           // DROPPED, so the forehead above the eyes grows
+        /* LOWER STILL (more positive is lower). Eyes low on the face leaving a
+           big rounded dome above them is the strongest single cute cue after eye
+           size, and it is exactly what the Cockapoo does at 0.00. */
+        eyeY: 0.03,
+        browY: -0.30,
+        /* out to the edge of the skull and DOWN off the crown, so the leather
+           hangs beside the face instead of standing on top of it. With
+           EAR_STYLE.semi now `behind: true` the root wants to be far enough out
+           that the head's fur edge covers it and the hanging part still clears
+           the cheek. */
+        earX: 0.92,
+        earY: -0.22,
         shoulderX: 0.37,
         pawX: 0.40,
         hipX: 0.69,
@@ -487,24 +580,42 @@ export const BREEDS = {
             [0.0845, 0.2392], [0.2551, 0.0389],
           ],
         },
-        /* FLAT CROWN, straight sides, width diminishing toward the nose —
-           "strong and rectangular, its width diminishing slightly from ears
-           to eyes, and again to the tip of the nose". 18 points, because a
-           flat plane needs more of them than a curve does. */
+        /* A HIGH ROUNDED DOME. The outline it replaces was authored off the
+           adult breed standard — flat crown, straight sides, "width diminishing
+           slightly from ears to eyes, and again to the tip of the nose" — and it
+           is the reason nothing else on this face could be rescued. A flat crown
+           meeting straight sides puts a hard corner at each top corner of the
+           skull, and hard angles read as severity in any species; the standard
+           is describing an adult working terrier, and the target is a puppy.
+
+           So: a superellipse (exponent 2.16, generated not hand-tweaked, so the
+           curvature is continuous and there is no segment anywhere long enough
+           to read as a straight side), widest a little ABOVE eye level, crown
+           broad and full, tapering ~14% to a softly rounded chin. That taper is
+           the only thing left of "diminishing toward the nose", and at 14% it
+           reads as a rounded jaw rather than as a wedge.
+
+           This is the big rounded forehead/dome from the reference, and combined
+           with anchors.eyeY 0.03 and muzzleY 0.42 it is what puts a genuine
+           expanse of forehead above the eyes. */
         head: {
-          origin: [0.5000, 0.5000], box: [92, 96], pts: [
-            [0.5000, 0.0083], [0.6704, 0.0120], [0.8471, 0.0597], [0.9590, 0.1897], [0.9867, 0.3465],
-            [0.9740, 0.5893], [0.9225, 0.7753], [0.8044, 0.9295], [0.6469, 0.9866], [0.5000, 0.9920],
-            [0.3529, 0.9877], [0.1948, 0.9308], [0.0765, 0.7761], [0.0255, 0.5894], [0.0138, 0.3466],
-            [0.0422, 0.1903], [0.1540, 0.0608], [0.3300, 0.0128],
+          origin: [0.5000, 0.5000], box: [94, 95], pts: [
+            [0.5000, 0.0000], [0.6827, 0.0280], [0.8287, 0.1093], [0.9349, 0.2368], [0.9922, 0.4012],
+            [0.9863, 0.5988], [0.9155, 0.7632], [0.8016, 0.8907], [0.6623, 0.9720], [0.5000, 1.0000],
+            [0.3377, 0.9720], [0.1984, 0.8907], [0.0845, 0.7632], [0.0137, 0.5988], [0.0078, 0.4012],
+            [0.0651, 0.2368], [0.1713, 0.1093], [0.3173, 0.0280],
           ],
         },
-        /* a blunt wedge, deep as it is wide: the schnauzer foreface */
+        /* A SHORT ROUNDED MUFF, not the old blunt wedge as deep as it was wide.
+           Same generator, exponent 2.06 (so almost a circle) in a 44x35 box:
+           wider than deep, which is what makes a muzzle read short. Still deeper
+           than the Cockapoo's 32 — that is the deliberate remaining difference
+           between the two faces. */
         muzzle: {
-          origin: [0.5000, 0.3800], box: [44, 42], pts: [
-            [0.5000, -0.0100], [0.7592, 0.0225], [0.9459, 0.2261], [0.9707, 0.5000], [0.9371, 0.7685],
-            [0.7504, 0.9613], [0.5000, 0.9900], [0.2500, 0.9606], [0.0640, 0.7678], [0.0307, 0.5000],
-            [0.0552, 0.2268], [0.2412, 0.0231],
+          origin: [0.5000, 0.4200], box: [44, 35], pts: [
+            [0.5000, 0.0000], [0.7422, 0.0652], [0.9225, 0.2449], [1.0000, 0.5000], [0.9267, 0.7551],
+            [0.7439, 0.9348], [0.5000, 1.0000], [0.2561, 0.9348], [0.0733, 0.7551], [0.0000, 0.5000],
+            [0.0775, 0.2449], [0.2578, 0.0652],
           ],
         },
         ear: {
@@ -523,68 +634,80 @@ export const BREEDS = {
       },
     },
 
+    /* ---- markings: MOSTLY DELETIONS ------------------------------------
+       Nine of the entries that used to be here existed to build a salt-and-
+       pepper MASK — a dark crown, a dark wedge between the eyes, a shadowed
+       socket under each brow, a pale temple, a pale socket, a strong pale cheek
+       and a field of peppering ticks. Every one of them was contrast machinery,
+       and three of them were on the anger list outright (brow overhang shadow,
+       high-contrast dark-over-light around the eye, a dark band closing the eyes
+       toward each other).
+
+       The reference face is ONE WARM COLOUR. So the mask is gone rather than
+       retuned, and what is left is only the shading that gives the body volume.
+       Deleted, for the record: the `ticks` peppering, the dark crown ellipse, the
+       dark inter-eye wedge, the deep-set socket shadow, and the pale temple.
+       ------------------------------------------------------------------- */
     markings: [
-      /* the pale chest and underside — salt-and-pepper dogs are much lighter
-         underneath, and it is what stops a grey dog reading as flat */
-      { shape: 'patch', where: 'body', outline: 'bib', color: 'cream', grad: 'bib', deform: 0.75, feather: 0.22 },
-      /* the dark saddle is strong on a salt-and-pepper: back and flanks are
-         markedly darker than the furnishings */
-      { shape: 'ellipse', where: 'body', at: [0, -0.72], size: [0.88, 0.50], color: 'coatSh', alpha: 0.30, soft: 0.95 },
-      { shape: 'ellipse', where: 'body', at: [0.70, -0.06], size: [0.32, 0.56], color: 'coatSh', alpha: 0.14, mirror: true, soft: 1.0 },
-      /* THE PEPPERING. Sparse ticks over the saddle and hips only.
-         SMALLER AND FAINTER than the first pass: at r 1.7 / alpha 0.42 the pale
-         half of the pair read as scattered white lint on the shoulders rather
-         than as banded hair, and the light colour is pulled off pure so it
-         cannot pop. Peppering is a texture you notice second, not first. */
-      { shape: 'ticks', where: 'body', at: [0, -0.52], size: [0.74, 0.34], n: 30, r: 1.15, alpha: 0.26, colors: ['#332f2a', '#cfc8b9'] },
-      /* A DARK CROWN AND MASK, so the pale brows read against it. Extended DOWN
-         over the brow band: at -0.70 x 0.30 it stopped at y -0.40 of the head
-         and the brows sit at -0.30, so the one place the mask existed to create
-         contrast was the one place it did not reach — and once the coat was
-         warmed and lightened the cream brows started dissolving into the
-         forehead. A schnauzer's skull cap is dark down to the brow line. */
-      { shape: 'ellipse', where: 'head', at: [0, -0.60], size: [0.66, 0.42], color: 'coatSh', alpha: 0.38, soft: 1.0 },
-      /* DEEP-SET EYES: the socket is shadowed under the brow ridge. Without
-         this the eyes read as big and bright, which is a cockapoo. Held to
-         0.09 and lifted clear of the lens, though — at 0.13 sitting across the
-         eye it was dimming the one feature that has to carry warmth, and a dim
-         eye under a heavy brow is a sad dog however cheeky the mouth is. */
-      { shape: 'ellipse', where: 'head', at: [0.375, -0.17], size: [0.26, 0.12], color: 'coatSh', alpha: 0.09, mirror: true, soft: 1.0 },
-      /* THE PALE SOCKET. tag:'eye' pins it to the lens through every pose (see
-         the anim hook in drawFace). Without it the black eye sat on mid-grey
-         mask with the brow's own shadow rim touching its upper lash, the two
-         darks fused, and what was left read as a squint. `at` deliberately
-         mirrors eyeSpacing / anchors.eyeY exactly. */
-      /* TURNED DOWN from 0.28. This was a crutch for a problem that no longer
-         exists: it existed to stop the black eye fusing with the brow's shadow
-         rim, and the eye is now drawn ON TOP of the brow (face.eyesOver), so
-         nothing can touch it. At 0.28 it was one more pale cloud in an upper
-         face that already has brows, cheeks and a moustache competing, and the
-         whole region read as undifferentiated fluff. Kept faint: a real
-         salt-and-pepper does lift the hair right around the eye. */
-      { shape: 'ellipse', where: 'head', at: [0.375, -0.03], size: [0.215, 0.135], color: 'creamMid', alpha: 0.15, mirror: true, soft: 1.0, tag: 'eye' },
-      /* pale cheek furnishings flanking the muzzle */
-      { shape: 'ellipse', where: 'head', at: [0.56, 0.34], size: [0.22, 0.20], color: 'creamMid', alpha: 0.55, rot: 0.22, mirror: true, soft: 0.9, tag: 'cheek' },
-      { shape: 'stocking', where: 'legFront', color: 'creamMid', alpha: 0.66, from: 0.24 },
+      /* the chest, now only a touch lighter than the coat — "fairly uniform all
+         over" is the reference, so this reads as a soft pale chest rather than
+         as a bib */
+      { shape: 'patch', where: 'body', outline: 'bib', color: 'cream', grad: 'bib', deform: 0.75, feather: 0.24 },
+      /* THE TINY WHITE CHEST FLASH IS CUT. It is in the reference photo, and it
+         was tried three ways and looked wrong every time: fully feathered it is a
+         radial gradient, and a radial gradient on a coat reads as a LIGHT SOURCE
+         (it rendered as a glowing spot, i.e. the "pale thing stuck on him"
+         failure this whole pass exists to remove); given a harder edge it reads
+         as a pale BUTTON sewn to his chest. At the size he is actually seen — the
+         dog is about a third of a 390x844 screen — there is no version of a
+         6-pixel pale disc that reads as fur.
+         The dominant instruction in the reference is "fairly uniform all over",
+         and the `bib` patch above already lifts the chest a little. So the chest
+         stays quiet, and the one detail that could not survive the rendering
+         style is dropped rather than shipped as an artifact. */
+      /* a gentle saddle. Down from alpha 0.30: that strength was carrying the
+         salt-and-pepper's strong dark back, and on a uniform auburn coat it just
+         reads as a dirty stripe. */
+      { shape: 'ellipse', where: 'body', at: [0, -0.74], size: [0.86, 0.46], color: 'coatSh', alpha: 0.17, soft: 1.0 },
+      { shape: 'ellipse', where: 'body', at: [0.70, -0.06], size: [0.32, 0.56], color: 'coatSh', alpha: 0.11, mirror: true, soft: 1.0 },
+      /* A FAINT WARM LIFT AROUND EACH EYE. tag:'eye' pins it to the lens through
+         every pose (see the anim hook in drawFace). Kept, but only just: on a
+         real dog the hair right around the eye is a shade lighter, and a barely
+         perceptible warm halo helps a very dark lens read as a wet eye rather
+         than a hole. It is `creamMid`, which is now a warm mid-brown ~20 points
+         off the coat, so it cannot become a pale patch. */
+      { shape: 'ellipse', where: 'head', at: [0.425, 0.03], size: [0.235, 0.15], color: 'creamMid', alpha: 0.10, mirror: true, soft: 1.0, tag: 'eye' },
+      /* soft warm cheeks flanking the muzzle. Down from alpha 0.60: at that
+         strength they were half of the "pale patches on his face" read, and they
+         were there to close a continuous silver field that no longer exists. */
+      { shape: 'ellipse', where: 'head', at: [0.58, 0.30], size: [0.255, 0.225], color: 'creamMid', alpha: 0.26, rot: 0.22, mirror: true, soft: 1.0, tag: 'cheek' },
+      /* down from 0.66 for the same reason: warm socks, not white ones */
+      { shape: 'stocking', where: 'legFront', color: 'creamMid', alpha: 0.30, from: 0.24 },
       { shape: 'tailUnder', color: 'cream', alpha: 0.22 },
     ],
 
+    /* 'tousled', not 'wiry' — see the FUR_TYPE note in dog/draw.js. `wiry`
+       exists to keep a clipped head SMOOTH so a rectangular skull can read, and
+       both of those are things this dog is no longer trying to be. */
     fur: {
-      type: 'wiry',
+      type: 'tousled',
       clump: {
-        body: { at: [0.11, 0.18, 0.25, 0.32, 0.40, 0.48, 0.56, 0.64, 0.71, 0.78, 0.86, 0.93], scale: 1.0 },
-        head: { at: [0.26, 0.33, 0.40, 0.47, 0.55, 0.63, 0.71, 0.78], scale: 0.88 },
+        body: { at: [0.11, 0.18, 0.25, 0.32, 0.40, 0.48, 0.56, 0.64, 0.71, 0.78, 0.86, 0.93], scale: 1.06 },
+        head: { at: [0.24, 0.31, 0.38, 0.45, 0.55, 0.62, 0.69, 0.76], scale: 0.96 },
       },
     },
 
     ear: 'semi',
 
-    /* ---- THE PERSONALITY --------------------------------------------------
-       Everything that makes a schnauzer face a schnauzer face. Order matters:
-       the moustache flares off the muzzle, the beard hangs below the jaw from
-       behind it, and the brows sit over the eyes and are allowed to overhang
-       the skull line. `wisp` adds the bristle that stops a brow reading as a
-       pillow — a schnauzer's furnishings are harsh-coated, not downy.
+    /* ---- THE SCHNAUZER NOTES, AS VOLUME ----------------------------------
+       Beard, moustache and brow tufts all survive — they are what stops him
+       being a cockapoo — but they are now made of the dog's own hair (`furn`,
+       39 luminance points off the coat) instead of a stark silver field 84
+       points off it. The shapes do the work; the colour stays out of the way.
+       Order still matters: the moustache flares off the muzzle, the beard hangs
+       below the jaw from behind it, and the brows sit above the eyes. What is
+       gone is the ink rim, the contact shadow, the temple furnishing and the
+       brow bristle — see each entry.
        --------------------------------------------------------------------- */
     furnishings: [
       /* BEARD — a rectangle that WIDENS as it comes forward and hangs below
@@ -596,31 +719,37 @@ export const BREEDS = {
          note in the report; a real beard hides the mouth, but the mouth is
          this game's primary mood channel. */
       {
-        /* RAISED AND SHORTENED vs the first pass, for two reasons.
-           Down at at:[0,0.82] reaching to +0.71 it hung to y≈81 on a head whose
-           jaw is at y≈53 — half a head below the chin. Rendered, that is not a
-           beard, it is a bib: it swallowed the whole chest and the pale chest
-           marking with it.
-           And its TOP edge started below the mouth, which left the mouth
-           stranded on bare muzzle. Now the top reaches up under the moustache,
-           so the mouth (drawn last, see face.mouthOver) lands on beard hair and
-           reads as a dark line on cream instead of dark on dark. */
-        kind: 'fluff', tag: 'beard', layer: 'over', at: [0, 0.60],
-        color: 'cream', shade: 'creamSh', shadeIn: 0.30,
-        tuftAmp: 2.6, tuftCycles: 13, tuftPow: 1.0,
-        /* narrow where it leaves the jaw, WIDENING forward and down, and a
-           broad flat bottom. No taper to a point: that is the round-ball
-           beard the reference warns about. */
+        /* SMALLER, ROUNDER, AND THE SAME COLOUR AS THE DOG.
+           The shape survives — he still carries a beard, which is half of why
+           he is a schnoodle and not a cockapoo — but three things change.
+           It is shallower (bottom +0.46 not +0.59) because the muzzle above it
+           is now short, and a full-depth beard under a short muzzle is all chin.
+           The bottom corners are pulled in so the outline is a rounded lobe
+           rather than the broad flat rectangle the adult breed standard wants:
+           the standard is avoiding the "round-ball Bouvier head", which is an
+           adult grooming fault and not a thing a puppy can commit.
+           And it is `cream`, which is now a warm mid-brown 25 points off the
+           coat instead of an 84-point cream — so it reads as a mass of slightly
+           lighter hair catching the light, which is what a beard is, rather than
+           as a bib pinned to his chin.
+           The mouth still lands on it (face.mouthOver draws last), so the smile
+           is still a dark line on a lighter field. */
+        kind: 'fluff', tag: 'beard', layer: 'over', at: [0, 0.635],
+        color: 'furn', shade: 'furnSh', shadeIn: 0.26,
+        /* rounder scallops than the old 2.6/13/1.0: pow below 1 gives round
+           bumps where pow above 1 gives points, and points are the harsh wiry
+           coat he is no longer wearing */
+        tuftAmp: 2.4, tuftCycles: 14, tuftPow: 0.80,
         path: [
-          [-0.24, -0.20], [-0.37, -0.06], [-0.49, 0.10], [-0.55, 0.30],
-          [-0.50, 0.46], [-0.32, 0.55], [-0.13, 0.585], [0, 0.59],
-          [0.13, 0.585], [0.32, 0.55], [0.50, 0.46], [0.55, 0.30],
-          [0.49, 0.10], [0.37, -0.06], [0.24, -0.20], [0.11, -0.25],
-          [0, -0.26], [-0.11, -0.25],
+          [-0.22, -0.21], [-0.34, -0.09], [-0.43, 0.06], [-0.465, 0.22],
+          [-0.415, 0.35], [-0.28, 0.425], [-0.12, 0.458], [0, 0.462],
+          [0.12, 0.458], [0.28, 0.425], [0.415, 0.35], [0.465, 0.22],
+          [0.43, 0.06], [0.34, -0.09], [0.22, -0.21], [0.10, -0.26],
+          [0, -0.27], [-0.10, -0.26],
         ],
         wisp: {
-          n: 7, from: [0, 0.55], spanX: 0.40, len: 0.14, angle: 1.35,
-          spread: 0.5, curl: 0.30, color: 'creamSh', alpha: 0.34, width: 1.6,
+          n: 7, from: [0, 0.42], spanX: 0.34, len: 0.13, angle: 1.35,
+          spread: 0.5, curl: 0.30, color: 'furnSh', alpha: 0.26, width: 1.6,
         },
       },
       /* MOUSTACHE — the hair beside and above the nose, combed forward and
@@ -638,147 +767,127 @@ export const BREEDS = {
            a dog that had no nose, and a nose is half of what makes a muzzle
            read as a face. The inner edge is now held at x≈7, just outside the
            nose, so the pair flanks it exactly as a groomed moustache does. */
-        kind: 'fluff', tag: 'moustache', layer: 'over', at: [0.345, 0.205], mirror: true,
-        color: 'cream', shade: 'creamSh', shadeIn: 0.26,
-        tuftAmp: 2.2, tuftCycles: 10, tuftPow: 1.15,
+        /* DROPPED to follow the muzzle. anchors.muzzleY went 0.34 -> 0.42 to grow
+           the forehead, so the whole muzzle sits ~4 units lower and the pair has
+           to travel with it or it detaches from the nose it is supposed to flank.
+           Softened too (pow 1.15 -> 0.82): pointy is the harsh coat, round is
+           this one. */
+        kind: 'fluff', tag: 'moustache', layer: 'over', at: [0.330, 0.300], mirror: true,
+        color: 'furn', shade: 'furnSh', shadeIn: 0.22,
+        tuftAmp: 2.0, tuftCycles: 11, tuftPow: 0.82,
         path: [
-          [-0.190, -0.055], [-0.020, -0.135], [0.160, -0.130], [0.300, -0.045],
-          [0.320, 0.075], [0.200, 0.185], [0.020, 0.235], [-0.140, 0.200],
-          [-0.200, 0.090],
+          [-0.180, -0.052], [-0.020, -0.126], [0.152, -0.122], [0.286, -0.042],
+          [0.304, 0.070], [0.190, 0.174], [0.020, 0.220], [-0.132, 0.188],
+          [-0.190, 0.084],
         ],
         wisp: {
-          n: 5, from: [0.24, 0.02], spanX: 0.08, len: 0.15, angle: 0.60,
-          spread: 0.7, curl: 0.4, color: 'creamSh', alpha: 0.44, width: 1.6,
+          n: 5, from: [0.24, 0.02], spanX: 0.08, len: 0.14, angle: 0.60,
+          spread: 0.7, curl: 0.4, color: 'furnSh', alpha: 0.30, width: 1.6,
         },
       },
-      /* EYEBROWS — THE PERSONALITY.
-         Two separate tufts joined at a midline parting, reading as a shallow
-         gull-wing from the front. They start on the brow BONE (roughly behind
-         the eye), sweep forward and outward, and are LONGEST TOWARD THE NOSE —
-         so the inner lobe is the big one and the outer lobe is small and
-         higher, which is what puts the diagonal "outer corner down to the
-         nose" line in and produces the quizzical down-the-nose look.
-         They overhang and shade the eye; they must never bury it. */
+      /* THE TEMPLE FURNISHING IS DELETED.
+         It was added last pass to join the brow, cheek, moustache and beard into
+         ONE continuous silver field, because the brows were reading as isolated
+         pale islands. That was a sound fix for a salt-and-pepper dog: the pale
+         had to stop being islands, so the dark was isolated instead.
+         It has no job on a warm brown dog. There is no pale field to connect —
+         the face is one colour, so the brow cannot be an island in it. Keeping a
+         pale wedge up the side of each eye would just reintroduce, in a new
+         place, the exact "patches stuck on his face" read that all of this is
+         meant to remove. Deleted rather than retuned. */
+      /* EYEBROWS — REBUILT, AND THE SINGLE BIGGEST CHANGE ON THE FACE.
+         ------------------------------------------------------------------
+         The pair that was here carried FOUR of the six documented anger cues at
+         once, and the comment history shows each one being argued into place on
+         anatomical grounds without anyone checking what the assembled face
+         actually said:
+
+           1. It slanted DOWN TOWARD THE CENTRE. The path had the inner end
+              "heavy and low" and the outer third climbing, which is by
+              definition inward-down — the strongest anger signal there is in any
+              species. It was authored deliberately, reasoned as "a dog that is
+              pleased to see you lifts the OUTER brow". That is true of a dog
+              lifting a brow, and it is also exactly the geometry of a scowl when
+              it is the brow's resting shape.
+           2. It OVERHUNG and shaded the eye: `contact` threw a shadow down onto
+              the lid and `shadeUnder: 0.46` darkened its own underside, both
+              added to "attach the mass to the face".
+           3. It was INKED. `shade: 'coatSh'` at rim 0.40 put a hard dark line
+              directly above a pale mass directly above the eye — high-contrast
+              dark-over-light around the eye, which reads as a scowl.
+           4. It was `cream` on grey: an 84-point value step, i.e. the pale
+              patch stuck on the face that the feedback is about.
+
+         What replaces it is a soft ROUNDED tuft of the dog's own hair:
+
+         LEVEL, AND ARCHED. The apex is at the middle and both ends fall away
+         equally — the inner tip's mean height is 0.018 and the outer tip's is
+         0.014, a 0.2-unit difference across a 28-unit span, which is level to
+         within a pixel. That is deliberate: inward-DOWN is angry and inward-UP is
+         pleading (an earlier pass drew that one by accident and it was noted),
+         so the safe shape is neither. A rounded arch is the only brow on the
+         cute list that is not simply absent.
+
+         NO INK, NO CONTACT SHADOW, NO shadeUnder. `shade` is `creamSh` — the
+         beard's own shade, one step down the same warm ramp — and `rim` drops
+         from 0.40 to 0.08, so the edge is the shaded underside of a tuft of fur
+         instead of a drawn line. `contact` is gone outright: it existed to prove
+         the brow was in front of the skull, and a same-colour tuft does not need
+         proving because it cannot detach. A whisper of `shadeIn` is all the form
+         it needs.
+
+         RAISED CLEAR OF THE EYE. The drawn bottom edge (path + ~1.6 of tuft +
+         0.16 of rim) lands about 2 units above the top of the lens rather than on
+         its lash line. Hooding an eye is what "peering out from under" needs, and
+         "peering out from under" is not on the cute list. The eye is still drawn
+         last (face.eyesOver), so nothing can bite into it regardless.
+
+         It is still legible, and it is still the schnauzer note that stops him
+         being a cockapoo — but now as fur volume and silhouette, which is what
+         the brief asks for, rather than as two pale objects. */
       {
-        /* DROPPED ONTO THE EYE. At -0.33 the brow's bottom edge stopped about
-           two units clear of the eye's top, so it read as a pale slab FLOATING
-           above a small dark eye — brow and eye as two separate features with a
-           shadow gap between them, which is the anatomy of a worried face. A
-           real schnauzer brow physically overhangs and shades the eye; landing
-           it on the top of the eye is what turns "worried" into "peering out
-           from under".
-           BUT A FURNISHING'S DRAWN EDGE IS NOT ITS AUTHORED EDGE. buildFluff
-           pushes the path out along its normals by up to ~2.7 units of tuft and
-           then lays a 2-unit dark rim outside that, so the visible bottom of
-           this brow falls about 4.5 units below the path. At -0.205 it reached
-           past the middle of the eye and hid it almost completely. -0.295 puts
-           the mean edge on the eye's top lash line with the tuft peaks dipping
-           a couple of units in: hooded, not buried. */
-        /* RAISED to -0.335 and given an INK EDGE.
-           Raised, because the eye is now drawn on top of the brow
-           (face.eyesOver) — so the brow no longer has to be jammed down onto
-           the lid to look like it overhangs. It can sit where a brow ridge
-           actually is and still read as hooding, because the lens crosses in
-           front of its lower edge.
-           Inked, because every other feature in this game has an outline — the
-           nose, the mouth, the whole silhouette — and the furnishings did not.
-           Drawn in pale-on-pale (creamSh) the brows, cheeks and moustache
-           dissolved into ONE cream cloud round the face and the brows stopped
-           being a feature you could name. A thin dark edge is what makes them
-           read as two drawn tufts, and it is also how they are drawn on paper.
-           BUT NOT A FULL INK LINE. At `line2` the ragged tuft profile traced
-           the outline as a hard zigzag and the pair came back as two scribbled
-           pale RECTANGLES floating high on the forehead — outlined shapes, not
-           hair, and separated from the eye again. `coatSh` is dark enough to
-           separate brow from forehead and from the cheek fluff, light enough
-           that the edge still reads as the shaded underside of a tuft. */
-        /* AND DROPPED BACK ONTO THE LID — with light, not with position.
-           Inked and raised, the pair came back as pale grey-white irregular
-           patches FLOATING above the eyes: they read as smudges or torn paper
-           because nothing in the picture said they were attached to the head.
-           The temptation is to push them down onto the eye, but that is how the
-           eye got crushed into a slit twice before. What actually attaches a
-           mass to a face is SHADOW: `contact` throws a soft shadow from the brow
-           down onto the lid (so the brow is demonstrably in front of the skull,
-           overhanging it) and `shadeUnder` darkens its own underside (so it is a
-           rounded overhanging form, lit from above, rather than a flat cutout
-           lit from below as `shadeIn` was doing). The brow now frames the eye
-           from above and never covers it — the eye is still drawn last. */
-        /* AND THE BROW IS THE SAME HAIR AS THE BEARD. `creamHi` made it the
-           brightest thing on the dog — brighter than the beard, brighter than
-           the chest — and a near-white patch on a mid-grey skull separates from
-           it whatever else is done to the edge: that is most of the "torn paper"
-           read. On a real salt-and-pepper the brows and the beard are one
-           furnishing colour. Now they match, the face reads as ONE dog, and the
-           brow is legible because of its shadow and its edge rather than because
-           it is the whitest object in frame. */
-        kind: 'fluff', tag: 'brow', layer: 'over', at: [0.45, -0.292], mirror: true,
-        color: 'cream', shade: 'coatSh', rim: 0.52, shadeUnder: 0.46,
-        contact: { dy: 0.062, alpha: 0.30, color: 'coatSh' },
-        /* HARSH-COATED, not downy. A shallow tuft profile rendered as two flat
-           white slabs stuck over the eyes; a schnauzer brow is bristle, so the
-           amplitude is high, the cycles many and the power >1 (pointy notches
-           rather than round scallops). The wisps carry the rest.
-           THE RAGGED EDGE STAYS. It was tuned down to 1.55/8 to try to make the
-           wedge shape survive, and the result was two flat pale patches with no
-           bristle at all — legible as shapes, dead as character. Bushy is the
-           point; the shape is carried by the anchor and the lifted outer tip,
-           not by a clean outline. */
-        /* Softened from 2.5/12/1.30. With a rim dark enough to define the mass,
-           a high-amplitude pointy profile stops reading as bristle and starts
-           reading as a zigzag border drawn round a patch. The bristle now comes
-           from the wisps, which is where it belongs — those are actual hairs. */
-        /* SOFTENED AGAIN, to a mid-tone scallop. At 2.0/10/1.05 the profile
-           still cusps (pow > 1) on a shape only ~16 units deep, and ten coarse
-           cusps round a small pale mass is not bristle, it is a TORN EDGE — the
-           single biggest reason these read as ripped paper. More cycles, less
-           amplitude and a power below 1 give a run of small round scallops:
-           soft hair against the coat. The bristle still comes from the wisps.
-           BUT NOT SMOOTH EITHER. Taken all the way to 1.45/15/0.74 the pair
-           came back as two flat pale BANDAGES: fifteen tiny ripples round a
-           small shape is a straight edge at viewing size. What reads as hair is
-           CLUMP-scale — bumps a few units wide and a couple deep, the same
-           relative coarseness the beard has and gets away with. */
-        tuftAmp: 1.95, tuftCycles: 11, tuftPow: 0.86,
-        /* A WEDGE, not a puff. In this frame +x is outward, so the INNER end
-           (-x, toward the nose) is the thick, long one — brows are longest
-           toward the nose — and the outer end is thin.
-           HELD DELIBERATELY SHALLOW. Sloping the pair steeply down toward the
-           centre gave a genuinely ANGRY dog on the first render; the brief
-           asks for cheeky. So the slope is gentle, the whole brow is lifted
-           clear of the eye, and the bottom edge only clips the eye's top
-           quarter — enough to hood it, not enough to scowl or to bury it. */
-        /* inner edge held back from the midline so the pair reads as TWO
-           tufts with a parting, not one bristly band across the whole face.
-           THE OUTER TIP LIFTS. The old path was near-symmetric — a flat lens —
-           and a flat brow over a dark eye is expressionless at best; what the
-           render actually showed was the INNER ends sitting highest, which is
-           precisely the raised-inner-brow of a pleading dog. Now the mass is
-           thick from the nose end through the middle (brows are longest toward
-           the nose) and thins to a tip that sits HIGHER than the rest, so the
-           pair arches. That is the quizzical, ears-up, up-to-something read the
-           reference calls scruffy and characterful. */
-        /* AND BIGGER. A schnauzer's brows are the most prominent thing on the
-           head — shaggy awnings, not eyebrow pencil — and at the first size
-           they simply did not have enough area to carry an expression on a
-           50-unit-wide skull. Scaled ~14% and re-anchored so the bottom edge
-           still lands on the eye's top lash. */
-        /* AND IT ARCHES OUTWARD. Level, the pair reads as two bars laid over the
-           eyes and the face goes deadpan — correct anatomy, no opinion. A dog
-           that is pleased to see you lifts the OUTER brow (raising the inner one
-           is the pleading face, which is what an earlier pass accidentally drew).
-           So the outer third climbs while the inner end stays heavy and low: a
-           gentle diagonal running up and away from the nose. Still shallow —
-           steepen it the other way and he is angry. */
+        /* centred on the eye (eyeSpacing is 0.425) and brought a little closer to
+           it: at -0.265 the drawn bottom edge sat a clear 2.4 units above the top
+           of the lens, and a brow with a visible gap under it reads as a separate
+           object hovering on the forehead — which is the old "floating pale slab"
+           complaint arriving by a different route. 1.4 units still leaves the eye
+           completely uncovered (nothing about hooding is wanted here) while
+           putting brow and eye in the same feature group. */
+        kind: 'fluff', tag: 'brow', layer: 'over', at: [0.425, -0.255], mirror: true,
+        /* `browTone` — the SMALLEST tone step on the dog, and the reason is in
+           the palette note for that key: the beard and the moustache are big
+           enough to carry `furn`, but a brow tuft only ~9 units deep needs to be
+           much closer to the coat or it reads as an applied patch rather than as
+           a raised part of it. `shade` stays on `furnSh` so the underside still
+           has enough form to read as raised. */
+        color: 'browTone', shade: 'furnSh', rim: 0.05, shadeUnder: 0.15,
+        /* low amplitude, many cycles, pow well below 1: small ROUND scallops.
+           The old 1.95/11/0.86 was tuned to look like bristle on a harsh-coated
+           adult; this is a soft puppy coat. */
+        tuftAmp: 1.05, tuftCycles: 17, tuftPow: 0.70,
+        /* A ROUNDED ARCH. Apex just inboard of centre, both tips level, no
+           straight run anywhere. In this frame +x is OUTWARD (away from the
+           midline), so the pair mirrors about the nose.
+           NARROWED from +-0.268 to +-0.205. At 28 units across on an 18.6-unit
+           eye the tuft was half again as wide as the thing it sits over, and a
+           shape that much wider than its feature reads as a horizontal BAR — at
+           face-crop size the pair were the second-loudest thing in the picture
+           after the eyes. Just wider than the eye reads as a brow. */
         path: [
-          [-0.330, -0.120], [-0.148, -0.186], [0.021, -0.190], [0.191, -0.208],
-          [0.330, -0.244], [0.362, -0.126], [0.246, -0.028], [0.064, 0.072],
-          [-0.127, 0.119], [-0.308, 0.084],
+          [-0.268, -0.012], [-0.180, -0.070], [-0.030, -0.100], [0.130, -0.088],
+          [0.262, -0.024], [0.262, 0.052], [0.130, 0.086], [-0.020, 0.094],
+          [-0.175, 0.070], [-0.268, 0.048],
         ],
-        wisp: {
-          n: 11, from: [0.02, -0.185], spanX: 0.30, len: 0.20, angle: -0.95,
-          spread: 1.00, curl: 0.55, color: 'creamSh', alpha: 0.62, width: 2.0,
-        },
+        /* NO WISPS. The pair carried 11 of them at alpha 0.62, described as the
+           harsh bristle a schnauzer's furnishings are made of. Rendered at any
+           alpha they came out as thin dark lines radiating up and out of the tuft
+           — legible at face-crop zoom as SCRATCHES on the forehead, not as hair,
+           because a hair drawn in the shade colour on top of a mass in the fill
+           colour is a stroke, and strokes on fur read as scribble. The beard and
+           the moustache keep theirs (they are big enough that a wisp reads as a
+           strand leaving a mass); a brow only ~9 units deep is not.
+           And bristle is the wrong material anyway now: this is a soft puppy
+           coat, and the brief's cute brow is rounded, not harsh. */
       },
     ],
 

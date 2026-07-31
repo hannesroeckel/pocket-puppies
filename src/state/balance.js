@@ -599,11 +599,34 @@ export const BALANCE = {
         hang: [1.26, 0.11, 0.07, 0.04, 0.03], swing: 0.95, backSweep: 0.52,
         flop: 0.30,
       },
-      /* A BUTTON EAR: a lifted cartilaginous base that FOLDS forward and
-         hangs to the cheekbone. Stiff root, loose tip, short chain. */
+      /* A SEMI-FLOPPED DOODLE EAR: it leaves the skull at a slant, KNUCKLES
+         over, and hangs down beside the face.
+         `hang` is a chain of RELATIVE angles in a frame where 0 is straight
+         outward and +pi/2 is straight down, so the cumulative angle is what you
+         actually see. The previous table read [-0.40, 1.52, 0.30, 0.18] — the
+         root segment ran at -23 DEGREES, i.e. up and outward, for its whole
+         length before anything folded. Rendered, that put a hard straight edge
+         out to +15 units of x while still rising, and the pair came back as two
+         angular flaps sticking out sideways like leaves. It was authored as "a
+         lifted cartilaginous base", which is a correct description of an adult
+         button ear and is not what a young doodle wears.
+         Now: root at 40 degrees (out and already descending), a firm knuckle to
+         93 degrees at the first joint, then hanging down and drifting a couple of
+         degrees inward so the leather lies along the cheek and FRAMES the face.
+         The bend at the base is what still reads as semi-flopped rather than as
+         the Cockapoo's straight vertical curtain. */
+      /* AND THE FOLD IS SPREAD OVER FIVE JOINTS, NOT CONCENTRATED IN ONE.
+         With n=4 and the bend all at the first joint, the ribbon renderer had
+         only four segments to describe a 55-degree turn, so it drew two long
+         straight facets meeting at a corner — which is precisely the "angular
+         flap" read, and no amount of moving the anchor fixes a shape that has a
+         visible crease in it. Five shorter segments turning ~25 degrees each
+         describe the same total fold as a CURVE. (The Cockapoo gets away with
+         n=5 and near-zero relative angles because a straight hang needs no
+         segments to be smooth; a folded one does.) */
       semi: {
-        n: 4, k: [186, 138], d: [14.0, 11.0], inherit: 0.34, waveLag: 0.28,
-        hang: [-0.40, 1.52, 0.30, 0.18], swing: 0.62, backSweep: 0.40,
+        n: 5, k: [186, 138], d: [14.0, 11.0], inherit: 0.34, waveLag: 0.28,
+        hang: [0.48, 0.72, 0.34, 0.16, 0.10], swing: 0.62, backSweep: 0.40,
         flop: 0.24,
       },
     },
