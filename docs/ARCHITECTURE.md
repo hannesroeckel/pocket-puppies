@@ -120,7 +120,9 @@ Dog = {
   affectionFloor,   // 0..1 ratchet — affection may NEVER be set below this
   trust,            // 0..1, slower than affection; gates advanced tricks
   tricks: { sit:{level:0..3, learnedAt, cue}, ... },
-  aptitude: { disc, agility, obedience },  // rolled at adopt from breed + jitter
+  aptitude: { disc, agility, obedience },  // per-DOG jitter only — SEE §15.1 §2.
+                                           // The 'from breed' half of this line was
+                                           // REMOVED in stage 5 and must not come back.
   wear: { collar, accessory },
   log: [ {at, kind, note} ],   // capped ring buffer; powers "remembers you" moments
 }
@@ -988,7 +990,381 @@ acceptable because its top edge sits 70 virtual units down, well clear of a 20px
 smaller device would want it anchored. The **back/cancel buttons** (`BALANCE.ui.map.back`,
 and training's at `342,62`) are tap targets rather than text and still use hard coordinates;
 they clear the 20px inset but are not derived from it, and the hit tests would have to move
-with them. `ui/toast.js`, `ui/sheet.js`, `ui/hud.js` and `ui/nav.js` are **not yet routed
-through `ui/text.js`** — the toast is the most visible of these and is the obvious next
-retrofit. Real audio: `audio.pending` now also owes `perk`, `scamper`, `toy-land`,
+with them. `ui/toast.js`, `ui/sheet.js`, `ui/hud.js` and `ui/nav.js` were **not yet routed
+through `ui/text.js`** — the toast was the most visible of these. **Stage 5 finished all
+four; see §15.7.** There are now zero `fillText` calls outside `ui/text.js`. Real audio: `audio.pending` now also owes `perk`, `scamper`, `toy-land`,
 `proud-yip`. No walk *history* screen — `walks.found` is a dated log nothing reads yet.
+
+---
+
+## 15. Stage 5 (Contests + economy) — as built
+
+The **Obedience Trial**, scored 0.00–10.00 to two decimals, judged on performance *and*
+grooming. **Disc was not built** and **Agility is cut** — the human's instruction partway
+through was explicit that depth on Obedience beats breadth, and the game is now being held
+back until it is gift-ready rather than shown early. If a later stage wants Disc, SCOPE.md
+§"Disc — reframed as catch-and-leap" is still the design; nothing here blocks it.
+
+### 15.1 Contract deviations
+
+**1. There is no `scenes/contest.js`. The trial lives in the room.**
+Fourth time, same reason (§13.1 A, §14.1 1): it is him, on this rig, in this room, with the
+same springs and the same petting field. Research §6.3 calls a near-frontal camera a "perfect
+fit" for a dog performing at a judge, so there is nothing to reframe. The room is *dressed* as
+a ring instead — cooled and dimmed, a spotlight drawn **under** him (so the room dims and he
+does not, which is what a spotlight actually is), a mat on the rug, a judge's board. That is a
+contest for the cost of four gradients. `dog/contest.js` is a LAYER, and `contest.apply()`
+runs in the care/train/walk slot.
+
+**2. `BREEDS[x].aptitude` IS NO LONGER READ TO CREATE A DOG. This overrides §4.**
+§4 said aptitude is "rolled at adopt from breed + jitter". SCOPE.md stage 5 drops the breed
+term, and the reason is specific rather than aesthetic: the gift puppy is a Schnoodle and the
+Cockapoo is the saving-up reward, so if either were a mechanically worse obedience dog the
+game would have told her that her favourite dog is the wrong dog.
+
+`newDog` now rolls `0.5 + jitter`. `state/game.js` **no longer imports `dog/breeds.js` at
+all** — the state layer's only knowledge of breed is an id it stores. The one remaining read
+of `breed.aptitude` in the codebase is in `state/save.js`, and it exists purely to *undo* the
+term: `MIGRATIONS[5]` **re-centres** rather than re-rolls,
+
+```
+new = clamp(0.5 + (old - breed.aptitude[k]), 0, 1)
+```
+
+which recovers exactly the individual's jitter and discards exactly the breed bias. Verified
+on all four legacy shapes: `{disc 0.60, agility 0.66, obedience 0.34}` →
+`{0.55, 0.44, 0.44}`. Per-*dog* variation is kept and is worth at most ±0.12 of a
+0.10-weighted term in the obedience roll and ±0.12 of ten points in a score
+(`BALANCE.contest.poise`). It can flavour a dog; it can never decide a class.
+
+**3. `startCare` and `startTrain` now go through `surfaceBlockedFor()` too.**
+Stage 4 built the arbiter but only routed `startWalk` and `openNaming` through it; care and
+training kept private `if (naming.active) … if (walk.busy) …` guards. That is why neither of
+them knew the ring existed until one line was added to each. `blockedToast(owner)` is the
+single place a refusal is spoken, and it is deliberately **silent** for `naming` and
+`reunion` — a toast over the one moment that must have no chrome is worse than saying nothing,
+which is the precedent stage 4 set in `startWalk`. `surfaceOwner()` gained `'contest'`, and
+that one line is what makes the guard work in *both* directions.
+
+**4. Three additions to stage 3's published surface (§13.2).** All additive.
+- `perform(id, { boost, hurry, hold })`. `boost` (0..0.6) is the steadying cue: it shifts
+  probability out of the three failure outcomes into obeying, **in proportion**, so only how
+  *often* he fails moves and not the shape of how he fails. `hurry` takes seconds off the
+  latency roll, floored at 0.18s so an answer never becomes instant. `hold` overrides the pose
+  hold; a contest passes `min(holdFor(id), asked)` so a round never drags when the judge asks
+  for less than he has.
+- `onPerform` results now carry **`chain`** (the posture chain as asked), plus `holdFor` and
+  `holdKept`. `chain` is load-bearing — see 15.4 defect 2.
+- `classifyPath(g, sinceTap)` and `createSignalReader()` are **exported from `dog/train.js`**.
+  The gesture recogniser was lifted out of `createTraining` so the ring can read a cue without
+  the training UI being up. A second recogniser in `dog/contest.js` would have been two
+  definitions of what a circle is, which is the class of drift this project has already paid
+  for once (`BALANCE.train.roster` vs `dog/anim/tricks.js`).
+
+**5. `player.trainerPoints` is renamed `player.carePoints`, and the currency is now earned.**
+"Trainer points" described the wrong thing — they are not earned by training, they are earned
+by looking after him. Nothing had ever paid any out, so in practice this renamed a zero, but a
+hand-edited or imported save may carry one and `MIGRATIONS[5]` moves the value across.
+`addTrainerPoints` survives as a documented alias so §11.2's published surface still holds.
+
+**6. `contests.agility` is deleted from the save.** Agility is cut, and a dead key in a save
+file is a promise to build it. `contests.disc` stays: it is reframed, not cut.
+
+**7. No active-trial record is persisted, on purpose.** A walk survives the app being killed
+because absence *is* the mechanic (§14.1). A trial is 45–90 seconds of her actually watching
+him, and resuming one from a cold start would be strange. So **an abandoned trial costs
+nothing** — the entry is only counted when the trial finishes, she can never lose an entry to
+a crash or a phone call or changing her mind, and there is no trial state to migrate.
+
+### 15.2 The trial, and what she does in it
+
+Judge calls a trick out loud → a **call beat** (`beats.call`, which *is* the assist window) in
+which she may back him up with the signal she taught → `perform(id, {judged:true})` asks **by
+id**, bypassing cue interpretation because the judge said the word → `onPerform` delivers what
+is scored → the round is marked 0..1.
+
+Programme by class: `call` / `hold` / `seq` / `free`, from `BALANCE.contest.programme`.
+The **free window** is the one real decision in a trial and it is hers: up to four chips,
+deepest first, and the deeper the trick the more the same execution is worth. Tapping a chip
+both chooses and counts as the cue — asking for the shape twice would be bookkeeping. Letting
+the window lapse is never a fail state: the judge nods him on and he does his best thing.
+
+**She may not touch him.** In the original that was the point — it was the true test of
+whether the training had worked. Honoured literally: a touch on him is absorbed and gets one
+warm line, once (verified: `pet.level` stays 0.000). What is **not** forbidden is *tapping* —
+SCOPE.md is explicit that "what's forbidden during a trial is petting him through it, not
+tapping" — which is why the cue pad exists and why voice is an equal-status extra rather than
+a requirement. A hands-off trial is winnable: 11/12 firsts at Expert unassisted against 12/12
+assisted, so assisting is worth about 0.60 points and never more than a courtesy.
+
+`scenes/room.js` routes a heard word to `contest.heard` while the ring owns the surface,
+instead of `train.heard` — the latter would try to teach or ask and start a second performance
+on top of the judged one.
+
+### 15.3 Scoring
+
+```
+score = performance01 * perfSpan + groomDelta + poiseDelta      clamped 0..10, 2 dp
+```
+
+`perfSpan` is **9.40, not 10**, and that is the whole design: a flawless run on a *Normal*
+coat lands at 9.40, so the last 0.60 has to come from grooming, and **>9.60 — the
+Championship win — is arithmetically unreachable on a dirty dog however well he performs.**
+That is the stage-2 care loop earning its place, in one number.
+
+`groomDelta` is a **signed** delta around a Normal coat, and its thresholds mirror
+`BALANCE.inspect` exactly so the word the judge says and the mark he gives can never disagree.
+Range **+0.75 (Beautiful + Gleaming) to −1.20 (Filthy + Dull)** — a 1.95-point swing, more
+than a whole class of the ladder.
+
+The **hold** round is where practice depth becomes the ladder: the judge's asked duration
+belongs to the **class**, not to the dog (a standard is a standard), and `holdFor` runs
+0.55 → 1.45 → 2.35 → 3.25s. So a level-1 trick comfortably meets Open's 1.40s and manages
+0.468 of the Championship's 3.10s. Scoring reads `held / asked` and **not** `holdKept` —
+that flag means "he held it as long as *he* can", which would award full marks to a dog who
+managed 0.55s of a 3.10s hold, i.e. exactly the thing the round exists to measure.
+
+`state/contest.js` is **pure**: no drawing, no ticking, and it does not import the dog layer
+(clip durations come from `BALANCE.train.clip`, keeping the same state/dog separation
+`state/walks.js` keeps). That is what makes a clean and a filthy dog at identical performance
+comparable with zero noise, and what makes a 70-trial sweep practical.
+
+### 15.4 Defects found by driving it, and what they cost
+
+**1. Every drawn cue was swallowed as "hands off".** `injectCue` passed the whole time; the
+*pointer path* failed. The hands-off test was a box copied from training's `halo`
+(`|lx| < 118 && ly > -330`) — which is deliberately generous because it means "her personal
+space", not "her body" — and the cue pad's centre resolves to rig-local **y = −321.6**, inside
+it. Replaced with `pet.hitZone(lx, ly)`, the same per-zone test the petting field uses, so
+"she touched him" now means precisely that; the pad could then widen from 150–400 to 108–470.
+**Only driving a real synthesised gesture caught this.**
+
+**2. A trick with a posture prerequisite could never score speed marks.** `perf.latency` runs
+from the start of the performance, and `chainFor` makes him sit and then lie down before he can
+roll over — so a roll over arrived at 3.5–5.2s against `mark.slow` = 2.90 and scored **zero
+speed marks, every single time**, purely for being a trick with a prerequisite. Every free
+round capped at 0.645 for that reason alone, and the free window is exactly where deep tricks
+are supposed to pay. `train.js` now reports the chain and `chainPar()` allows for it, because a
+judge does not penalise a dog for lying down first. Free rounds went 0.645 → 0.906.
+
+**3. His mood collapsed over the course of a trial.** Mood decays toward a baseline that a
+fresh dog's low affection puts at ~0.16, at 0.085/s. Measured over a Championship programme:
+**0.95 at the first call, ~0.25 by the last** — so the trial got harder as it went, the free
+window suffered most, and she cannot cheer him up because petting is the one thing a trial
+forbids. `holdMood` now holds him at the level she brought him in with and **never above it**,
+so a flat dog still has a flat trial and the gate still gates; what it stops is the trial being
+a war of attrition against its own length.
+
+**4. `spendCoins(null)` handed the item over for free.** `ok()` coerces before testing, so
+`+null` and `+''` are a finite 0 and the `cost === 0` early-return reported success. Money is
+the one field where a coercion is worse than a refusal, so `spendCoins` is **stricter than the
+rest of the file**: it demands a real `number` and rejects everything else.
+
+**5. Layout.** The entry button was placed at a hard `y: 686` and floated over his paws with
+its label unreadable against his coat; the panel covered his face. The button is now derived
+from the panel (`enterBox()` — one expression for the draw *and* the hit test) and the panel
+moved clear of his head. Both found by cropping in, neither visible in a whole-screen render.
+
+**6. `node --check` is not enough.** It parses `.js` as a script, and two real boot failures
+only surface in module mode: prose left outside a `/* */` (reported as "Unexpected template
+string") and `makeSprings` throwing on names missing from `BALANCE.springs`. Copying
+`src/**/*.js` to `.mjs` and checking those is the pre-flight now.
+
+### 15.5 Schema v5
+
+`SCHEMA_VERSION = 5`, `MIGRATIONS[5]`. Three changes: the aptitude re-centring (15.1 §2),
+`trainerPoints` → `carePoints` plus a fresh `player.careDay` ledger, and `contests` reshaped
+for the ladder with `agility` dropped. `contestState()` repairs and day-rolls the obedience
+record on **every read**, exactly as `walkState` does, and `fillDefaults` calls it plus guards
+`player.coins` / `player.carePoints` — a NaN in `carePoints` would silently lock or unlock
+every breed in the game.
+
+Verified individually, **63/63 checks, zero page errors**: v1, v2, v3 and v4 each reach v5,
+keep the dog and the name and the bond (the ratchet is the invariant, not the raw number —
+stage 2's capped "missed you" dip legitimately moves 0.610 → 0.604), keep coins, carry the
+points across, drop agility, repair the obedience record into the Beginner class, keep the
+trick ledger and the dirt and gloss and the found items and the active toy — **and can enter
+and finish a trial afterwards**. That last check initially failed because the *reunion* owned
+the surface after a 600-day absence, which is the arbiter working rather than a bug.
+
+### 15.6 Interfaces stage 6 codes against
+
+Stage 6 builds the shop and the kennel. Everything it needs is here and persisted.
+
+```js
+// state/game.js — THE ECONOMY
+get coins                      // integer, never negative, never NaN
+addCoins(n)
+spendCoins(n) -> { ok, coins, spent, short }   // `short` = how much is missing,
+                                               // so a shop says "82 more", not "no"
+canAfford(n) -> bool                           // pure; writes nothing
+
+get carePoints                 // the ONLY thing that unlocks content
+addCarePoints(n)               // raw; migrations and tests only
+awardCare(kind, now?) -> paid  // through the daily ledger + cap
+careLedger(now?) / get careToday
+careUnlocks() -> { points, unlocked:[{id,kind,at,name}], next:{...,short}, word }
+isUnlocked(id) -> bool         // reads carePoints and NOTHING ELSE
+describeCare() -> word
+
+// state/game.js — CONTESTS
+get contest                    // the repaired, day-rolled obedience record
+contestClass() -> { id, name, index, top, hold, prize, rival, entries, wins,
+                    best, won, standing:{avg, holding, n, need} }
+get contestEntriesLeft
+recordContest({score, placing, prize, practice, promoted, won}, now)
+
+// state/contest.js — the pure model
+CLASSES / CLASS_IDS / CLASS_BY_ID / classAt(i) / classIndex(id) / isTop(i)
+contestState(state, now?)      // repair + day roll; call on every read
+entryCheck(game, {knows, now}) -> { ok, reason, need, practice }
+buildProgramme(classId, repertoire, rng) -> rounds     // deterministic from a seed
+askedHold(classId) / chainPar(ids) / depthOf(id, lv) / freeMul(id, lv)
+markAsk(result, {hold, par}) / markRound(round, results) / performance(rounds, marks)
+groomDelta(cleanliness, gloss) / poiseDelta(aptitude)
+finalScore({performance, cleanliness, gloss, aptitude}) -> 0.00..10.00
+scoreBreakdown(...) -> { performance, perfPoints, groom, poise, total }
+rollRivals(classId, rng, field) / placeIn(score, rivals) / promotes(placing)
+prizeFor(classId, placing) / champStanding(scores) / winsChampionship(score)
+ladderDays(pPlace, perDay) -> { promotions, entriesExpected, days }
+
+// dog/contest.js
+createContest(rig, { game, pet, idle, train, voice, rng, reduced,
+                     spawn, sound, toast, onNeed }) -> {
+  active, modal, busy, owns, beat, phase, weight, hint, listening, COPY,
+  start(), stop(quiet?), update(dt, mood), apply(dt, mood),
+  pointer(ev, local) -> consumed, heard(text), listen(),
+  drawBack(g), drawFront(g), drawOver(g),
+  enterRing(), asking(), choices(), choose(id), injectCue(sig), check(),
+  result, debug }
+
+// dog/train.js  (additive to §13.2)
+perform(id, { judged, force, boost, hurry, hold })
+classifyPath(g, sinceTap) / createSignalReader() -> { tick, down, move, up, cancel }
+```
+
+**THE THING STAGE 6 MUST NOT DO.** Do not sell an unlock for coins, and do not add
+`spendCarePoints` or any exchange between the two currencies. The separation is the strongest
+structural idea in the original (research §7) and it is what gives the care loop teeth without
+turning it into a bill: **sell OBJECTS for coins; gate CONTENT on care points.** It is enforced
+today only by there being no code to break it — `careUnlocks()` and `isUnlocked()` do not
+mention `coins`, and nothing converts either way. Verified: 10,000,000 coins unlocks nothing
+and leaves the Cockapoo locked; 400 care points unlocks it. A finished trial moves coins and
+**zero** care points (`BALANCE.economy.care.contest` is literally `0`).
+
+`BALANCE.economy.unlocks` is the table stage 6 should read, with `kind` naming which surface
+owns each row (`decor` / `breed` / `stock` / `room`). The Cockapoo sits at 400, which an
+attentive day of ~205 care points reaches on day 2–3.
+
+Test drivers on `window.__pp`: `ring`, `ringCheck`, `enterRing`, `asking`, `choices`,
+`cueRing`, `cueDraw`, `chooseFree`, `runTrial`, `ringState`, `purse`, `coins`, `addCoins`,
+`spendCoins`, `canAfford`, `carePoints`, `addCarePoints`, `awardCare`, `isUnlocked`,
+`careUnlocks`, `setClass`, `setCoat`, `setNeed`, `learn`, `learnAll`.
+`__pp.version` is `5`.
+
+### 15.7 `ui/text.js` retrofit finished
+
+`ui/toast.js`, `ui/hud.js`, `ui/nav.js` and `ui/sheet.js` are now routed through the helper.
+**Every one of them has zero `fillText` calls; `ui/text.js` is the only place canvas text is
+drawn in the game.** The toast was the one stage 4 named — it drew `#ffeccd` at
+`globalAlpha 0.88` over a pill whose alpha somebody had liked the look of, and measured its own
+width so long copy could run off a narrow screen. The hud's **hint line** was the real defect:
+bare cream over whatever art was behind, with a drop shadow standing in for a guarantee.
+
+Measured with `auditContrast` / `inkFor`, every ink stage 5 draws:
+
+| what | mode | plate alpha | ratio |
+|---|---|---|---|
+| the standard ink (toast, hint, ring hint) | solved plate | 0.625 | **4.58** |
+| button label on the ribbon red | over | — | 4.72 |
+| button label on the teal "do this first" | over | — | 4.91 |
+| card ink on the result / entry card | over | — | 10.28 |
+| nav label on its pill | over | — | 8.98 |
+| sheet row ink | over | — | 9.08 |
+| hud name pill + needs panel | over | — | 9.15 |
+| judge board — the class line | over | — | 7.56 |
+| judge board — THE CALL | over | — | 13.26 |
+| card secondary lines | over | — | 5.51 |
+| a NEGATIVE grooming line | over | — | 5.04 |
+| a POSITIVE grooming line | over | — | 4.68 |
+
+**Worst ratio anywhere: 4.58** against a 4.5 target. All pass.
+
+### 15.8 Measured
+
+Headless Chromium, 390x844, `--enable-gpu`, safe insets forced to the target device's
+20px top / 40px bottom. DPR capped at 2.25 by design.
+
+| beat | DPR | work median | work p95 | work max | rAF median | rAF p95 |
+|---|---|---|---|---|---|---|
+| room idle | 2 | 3.0 ms | 4.9 ms | 5.6 ms | 16.70 | 16.70 |
+| ring: entry panel | 2 | 1.8 ms | 2.8 ms | 3.0 ms | 16.70 | 16.70 |
+| ring: mid-trial (Championship) | 2 | 2.0 ms | 2.8 ms | 3.5 ms | 16.70 | 16.80 |
+| ring: free-window chips | 2 | 1.6 ms | 2.4 ms | 3.3 ms | 16.70 | 16.80 |
+| ring: result card | 2 | 2.0 ms | 2.8 ms | 3.2 ms | 16.70 | 16.80 |
+| room idle | 3 | 1.9 ms | 3.1 ms | 3.6 ms | 16.70 | 16.80 |
+| ring: entry panel | 3 | 1.8 ms | 2.5 ms | 5.3 ms | 16.70 | 16.70 |
+| ring: mid-trial (Championship) | 3 | 1.9 ms | 2.7 ms | 5.5 ms | 16.70 | 16.80 |
+| ring: free-window chips | 3 | 2.2 ms | 4.3 ms | 4.6 ms | 16.70 | 16.80 |
+| ring: result card | 3 | 2.2 ms | 5.9 ms | 17.8 ms | 16.70 | 16.70 |
+
+**Worst rAF p95 across every beat: 16.80 ms — vsync-locked at 60fps throughout**, with
+roughly 6x headroom. The one 17.8 ms work spike is a single frame at DPR 3 as the result card
+first measures its type and fills the width cache; no frame was dropped for it (rAF p95 stayed
+at 16.70). Stage 5 costs about nothing over stage 4.
+
+Zero console errors and **zero external requests** in every run, in light and dark, at normal
+and `prefers-reduced-motion: reduce` — a whole trial completes and scores in all four
+combinations.
+
+**Scoring, the headline.** Identical performance, different coat (gloss Normal):
+
+| performance | Beautiful | Clean | Normal | Dirty | Filthy | swing |
+|---|---|---|---|---|---|---|
+| 1.00 | **10.00** | 9.70 | 9.40 | 8.85 | **8.30** | 1.70 |
+| 0.95 | **9.53** | 9.23 | 8.93 | 8.38 | **7.83** | 1.70 |
+| 0.85 | 8.59 | 8.29 | 7.99 | 7.44 | 6.89 | 1.70 |
+
+Live, 12 real trials per condition at Expert: clean+gleaming **9.72 mean, 12/12 firsts**;
+FILTHY+dull **6.50 mean, 0/12 firsts** (a 3.22 swing — 1.70 is the grooming mark, the rest is
+a filthy dog also being a *distracted* one, since `pressingNeed()` feeds
+`train.obey.distract.need`); flat mood **6.67, 3/12**; level 1 instead of 2 **8.27, 6/12**;
+hands off **9.12, 11/12**. Free window at Championship: `sit` → 9.16 mean and 5/10 firsts,
+`rollOver` → 9.89 and 9/10. Her choice in the free window is worth four places.
+
+**The ladder.** Four promotions at a top-three placing, three entries a day:
+
+| p(top-three per entry) | entries expected | days to the Championship |
+|---|---|---|
+| 0.50 | 8.00 | **2.67** |
+| 0.75 | 5.33 | 1.78 |
+
+**Days, not months**, against the original's 50,000 trainer points at 200/day. An attentive
+day earns ~205 care points against a 240 cap, so the unlock ladder is 90 → day 1,
+220 → day 2, **the Cockapoo at 400 → day 2–3**, 1600 → day ~8.
+
+Full numbers, including the per-round marks and the hold ladder, in `docs/STAGE5-NOTES.md`.
+
+### 15.9 Not built in stage 5
+
+- **Disc (catch-and-leap) is not built.** Deliberate: the instruction was depth over breadth,
+  and Obedience got the whole budget. SCOPE.md's design for it still stands.
+- **Agility is cut and must not be built.**
+- **No rival dog is ever drawn.** The field is four numbers and a name each, which is enough
+  for a placing to mean something and costs nothing. If a later stage wants to *show* them it
+  needs a second rig, and that is the thing this project has consistently refused.
+- **The Championship standing is a standing, not a rank she can lose.** There is no demotion
+  at any score, by design (SCOPE: losing must never feel like rebuke). `champStanding()`
+  reports `holding: false` and the card says something warm about him; nothing is taken away.
+- **`BALANCE.economy.unlocks` is a table nothing consumes yet.** `careUnlocks()` returns it
+  and `isUnlocked()` answers for it, but no shop, kennel or decor surface exists to read them
+  — that is stage 6's job, and the rows carry a `kind` so it knows which surface owns each.
+- **A trial charges no needs at all**, unlike every other activity. Deliberate: the entry gate
+  already requires a fed and watered dog, so charging thirst would gate the second trial of the
+  day behind the first. That is a punishment loop.
+- **The ring's `back` button and the free-window chips use fixed virtual coordinates**, the
+  same honest limit stage 4 recorded for the route map. They clear a 20px inset but are not
+  derived from it. The panel and card *are* derived from their own geometry, and all their
+  copy goes through `ui/text.js`, which anchors to the safe band.
+- Real audio: `audio.pending` now also owes the ring's `perk`, `cue`, `praise` and
+  `proud-yip` uses (all names stage 3 already registered).

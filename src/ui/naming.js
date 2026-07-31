@@ -21,7 +21,8 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, smooth, roundRect } from '../engine/draw.js';
-import { drawText } from './text.js';
+import { drawText, plateAlpha } from './text.js';
+import { capitalise } from '../state/game.js';
 
 const NA = BALANCE.ui.naming;
 const VW = BALANCE.view.W;
@@ -31,9 +32,24 @@ const VH = BALANCE.view.H;
    puppy's ears reach y~373 and NO COPY MAY SIT ACROSS HER FACE — she is the
    thing being looked at. The scrim darkens the top so cream text still reads
    over the pale window. */
-const LINE_Y = { line: 246, ask: 200, field: 252, cue: 330, skip: VH - 84 };
+const LINE_Y = {
+  line: 246, ask: 200, field: 252, cue: 330, skip: VH - 84,
+  /* the reveal, named rather than inlined at 252/296 */
+  reveal: 252, revealSub: 296,
+};
+/* the beat's one ink, and the SCRIM ALPHA SOLVED FOR IT. `plateAlpha` returns
+   the smallest alpha at which a plate of this colour gives this ink 4.5:1
+   against the worst possible background — pure black or pure white showing
+   through. The scrim is drawn at that alpha, so it is the guarantee and no
+   pill is needed over the one moment in the game that must have no chrome. */
+const INK = '#fff3d8';
+const SCRIM = '#1a0d06';
+const SCRIM_A = plateAlpha(INK, SCRIM);
 
 export function createNaming(opts = {}) {
+  /* NO HARDCODED PRONOUN. "Her new name" was wrong on screen for a male gift
+     puppy; the pronoun comes from per-dog data at draw time (§13.5). */
+  const pron = () => (opts.game ? opts.game.pron : { their: 'their' });
   const game = opts.game;
   const reduced = !!opts.reduced;
   const onDone = opts.onDone || (() => {});
@@ -226,11 +242,25 @@ export function createNaming(opts = {}) {
     gr.addColorStop(1, `rgba(30,15,7,${(0.70 * a).toFixed(3)})`);
     c.fillStyle = gr;
     c.fillRect(0, 0, VW, VH);
-    /* and the top goes further down, so cream copy reads over the pale window
-       without a plate or a card behind it */
+    /* AND THE TOP GOES FURTHER DOWN, BECAUSE THE SCRIM IS THE GUARANTEE.
+       This beat draws no plate behind its copy, on purpose: a pill over the
+       emotional centre of first launch is chrome where there must be none
+       (stage 4 made that call for the title and it is the right one). But
+       `plate: 'none'` with no `over` means the helper guarantees NOTHING, and
+       the previous gradient resolved to only ~0.36 alpha at the copy's y —
+       so cream over the pale wall and the sunlit window computed to about
+       2.0:1, which is the project's recurring failure wearing a third costume.
+
+       The fix is not a pill. It is to make the beat's OWN SCRIM as strong as
+       the plate would have been: `SCRIM_A` is `plateAlpha(ink, '#1a0d06')`,
+       i.e. the alpha ui/text.js SOLVES for cream to clear 4.5:1 against the
+       worst possible background. The scrim then does the plate's job as art,
+       and the guarantee is measured rather than hoped for. Held flat across
+       the whole copy band (down to y=352) and only then released. */
     const tb = c.createLinearGradient(0, 0, 0, 440);
-    tb.addColorStop(0, `rgba(26,13,6,${(0.62 * a).toFixed(3)})`);
-    tb.addColorStop(0.62, `rgba(26,13,6,${(0.34 * a).toFixed(3)})`);
+    tb.addColorStop(0, `rgba(26,13,6,${(Math.min(0.82, SCRIM_A + 0.10) * a).toFixed(3)})`);
+    tb.addColorStop(0.45, `rgba(26,13,6,${(Math.min(0.80, SCRIM_A + 0.08) * a).toFixed(3)})`);
+    tb.addColorStop(0.80, `rgba(26,13,6,${((SCRIM_A + 0.02) * a).toFixed(3)})`);
     tb.addColorStop(1, 'rgba(26,13,6,0)');
     c.fillStyle = tb;
     c.fillRect(0, 0, VW, 440);
@@ -241,19 +271,24 @@ export function createNaming(opts = {}) {
     c.textBaseline = 'middle';
 
     if (revealName) {
-      /* her name, large and quiet, and then it gets out of the way */
+      /* HER NAME, large and quiet, and then it gets out of the way. Through the
+         helper so it shrinks to the safe band rather than running to the edges
+         — `maxLen: 14` does not guarantee that at every viewport — and so the
+         name is centred and clamped by the same code as everything else.
+         No plate: the scrim above is the guarantee. */
       const u = clamp(t / 0.7, 0, 1);
-      const s = 1 + (1 - smooth(u)) * 0.10;
-      c.globalAlpha = a * smooth(clamp(t / 0.45, 0, 1));
-      c.fillStyle = '#fff3d8';
-      c.font = `600 ${(34 * s).toFixed(1)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      c.shadowColor = 'rgba(30,14,6,0.7)'; c.shadowBlur = 14; c.shadowOffsetY = 2;
-      c.fillText(revealName, VW / 2, 252);
-      c.shadowBlur = 0;
-      c.globalAlpha = a * 0.62 * smooth(clamp((t - 0.5) / 0.6, 0, 1));
-      c.font = '500 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillText(mode === 'rename' ? 'Her new name' : 'Hello, ' + revealName, VW / 2, 296);
+      const sc = 1 + (1 - smooth(u)) * 0.10;
       c.restore();
+      drawText(g, revealName, {
+        x: VW / 2, y: LINE_Y.reveal, size: 34 * sc, weight: 700,
+        ink: INK, plate: 'none', maxWidth: VW - 64,
+        fade: a * smooth(clamp(t / 0.45, 0, 1)),
+      });
+      drawText(g, mode === 'rename' ? `${capitalise(pron().their)} new name` : 'Hello, ' + revealName, {
+        x: VW / 2, y: LINE_Y.revealSub, size: 13.5, weight: 600,
+        ink: INK, plate: 'none', maxWidth: VW - 64,
+        fade: a * smooth(clamp((t - 0.5) / 0.6, 0, 1)),
+      });
       return;
     }
 
@@ -283,26 +318,30 @@ export function createNaming(opts = {}) {
       /* the underline is drawn by the DOM field; here we only add the two
          quiet affordances around it */
       const typed = input && input.value ? input.value.trim() : '';
-      c.globalAlpha = a * fade * (typed ? 0.86 : 0.30);
-      c.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillStyle = typed ? '#ffe0a8' : '#fff3d8';
-      c.shadowColor = 'rgba(30,14,6,0.72)'; c.shadowBlur = 8;
-      c.fillText(typed ? 'Press return' : 'Type a name', VW / 2, LINE_Y.cue);
-      c.shadowBlur = 0;
-
-      c.globalAlpha = a * fade * 0.42;
-      c.font = '500 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillStyle = '#fff3d8';
-      c.shadowColor = 'rgba(30,14,6,0.7)'; c.shadowBlur = 6;
-      c.fillText('not yet', VW / 2, LINE_Y.skip);
-      c.shadowBlur = 0;
-    } else {
-      /* the faintest possible "tap to go on" — present, never insistent */
-      c.globalAlpha = a * fade * 0.26 * (0.6 + 0.4 * Math.sin(t * 2.1));
-      c.font = '500 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillText('tap', VW / 2, VH - 118);
+      c.restore();
+      drawText(g, typed ? 'Press return' : 'Type a name', {
+        x: VW / 2, y: LINE_Y.cue, size: 12.5, weight: 700,
+        ink: typed ? '#ffe0a8' : INK, plate: 'none',
+        fade: a * fade * (typed ? 1 : 0.62),
+      });
+      /* "not yet" is a real tap target (see `pointer`), so it is not allowed to
+         be decorative-faint — it was at 0.42 and reading it required knowing it
+         was there. It stays the quietest thing on screen and stays legible. */
+      drawText(g, 'not yet', {
+        x: VW / 2, y: LINE_Y.skip, size: 12, weight: 600,
+        ink: INK, plate: 'none', fade: a * fade * 0.72,
+      });
+      return;
     }
     c.restore();
+    /* the faintest possible "tap to go on" — present, never insistent. This one
+       IS decorative: it repeats an affordance the whole screen already has (any
+       tap advances), so it is the one place a low alpha is honest. */
+    drawText(g, 'tap', {
+      x: VW / 2, y: VH - 118, size: 11.5, weight: 600,
+      ink: INK, plate: 'none',
+      fade: a * fade * 0.34 * (0.6 + 0.4 * Math.sin(t * 2.1)),
+    });
   }
 
   return {

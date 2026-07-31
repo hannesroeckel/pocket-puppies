@@ -160,6 +160,13 @@ export const BALANCE = {
          brought home safe is worth more than a fetched ball and less than a
          whole care action. */
       walkBonus: 0.008,
+      /* per finished trial (repeatable, still day-capped). Doing a thing
+         TOGETHER in front of strangers is a bonding moment whatever the score,
+         so this is paid on a last place exactly as on a win — and it is the
+         only thing a contest pays into any ledger. It pays ZERO care points
+         (BALANCE.economy.care.contest), which is the two-currency separation
+         stated as a pair of numbers rather than as a promise. */
+      contestBonus: 0.006,
     },
     idleDrainPerSec: 0,         // the fast drift lives on MOOD now, not here
     floorRatio: 0.62,           // continuous ratchet: floor >= affection * this
@@ -739,7 +746,13 @@ export const BALANCE = {
       perLevel: 0.13,           // x level 1..3
       perMood: 0.34,
       perTrust: 0.16,
-      perAptitude: 0.10,        // the breed's obedience aptitude
+      /* THE PER-**DOG** APTITUDE, and never a per-breed one. SCOPE.md's
+         "Breed is COSMETIC" overrides ARCHITECTURE §4: `newDog` rolls this as
+         0.5 + jitter with NO breed term, and MIGRATIONS[5] re-centres an old
+         save's roll to strip the term it was created with. Individuals differ;
+         breeds do not, because the gift puppy is a Schnoodle and the Cockapoo
+         is the saving-up reward, and neither may be the mechanically wrong dog. */
+      perAptitude: 0.10,
       min: 0.03, max: 0.985,
       /* how the remaining probability splits when she does NOT obey cleanly */
       hesitate: { base: 0.45, perLevel: 0.10, perMood: 0.25 },
@@ -818,6 +831,341 @@ export const BALANCE = {
       /* the "call him" button in the training overlay */
       button: { x: 40, y: 62, r: 21 },
     },
+  },
+
+  /* ---- CONTESTS: the Obedience Trial ----------------------------------
+     THE PRIMARY CONTEST AND THE MECHANICAL PAYOFF OF THE TRAINING SYSTEM
+     (SCOPE.md stage 5, research §6.3). Disc is reframed as catch-and-leap and
+     ships only if there is budget; **Agility is cut** and must not be built —
+     its top-down route map IS the mechanic and it fights this rig hardest.
+
+     FOUR THINGS HERE ARE THE DESIGN, NOT DECORATION:
+
+     1. SCORE 0.00-10.00 TO TWO DECIMALS. The precision is the point: it makes
+        a 9.34 feel earned and a 9.61 feel like a triumph.
+     2. JUDGED ON PERFORMANCE **AND** GROOMING. `groom` is a SIGNED delta
+        around "Normal": dirty and filthy DEDUCT, clean and beautiful BONUS.
+        This is what makes the stage-2 care loop earn its place rather than be
+        a chore list — a bath before a trial is an obvious good idea she works
+        out for herself. Its thresholds mirror BALANCE.inspect exactly, so the
+        judge's WORD and the deduction can never disagree.
+     3. NOTHING HERE PUNISHES. `mark.ignoreCredit` is deliberately non-zero (he
+        looked at a bird; he is a dog, not a machine), there is NO demotion at
+        any score, and past the daily entry cap a trial still runs as a
+        practice round rather than being refused. "Losing must never feel like
+        rebuke."
+     4. THE LADDER IS DAYS, NOT MONTHS. See `economy` below for the arithmetic.
+     ------------------------------------------------------------------- */
+  contest: {
+    /* ---- THE ENTRY GATE -------------------------------------------
+       "Entry requires a dog that is not hungry and not parched" (research
+       §6). These are the BALANCE.inspect word boundaries, so the gate is
+       exactly "he is Hungry" / "he is Thirsty" and the copy can name the bowl.
+       It must read as LOOKING AFTER HIM, never as a punishment — see COPY in
+       dog/contest.js, which offers the bowl rather than refusing the entry. */
+    gate: { hunger: 0.55, thirst: 0.55 },
+
+    /* Three trials a day is the widely-repeated community figure (research
+       §6, unconfirmed). Past it the ring is not CLOSED — she may still enter,
+       it simply pays nothing and cannot promote, and is framed as a practice
+       round. A cap she hits and resents is off-brief. */
+    perDay: 3,
+
+    /* ---- THE LADDER -------------------------------------------------
+       Five classes, advancing on a TOP-THREE placing (research §6). `rival`
+       is the field she is scored against: `mean` and `sd` of the other
+       competitors' scores, which is the only thing that makes a placing mean
+       something without simulating four other dogs. Deliberately readable as
+       a table so the difficulty curve can be tuned by eye.
+
+       `prize` is [1st, 2nd, 3rd] in COINS, from the original's shape
+       (100/50/30 -> 200/100/60 -> 300/150/90 -> 400 -> 600). The 2nd and 3rd
+       columns for Master and Championship were never recovered from a source
+       (research §6 flags it), so they continue the same halving.
+
+       `hold` is the DURATION THE JUDGE ASKS FOR, in seconds, and it belongs to
+       the CLASS rather than to the dog — a standard is a standard. That is
+       what turns research §5's "the more a trick is practised, the longer the
+       dog will hold it" into a ladder: dog/train.js's `holdFor` grows
+       0.55 -> 1.45 -> 2.35 -> 3.25s with practice depth, so a level-1 trick
+       comfortably meets Open's 1.40s and manages less than half of the
+       Championship's 3.10s. Depth is literally what buys the top classes. */
+    classes: [
+      { id: 'beginner', name: 'Beginner', hold: 0.90, rival: { mean: 6.30, sd: 0.62 }, prize: [100, 50, 30] },
+      { id: 'open', name: 'Open', hold: 1.40, rival: { mean: 7.20, sd: 0.58 }, prize: [200, 100, 60] },
+      { id: 'expert', name: 'Expert', hold: 2.00, rival: { mean: 7.95, sd: 0.54 }, prize: [300, 150, 90] },
+      { id: 'master', name: 'Master', hold: 2.60, rival: { mean: 8.55, sd: 0.46 }, prize: [400, 200, 120] },
+      { id: 'champion', name: 'Championship', hold: 3.10, rival: { mean: 9.10, sd: 0.34 }, prize: [600, 300, 180] },
+    ],
+    /** competitors in the ring INCLUDING him, so `field - 1` rivals are rolled */
+    field: 5,
+    /** a top-three placing promotes (research §6). 1-indexed. */
+    promoteAt: 3,
+
+    /* ---- THE CHAMPIONSHIP, AND WHY IT NEVER DEMOTES ------------------
+       Research §6.3: maintain a >= 9.00 average to stay in the Championship,
+       > 9.60 to win it. Both numbers are kept because they give the ceiling a
+       real name — but "stay in" is implemented as a STANDING SHE HOLDS, not a
+       rank she can lose. Dropping a class for a bad day is exactly the rebuke
+       SCOPE.md forbids, so falling below 9.00 costs nothing except the words
+       on the card. Winning is permanent. */
+    champion: { holdAt: 9.00, holdWindow: 3, winAt: 9.60 },
+
+    /* ---- THE PROGRAMME ----------------------------------------------
+       What the judge calls, per class, in order.
+         call  one trick, scored on correctness and speed
+         hold  one trick, held for a judge-set duration (dog/train.js's
+               `holdFor` grows 0.55s -> 3.25s with practice depth, which is
+               what research §5 says the trial is really testing)
+         seq   two tricks back to back — both must land
+         free  THE FREE-PERFORMANCE WINDOW, where the deeper tricks earn the
+               big points (see `free` below)
+       Sized so a whole trial is roughly 45-90 seconds: a session is 90
+       seconds or 20 minutes and both must be valid (SCOPE principle 3). */
+    programme: {
+      beginner: ['call', 'call', 'free'],
+      open: ['call', 'hold', 'call', 'free'],
+      expert: ['call', 'hold', 'seq', 'free'],
+      master: ['call', 'hold', 'seq', 'hold', 'free'],
+      champion: ['call', 'hold', 'seq', 'hold', 'free', 'free'],
+    },
+    /** how much each round kind counts toward the performance mean */
+    weight: { call: 1.00, hold: 1.15, seq: 1.30, free: 1.55 },
+
+    /* ---- MARKING ONE ROUND, 0..1 ------------------------------------
+       `correct`/`speed`/`hold` are shares of one round's mark; the hold share
+       is redistributed into the other two on a round with no hold. */
+    mark: {
+      correct: 0.60, speed: 0.26, hold: 0.14,
+      /* at or under `par` seconds from the call to the pose landing, full
+         speed marks; at or over `slow`, none. dog/train.js's modelled latency
+         at level 2 / happy mood is ~1.3s, so par is genuinely reachable. */
+      par: 1.15, slow: 2.90,
+      /* HE DID A TRICK, BEAUTIFULLY, JUST NOT THAT ONE. Never a nil. */
+      wrongCredit: 0.20,
+      /* HE LOOKED AT SOMETHING. Also never a nil: he is a dog. */
+      ignoreCredit: 0.08,
+      /* he got there, he just thought about it first */
+      hesitate: 0.90,
+      /* a sequence's second trick gets this long added to par, because he has
+         to get into position first (dog/train.js charges `latency.chain`) */
+      chainAllowance: 0.60,
+    },
+
+    /* ---- THE FREE-PERFORMANCE WINDOW --------------------------------
+       "Free performance is where advanced tricks earn the big points"
+       (research §6.3). Two things count as depth and both are earned:
+         DEPTH  how demanding the trick is (`depth` below) — a roll-over is
+                worth more than a sit, and always was
+         LEVEL  how deeply THIS dog has practised it (dog/train.js's level 0-3)
+       A perfectly executed level-1 sit still scores; it just does not win a
+       Championship, which is the whole shape research describes. */
+    free: { floor: 0.55, depthShare: 0.50 },
+    /** how demanding each trick is, 1..3. A design tunable, not art data. */
+    depth: {
+      sit: 1, lieDown: 1, shake: 2, beg: 2, spin: 2, jump: 2, rollOver: 3, playDead: 3,
+    },
+
+    /* ---- THE SCORE ---------------------------------------------------
+       score = performance01 * perfSpan + groom + poise, clamped 0..10, 2 dp.
+
+       `perfSpan` is 9.40 rather than 10 on purpose: a flawless run on a dog
+       with a NORMAL coat lands at 9.40, and the last 0.60 has to come from
+       grooming. That is what makes "bath before a trial" the obvious move
+       without ever saying so, and it is why >9.60 (the Championship win) is
+       unreachable on a dirty dog no matter how well he performs. */
+    perfSpan: 9.40,
+
+    /* GROOMING, as a SIGNED delta. Thresholds mirror BALANCE.inspect
+       (cleanliness and gloss) so the word the judge says and the mark he gives
+       are the same fact. */
+    groom: {
+      coat: [[0.90, 0.60], [0.70, 0.30], [0.45, 0.00], [0.20, -0.55], [0, -1.10]],
+      gloss: [[0.86, 0.15], [0.62, 0.08], [0.34, 0.00], [0, -0.10]],
+    },
+
+    /* POISE: the per-DOG jitter, +/- this at aptitude 1 / 0. Small enough that
+       it can never decide a class, big enough that two dogs feel like two
+       dogs. NOT a breed term — see BALANCE.train.obey.perAptitude. */
+    poise: 0.12,
+
+    /* ---- HER PART IN IT ---------------------------------------------
+       She may NOT pet him through a trial — in the original that was the
+       point, it was the true test of whether the training had worked. What is
+       forbidden is TOUCHING HIM; giving the cue is not (SCOPE.md stage 5:
+       "What's forbidden during a trial is petting him through it, not
+       tapping"). So the judge names the trick, and she may back him up with
+       the signal she taught — by hand OR by voice, at exactly equal status.
+
+       Assisting is ALWAYS OPTIONAL AND ALWAYS POSITIVE. There is no penalty
+       for standing still and letting him answer the judge on his own, because
+       a hands-off trial has to be winnable; and a signal he does not know just
+       gets a look, never a deduction. */
+    assist: {
+      /* the window is `beats.call` — the length of the beat the judge's call
+         hangs on screen for. One number, so the thing she can see and the
+         thing she has time to do are the same thing by construction. */
+      reliability: 0.14,      // added to p(obey) for that round
+      speed: 0.16,            // seconds shaved off the latency roll
+      /* WHERE A CUE MAY BE DRAWN. Generous on purpose: HIM is excluded by a
+         real per-zone hit test (dog/contest.js uses `pet.hitZone`, the same
+         test the petting field uses), so the pad does not have to keep its
+         distance from him and can simply be "most of the screen". The first
+         pass tried to keep clear with a box and overlapped the training
+         layer's `halo`, which swallowed every cue as a touch on the dog. */
+      pad: { top: 108, bottom: 470 },
+      /* the "say it" bubble, only drawn when voice is opted in. Sits opposite
+         the cue pad's centre so hand and voice are visibly the same offer. */
+      button: { x: 44, y: 430, r: 21 },
+    },
+
+    /* ---- PACING (seconds) ------------------------------------------- */
+    beats: {
+      fade: 0.42,             // the ring wash blending in and out
+      intro: 2.30,            // the judge's board arrives
+      /* THE CALL BEAT **IS** THE ASSIST WINDOW. The judge names the trick and
+         it hangs there for this long; a cue given inside it steadies him.
+         Long enough to be a real chance, short enough to be a real beat. */
+      call: 1.15,
+      settle: 0.85,           // the round's mark, shown before moving on
+      gap: 0.70,              // between rounds
+      /* the free window: how long she has to pick before the judge nods him on
+         and he simply does his best thing. Never a fail state. */
+      choose: 6.5,
+      tally: 1.70,            // the final score counting up
+      maxRound: 9.0,          // watchdog: no round may hang the trial
+    },
+
+    /* ---- WHAT A TRIAL COSTS HIM: DELIBERATELY NOTHING ----------------
+       Every other activity in the game charges needs — a walk costs energy,
+       hunger and thirst; play costs energy. A trial charges NONE, and that is
+       a decision rather than an omission: the entry gate already requires a
+       fed and watered dog, so charging thirst for entering would mean the
+       second trial of the day is gated by the first. That is a punishment
+       loop, and punishing is off-brief (SCOPE principle 5). He gets a mood
+       lift instead, and he gets it whatever the score. */
+    mood: { win: 0.40, place: 0.28, ran: 0.20 },
+
+    /* HOW FAST THE RING HOLDS HIS MOOD UP, per second. It can only ever return
+       him to the mood she brought him in with, never exceed it — so this is a
+       ceiling on the RATE, not a mood gift. Comfortably above the decay rate
+       at any realistic baseline (0.085 * the gap), so the floor actually holds.
+       See dog/contest.js `holdMood` for the measurement that made this
+       necessary: without it a Championship programme ran his mood from 0.95
+       down to 0.25 and the last round was a different game from the first. */
+    ringLift: 0.30,
+
+    /* ---- THE RING (scene art constants; §11 G) ----------------------- */
+    ring: {
+      dim: 0.26, chill: 0.16,        // the cool wash over the empty room
+      /* the spotlight is drawn UNDER the dog and over the room, so the room
+         dims and he does not — which is what a spotlight actually is */
+      spot: { at: [186, 660], r: 268, alpha: 0.30 },
+      mat: { at: [192, 708], r: [168, 70] },
+      /* THE JUDGE'S BOARD, measured DOWN FROM THE SAFE-AREA TOP EDGE.
+         `boardTop` clears the back button (y 62, r 20 -> ends at 82) rather
+         than merely happening to miss it. */
+      boardTop: 62, boardW: 300, boardH: 96, boardR: 18,
+      /* the running score, also from the safe top edge */
+      scoreTop: 176,
+      /* the leave-the-ring button, the same place as the map's back button so
+         "get me out of here" is in one place in the whole game */
+      back: { x: 40, y: 62, r: 20 },
+      /* the free-performance chips: HER choice, and the only real decision in
+         a trial. Sat low, where the nav would be if it were not hidden. */
+      chip: { y: 762, w: 84, h: 44, gap: 7, r: 14, max: 4 },
+      /* the result card */
+      card: { y: 366, w: 306, h: 246, r: 22 },
+      /* THE ENTRY PANEL. Centred at 330 so it sits over the wall, the window
+         and the shelf and stops CLEAR OF HIS HEAD (the rig's crown is around
+         y 480) — placed by looking: at 386 it covered his face, which is the
+         one thing a screen about entering him into a contest should not do. */
+      panel: { y: 330, w: 306, h: 254, r: 22 },
+      /* the button lives INSIDE the panel, `inset` up from its bottom edge.
+         Derived rather than given an absolute y, because the first pass gave
+         it one (686) and it ended up floating over the dog's paws with its
+         label unreadable against his coat. One source of truth: the layer
+         computes the same expression for the draw and for the hit test. */
+      enter: { inset: 36, w: 224, h: 46, r: 23 },
+    },
+
+    /* the other competitors. Names only — no dogs are simulated, no rig is
+       built for them, and none of them is ever drawn. */
+    rivals: ['Biscuit', 'Otto', 'Marlow', 'Juno', 'Pepper', 'Wren', 'Alfie', 'Sable'],
+  },
+
+  /* ---- THE ECONOMY: TWO CURRENCIES, AND THE SEPARATION IS VERBATIM ----
+     Research §7 calls this the strongest structural idea in the original, and
+     it costs nothing to reproduce:
+
+       COINS        contest placings, selling walk finds
+                    -> toys, treats, care tools, collars, decor
+       CARE POINTS  caring WELL — feeding, washing, brushing, walking,
+                    training, turning up
+                    -> nothing directly. They UNLOCK breeds, decor, shop stock.
+
+     MONEY IS SKILL AND LUCK; POINTS ARE ATTENTIVENESS. She cannot buy her way
+     to the Cockapoo and she cannot grind contests for a new rug. There is
+     deliberately NO exchange rate, NO `spendCarePoints`, and NO code path
+     anywhere that reads `coins` when deciding an unlock — see state/game.js,
+     where the two live in different mutators that never call each other.
+
+     COMPRESSED HARD. The original's top breed sat at 50,000 trainer points
+     against a 200/day cap — a months-long grind built to retain a 2005
+     handheld player. An attentive day here earns ~200 points (see below), so
+     the whole ladder is DAYS:
+        90  -> day 1     220 -> day 2     400 -> day 2-3 (the Cockapoo)
+       700  -> day 4-5  1100 -> day 6-7
+     ------------------------------------------------------------------- */
+  economy: {
+    /* what she starts with. Research §7 is emphatic that the original's
+       "enough for one dog plus a little" is why the early game has stakes —
+       but the first puppy here is a GIFT, not a purchase, so this is just
+       pocket money and the first real coins come from a walk or a placing. */
+    startCoins: 40,
+
+    /* ---- CARE POINTS: what caring well is worth --------------------
+       Paid through the SAME daily ledger the bond uses (state/game.js
+       `awardCare`), so the shapes agree: distinct days beat long sessions,
+       and no amount of drilling in one sitting outruns the cap. */
+    care: {
+      showUp: 20,             // turning up at all on a new day
+      reunion: 15,            // ...after a long absence, on top
+      feed: 25, water: 20, wash: 45, brush: 35,   // once each per day
+      petSession: 15,         // a real petting session, once a day
+      toy: 6,                 // per fetched toy (repeatable)
+      walk: 30,               // per completed walk (repeatable)
+      trick: 8,               // per rewarded training rep (repeatable)
+      /* A CONTEST PAYS **ZERO** CARE POINTS. That is the separation, in a
+         number. Placing is skill; points are attentiveness. */
+      contest: 0,
+      /* a day's ceiling. An attentive day reaches ~205 and a devoted one is
+         capped here — high enough that nobody hits it in four minutes, which
+         research §7 names as the exact way to teach someone to stop playing. */
+      dayCap: 240,
+    },
+
+    /* ---- WHAT CARE POINTS UNLOCK -----------------------------------
+       Read ONLY against `player.carePoints`. Stage 6 builds the shop and the
+       kennel on top of this table; `kind` tells it which surface owns each
+       row. `at` is the lifetime total, and unlocks are permanent.
+
+       THE COCKAPOO IS THE SAVING-UP REWARD (SCOPE stage 6) and it is a CARE
+       unlock, not a purchase. It sits at 400 — reachable on day 2 or 3 by
+       someone who looks after him, and unreachable by someone with a fortune
+       in coins, which is the entire point. */
+    unlocks: [
+      { id: 'collarRed', kind: 'decor', at: 90, name: 'A red collar' },
+      { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug' },
+      { id: 'cockapoo', kind: 'breed', at: 400, name: 'The Cockapoo' },
+      { id: 'bedBasket', kind: 'decor', at: 700, name: 'A basket bed' },
+      { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats' },
+      { id: 'roomSeaside', kind: 'room', at: 1600, name: 'The seaside room' },
+    ],
+    /* the word-scale for how well she is looking after him. WORDS, NEVER A
+       BAR — care points are a number she can see (they are a currency), but
+       what they SAY about her is a word. */
+    careWords: [[1600, 'devoted'], [700, 'attentive'], [220, 'settled in'], [0, 'getting to know each other']],
   },
 
   /* ---- the reunion ----------------------------------------------------
@@ -1040,6 +1388,17 @@ export const BALANCE = {
     leash:    [120, 14],    // the dangled leash settling
     homeIn:   [44, 11],     // how far up the road he still is, 1 -> 0
     carry:    [130, 13],    // the found thing, in his mouth and then dropped
+    /* ---- stage 5: the ring ----
+       Chrome, not anatomy, so these are stiffer and better damped than
+       anything on the dog: a judge's board that overshoots reads as a UI
+       element showing off. `mark` is the one exception — the pip that pops
+       when a round is scored is allowed a little bounce, because it is the
+       only feedback that round gets. */
+    ringW:    [38, 12],     // the ring wash blending in and out
+    board:    [110, 15],    // the judge's board arriving
+    card:     [96, 14],     // the result card
+    chip:     [120, 15],    // the free-window chips rising
+    mark:     [150, 11],    // the round's pip landing
   },
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },
 
@@ -1202,8 +1561,16 @@ export const BALANCE = {
   /* ---- ui ------------------------------------------------------------ */
   ui: {
     meter: { w: 82, h: 30, pad: 14, pulseDecay: 2.6, pulsePerUnit: 0.004 },
-    toast: { dur: 1.9, fade: 0.32, y: 118, maxStack: 3 },
-    nav: { h: 58, gap: 6, pad: 12, r: 15, iconR: 11 },
+    /* ROUTED THROUGH ui/text.js IN STAGE 5 — it was the lowest-contrast text
+       left in the game, which stage 4's notes had already flagged. `size`,
+       `padX`/`padY` and `step` are the pill's geometry; the plate's ALPHA is
+       not here any more because it is no longer a number anyone chooses — the
+       helper solves it against the worst possible background. */
+    toast: { dur: 1.9, fade: 0.32, y: 118, maxStack: 3, size: 13.5, padX: 15, padY: 7, step: 34 },
+    /* STAGE 5 added a SEVENTH pill (the ring), which cuts each one to about
+       47 virtual units. `label` is here rather than hardcoded because
+       ui/text.js shrinks to fit from it, so it is now a real tunable. */
+    nav: { h: 58, gap: 6, pad: 12, r: 15, iconR: 11, label: 9.5 },
     handGlow: { r: 52, rPet: 16, alpha: 0.30 },
     hintAt: [0.30, 0.80],
     /* WORDS, NEVER BARS. The status line names the need and its word-state;

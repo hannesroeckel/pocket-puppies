@@ -25,6 +25,7 @@ import { createReunion } from '../dog/reunion.js';
 import { createTraining } from '../dog/train.js';
 import { createVoice } from '../dog/voice.js';
 import { createWalk } from '../dog/walk.js';
+import { createContest } from '../dog/contest.js';
 import { capitalise } from '../state/game.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
@@ -275,7 +276,7 @@ export function createRoomScene() {
   let app = null;
   let rig = null, dog = null, idle = null, pet = null;
   let care = null, toy = null, reunion = null, naming = null;
-  let train = null, voice = null, walk = null;
+  let train = null, voice = null, walk = null, contest = null;
   let hud = null, nav = null, toasts = null, sheet = null;
   let roomCv = null, ovCv = null;
   const rng = createRng(BALANCE.rng.seed).fork(3);
@@ -564,6 +565,7 @@ export function createRoomScene() {
     if (n.id === 'settings') { openSettings(); return; }
     if (n.id === 'train') { startTrain(); return; }
     if (n.id === 'walk') { startWalk(); return; }
+    if (n.id === 'ring') { startContest(); return; }
     if (n.id === 'play') {
       /* Play is not a scene: the ball is in the room. Point at it and get out
          of the way — flicking it up-screen is the whole interface. */
@@ -608,6 +610,13 @@ export function createRoomScene() {
   function surfaceOwner() {
     if (naming && naming.active) return 'naming';
     if (reunion && reunion.active) return 'reunion';
+    /* STAGE 5: the ring is a full surface, and it is in this list rather than
+       behind a private `if` in `startContest` — which is the whole point of
+       the arbiter existing (ARCHITECTURE §14.1). Being here is what makes the
+       guard work in the OTHER direction too: naming, the walk, care and
+       training all consult `surfaceBlockedFor`, so none of them can open over
+       a trial without a single line being added to any of them. */
+    if (contest && contest.modal) return 'contest';
     if (walk && walk.modal) return 'walk';
     if (walk && walk.away) return 'away';
     return '';
@@ -622,6 +631,26 @@ export function createRoomScene() {
     const owner = surfaceOwner();
     if (!owner || owner === who) return '';
     return owner;
+  }
+
+  /**
+   * The one line said when a layer is refused because something else owns the
+   * screen. There is exactly one of these so every refusal sounds the same,
+   * and it is DELIBERATELY SILENT during naming and the greeting: a toast over
+   * the one moment that must have no chrome at all is worse than saying
+   * nothing, and stage 4 established that precedent in `startWalk`.
+   */
+  function blockedToast(owner) {
+    if (!owner || owner === 'naming' || owner === 'reunion') return;
+    if (owner === 'walk' || owner === 'away') {
+      toasts.show(walk.COPY.awayBusy(app.game.pron));
+      return;
+    }
+    if (owner === 'contest') {
+      toasts.show(contest.COPY.ringBusy(app.game.pron));
+      return;
+    }
+    toasts.show('One thing at a time');
   }
 
   /**
@@ -646,8 +675,12 @@ export function createRoomScene() {
 
   /** start a care action, closing anything that would fight it */
   function startCare(kind) {
-    if (naming && naming.active) return false;
-    if (walk && walk.busy) { toasts.show(walk.COPY.awayBusy(app.game.pron)); return false; }
+    /* THROUGH THE ARBITER, not a private `if`. Stage 4 only routed the walk
+       and the naming beat through it and left care and training with their own
+       hand-rolled guards — which is why neither of them knew about the ring
+       until this line existed. */
+    const blocked = surfaceBlockedFor('care');
+    if (blocked) { blockedToast(blocked); return false; }
     if (toy && toy.busy) {
       const P = app.game.pron;
       toasts.show(`${capitalise(P.they)} ${P.is} busy with the ball`);
@@ -663,9 +696,11 @@ export function createRoomScene() {
   /** enter training mode, closing anything that would fight it */
   function startTrain() {
     if (!train) return false;
-    if (naming && naming.active) return false;
-    if (walk && walk.busy) { toasts.show(walk.COPY.awayBusy(app.game.pron)); return false; }
+    /* the toggle-off comes FIRST: pressing Train while training is closing it,
+       not asking permission to open it */
     if (train.modal) { train.stop(); return false; }
+    const blocked = surfaceBlockedFor('train');
+    if (blocked) { blockedToast(blocked); return false; }
     if (toy && toy.busy) {
       const P = app.game.pron;
       toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
@@ -690,10 +725,10 @@ export function createRoomScene() {
        the whole surface; starting the leash beat underneath either of them
        stacks two modal states. Silent rather than toasted: during first-run
        naming a toast would be chrome over the one moment that must have none. */
-    const blocked = surfaceBlockedFor('walk');
-    if (blocked === 'naming' || blocked === 'reunion') return false;
     if (walk.away) return false;                 // the away panel owns this
     if (walk.beat === 'prep' || walk.beat === 'map') { walk.stop(); return false; }
+    const blocked = surfaceBlockedFor('walk');
+    if (blocked) { blockedToast(blocked); return false; }
     if (toy && toy.busy) {
       const P = app.game.pron;
       toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
@@ -703,6 +738,30 @@ export function createRoomScene() {
     if (train.modal) train.stop();
     pet.cancel();
     return walk.start();
+  }
+
+  /* ---- CONTESTS (stage 5) ----------------------------------------------
+     The Obedience Trial is IN THE ROOM for the same reason care, training and
+     the walk are: it is him, on this rig, in this room, and research §6.3
+     calls a near-frontal camera a "perfect fit" for a dog performing at a
+     judge. The room is DRESSED as a ring rather than replaced by one, so the
+     rig, the baked canvas and the petting field all survive.
+     `scenes/contest.js` is therefore not built — see ARCHITECTURE §15. */
+  function startContest() {
+    if (!contest) return false;
+    /* the toggle-off first, as with training */
+    if (contest.modal) { contest.stop(true); return false; }
+    const blocked = surfaceBlockedFor('contest');
+    if (blocked) { blockedToast(blocked); return false; }
+    if (toy && toy.busy) {
+      const P = app.game.pron;
+      toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
+      return false;
+    }
+    if (care.modal) care.stop();
+    if (train.modal) train.stop();
+    pet.cancel();
+    return contest.start();
   }
 
   /** the reunion, in one place, because the walk's return can also trigger it */
@@ -929,7 +988,14 @@ export function createRoomScene() {
          arrives as one more signal if it happens to be working. Nothing is
          ever listening on its own — one press, one utterance (dog/voice.js). */
       voice = createVoice({
-        onHeard: (text) => { if (train) train.heard(text); },
+        /* A HEARD WORD BELONGS TO WHOEVER OWNS THE SCREEN. In the ring it is a
+           steadying cue for the trick the judge just called; handing it to
+           `train.heard` there would try to teach or to ask and would start a
+           second performance on top of the judged one. */
+        onHeard: (text) => {
+          if (contest && contest.owns) { contest.heard(text); return; }
+          if (train) train.heard(text);
+        },
         onState: () => {
           /* only ever surfaced where she went looking for it */
           if (sheetKind === 'settings' && sheet.isOpen) openSettings();
@@ -962,6 +1028,26 @@ export function createRoomScene() {
          Playing both at once would have them fight for the same body. */
       walk.onHome(({ after }) => { if (after > 0) playReunion(after, (app.elapsed || {}).hours || 8); });
 
+      /* ---- CONTESTS (stage 5) ---------------------------------------
+         The trial drives dog/train.js rather than the rig: it asks BY ID with
+         `judged:true`, subscribes to `onPerform`, and scores what comes back.
+         It is handed `voice` so a spoken cue can steady him — an extra at
+         exactly equal status with the hand, and never a requirement. */
+      contest = createContest(rig, {
+        game: app.game, pet, idle, train, voice, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        /* A SHUT GATE HANDS HER THE FIX. The trial says what is wanted; the
+           room is the only thing allowed to take the surface, so the routing
+           lives here. The layer has already released the surface by now. */
+        onNeed: (reason) => {
+          if (reason === 'hunger') startCare('feed');
+          else if (reason === 'thirst') startCare('water');
+          else if (reason === 'untrained') startTrain();
+        },
+      });
+
       naming = createNaming({
         game: app.game, reduced: app.reduced,
         onName: (name) => {
@@ -988,6 +1074,10 @@ export function createRoomScene() {
         { id: 'walk', label: 'Walk', available: true },
         { id: 'train', label: 'Train', available: true },
         { id: 'play', label: 'Play', available: true },
+        /* the ring. A short label on purpose: seven pills across 390 virtual
+           units leaves 47 each, and ui/nav.js draws its labels at a fixed
+           size rather than shrinking them. */
+        { id: 'ring', label: 'Ring', available: true },
         { id: 'shop', label: 'Shop', available: app.nav.has('shop') },
         { id: 'settings', label: 'More', icon: 'settings', available: true },
       ], { safeBottom: app.view.safe.bottom / app.view.vs });
@@ -1045,6 +1135,8 @@ export function createRoomScene() {
       /* `walk.stop()` tears the LAYER down and deliberately leaves an active
          walk alone — he is still out, and the save says so. */
       if (walk) walk.stop();
+      /* an abandoned trial costs nothing and banks nothing (state/contest.js) */
+      if (contest) contest.stop(true);
       /* the microphone must never outlive the scene that asked for it: a live
          mic indicator on a puppy game would be alarming, and correctly so */
       if (voice) voice.abort();
@@ -1080,6 +1172,7 @@ export function createRoomScene() {
       toy.update(dt, game.mood);
       train.update(dt, game.mood);
       walk.update(dt, game.mood);
+      contest.update(dt, game.mood);
 
       /* --- the pose pipeline, in order ---
          base -> idle -> pet -> care -> train -> toy -> reunion -> resolve
@@ -1108,9 +1201,12 @@ export function createRoomScene() {
       /* the walk shares the care/train slot: prepare and return own the body
          the way a care action does, and the three are mutually exclusive */
       walk.apply(dt, mood);
+      /* ...and so does the trial, which writes almost nothing: the point of a
+         trial is that dog/train.js is doing the work */
+      contest.apply(dt, mood);
       /* `toy.apply` rewrites rig.x/y/s back to home every idle frame, which
          would fight the return's arrival exactly as it fights the spin */
-      if (!reunion.active && !train.busy && !walk.busy) toy.apply(dt, mood);
+      if (!reunion.active && !train.busy && !walk.busy && !contest.busy) toy.apply(dt, mood);
       reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
@@ -1133,7 +1229,8 @@ export function createRoomScene() {
       else if (!walk.away && hintBeforeWalk && !hud.hint) { hud.setHint(hintBeforeWalk); hintBeforeWalk = ''; }
       hud.update(dt);
       /* chrome gets out of the way for the beats that need the whole screen */
-      hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active && !walk.modal;
+      hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active
+        && !walk.modal && !contest.modal;
     },
 
     draw(a, g) {
@@ -1163,6 +1260,9 @@ export function createRoomScene() {
 
       /* the empty-room wash and today's treasures on the rug */
       walk.drawBack(g);
+      /* THE RING WASH GOES UNDER HIM. That is what makes the spotlight a
+         spotlight: the room dims, and the dog drawn after it does not. */
+      contest.drawBack(g);
 
       /* The resting bowls, hidden while a care action has picked one up. Both
          sit clear of the dog's silhouette — a bowl tucked behind her body is a
@@ -1209,11 +1309,14 @@ export function createRoomScene() {
       care.drawOver(g);
       train.drawOver(g);
       hud.draw(g, view);
-      if (!naming.active && !care.modal && !train.modal && !reunion.active && !walk.modal) nav.draw(g);
+      if (!naming.active && !care.modal && !train.modal && !reunion.active
+        && !walk.modal && !contest.modal) nav.draw(g);
       toasts.draw(g, nav.y - 22);
       /* the map is a full-surface overlay, so it goes over the nav — and the
          absence panel and the find card go over everything but the sheet */
       walk.drawOver(g);
+      /* the judge's board, the chips and the result card, likewise */
+      contest.drawOver(g);
       sheet.draw(g);
       naming.draw(g, view);
     },
@@ -1233,7 +1336,16 @@ export function createRoomScene() {
           if (row) sheetAction(row.id);
           return;
         }
-        /* THE WALK FIRST while it owns the surface: the leash beat, the map and
+        /* THE RING FIRST, and it consumes EVERYTHING while it owns the
+           surface — including touches on him. Letting one fall through to the
+           petting field would be petting him through a trial, which is the one
+           thing a trial forbids (SCOPE stage 5). */
+        if (contest.owns) {
+          contest.pointer(ev, local());
+          capture = 'contest';
+          return;
+        }
+        /* THE WALK NEXT while it owns the surface: the leash beat, the map and
            the return each own the whole screen for a few seconds. */
         if (walk.owns) {
           if (walk.pointer(ev, local())) { capture = 'walk'; return; }
@@ -1279,7 +1391,8 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'move') {
-        if (capture === 'walk') { walk.pointer(ev, local()); return; }
+        if (capture === 'contest') { contest.pointer(ev, local()); return; }
+      if (capture === 'walk') { walk.pointer(ev, local()); return; }
         if (capture === 'toy') { toy.pointer(ev, local()); return; }
         if (capture === 'care') { care.pointer(ev, local()); return; }
         if (capture === 'train') { train.pointer(ev, local()); return; }
@@ -1294,7 +1407,8 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'up') {
-        if (capture === 'walk') { walk.pointer(ev, local()); capture = ''; return; }
+        if (capture === 'contest') { contest.pointer(ev, local()); capture = ''; return; }
+      if (capture === 'walk') { walk.pointer(ev, local()); capture = ''; return; }
         if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
         if (capture === 'care') { care.pointer(ev, local()); capture = ''; return; }
         if (capture === 'train') { train.pointer(ev, local()); capture = ''; return; }
@@ -1316,7 +1430,8 @@ export function createRoomScene() {
 
       if (ev.type === 'cancel') {
         nav.pressed = ''; pressedNav = null;
-        if (capture === 'walk') walk.pointer(ev, local());
+        if (capture === 'contest') contest.pointer(ev, local());
+        else if (capture === 'walk') walk.pointer(ev, local());
         else if (capture === 'toy') toy.pointer(ev, local());
         else if (capture === 'care') care.pointer(ev, local());
         else if (capture === 'train') train.pointer(ev, local());
@@ -1354,6 +1469,7 @@ export function createRoomScene() {
         toyState: toy.debug,
         train: train.debug,
         walk: walk.debug,
+        contest: contest.debug,
         reunion: reunion.debug,
         naming: naming.debug,
         /* who owns the whole screen. Two modal layers stacked is a defect that
@@ -1406,6 +1522,7 @@ export function createRoomScene() {
     get train() { return train; },
     get voice() { return voice; },
     get walk() { return walk; },
+    get contest() { return contest; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     startCare(kind) { return startCare(kind); },
     stopCare() { care.stop(); },
@@ -1416,6 +1533,8 @@ export function createRoomScene() {
     openNaming(mode) { return openNaming(mode); },
     surfaceOwner() { return surfaceOwner(); },
     stopWalk() { if (walk) walk.stop(); },
+    startContest() { return startContest(); },
+    stopContest() { if (contest) contest.stop(true); },
     playReunion(intensity, hours) {
       if (naming.active) naming.skip();
       return reunion.start(intensity, hours);

@@ -25,16 +25,22 @@
    ========================================================================== */
 import BALANCE from './balance.js';
 import { clamp } from '../engine/draw.js';
-import { getBreed } from '../dog/breeds.js';
+/* NOTE: `dog/breeds.js` is deliberately NOT imported here any more. It was
+   imported for exactly one thing — rolling `aptitude` from the breed — and
+   SCOPE.md stage 5 forbids that term. The state layer now has no knowledge of
+   breeds beyond storing an id, which is the correct shape for a game where
+   breed is cosmetic. (state/save.js still imports it, once, to UNDO the term
+   in an old save; see MIGRATIONS[5].) */
 import { rng as sharedRng } from '../engine/rng.js';
 import { dayIndex } from './time.js';
+import { contestState, classAt, isTop, champStanding } from './contest.js';
 import {
   walkState, startWalk as startWalkModel, walkProgress as walkProgressModel,
   endWalk as endWalkModel, cancelWalk as cancelWalkModel, rollFinds,
   collected as collectedFinds, FIND_BY_ID,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -48,7 +54,6 @@ export function newDog(now, opts = {}) {
   const {
     breedId = G.breedId, name = '', sex = G.sex, rng = sharedRng,
   } = opts;
-  const breed = getBreed(breedId);
   const jitter = () => clamp(rng.range(-0.12, 0.12), -0.12, 0.12);
   return {
     id: 'dog-' + now.toString(36),
@@ -69,10 +74,27 @@ export function newDog(now, opts = {}) {
     /* voice prototypes per cue slot: {dur, loud, pitch, n}. Opt-in extra;
        an empty map is the normal, complete, tap-only game. */
     cueVoice: {},
+    /* ---- BREED IS COSMETIC. THIS OVERRIDES ARCHITECTURE §4. --------------
+       §4 said aptitude is "rolled at adopt from breed + jitter". SCOPE.md
+       stage 5 drops the breed term outright, and the reason is specific
+       rather than aesthetic: the gift puppy is a Schnoodle and the Cockapoo is
+       the saving-up reward, so if either turned out to be a mechanically worse
+       obedience dog the game would have told her that her favourite dog is the
+       wrong dog. Unacceptable.
+
+       PER-DOG JITTER IS KEPT, and is good: it is what makes an individual feel
+       like an individual, and it is worth at most +/-0.12 of a 0.10-weighted
+       term in the obedience roll (BALANCE.train.obey.perAptitude) and +/-0.12
+       of ten points in a trial score (BALANCE.contest.poise). It can flavour a
+       dog; it can never decide a class.
+
+       `BREEDS[x].aptitude` still exists — it is part of the §11.3 breed-seam
+       schema and MIGRATIONS[5] needs it to UNDO the term an old save was
+       created with — but nothing reads it to create a dog any more. */
     aptitude: {
-      disc: clamp(breed.aptitude.disc + jitter(), 0, 1),
-      agility: clamp(breed.aptitude.agility + jitter(), 0, 1),
-      obedience: clamp(breed.aptitude.obedience + jitter(), 0, 1),
+      disc: clamp(0.5 + jitter(), 0, 1),
+      agility: clamp(0.5 + jitter(), 0, 1),
+      obedience: clamp(0.5 + jitter(), 0, 1),
     },
     wear: { collar: null, accessory: null },
     log: [],
@@ -112,7 +134,19 @@ export function newState(now = Date.now(), opts = {}) {
     v: SCHEMA_VERSION,
     createdAt: now,
     lastSeenAt: now,
-    player: { coins: 0, trainerPoints: 0 },
+    /* ---- TWO CURRENCIES, AND THEY NEVER MEET (SCOPE stage 5) ------------
+       `coins` are skill and luck: contest placings and selling walk finds.
+       `carePoints` are attentiveness: they are earned ONLY by looking after
+       him, they buy nothing, and they are the only thing that unlocks a breed
+       or a piece of decor. There is no exchange rate and no mutator below
+       converts one into the other — see `spendCoins` and `awardCare`.
+       `careDay` is the daily ledger the points are paid through, so a marathon
+       cannot substitute for coming back tomorrow (the same shape as `bond`). */
+    player: {
+      coins: BALANCE.economy.startCoins,
+      carePoints: 0,
+      careDay: { day: dayIndex(now), earned: 0, once: {} },
+    },
     dogs: [dog],
     activeDogId: dog.id,
     /* `activeToy` is which of the fetch toys is currently on the rug. Stage 4's
@@ -120,10 +154,18 @@ export function newState(now = Date.now(), opts = {}) {
        genuinely becomes the thing he fetches. */
     inventory: { food: {}, care: {}, toys: ['ball'], activeToy: 'ball', accessories: [] },
     unlocks: { breeds: [dog.breedId], items: [], rooms: ['room'] },
+    /* ---- CONTESTS -------------------------------------------------------
+       AGILITY IS CUT (SCOPE stage 5) and its key is gone with it — its
+       top-down route map IS the mechanic and it fights this rig hardest. Disc
+       keeps a stub because it is reframed as catch-and-leap and may still
+       ship. `obedience` is the real one; `state/contest.js contestState()`
+       repairs and day-rolls it on every read, exactly as `walkState` does. */
     contests: {
       disc: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
-      agility: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
-      obedience: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
+      obedience: {
+        classIdx: 0, day: dayIndex(now), entriesToday: 0, entries: 0,
+        wins: 0, best: 0, lastEntryAt: 0, champScores: [], won: false,
+      },
     },
     /* `active` is the walk he is on RIGHT NOW, and it is the whole reason a
        walk survives the app being killed: it stores when he left and how long
@@ -226,6 +268,18 @@ export function sanitiseDog(d) {
   }
   if (!Array.isArray(d.log)) d.log = [];
   return d;
+}
+
+/**
+ * Map a bond-ledger `awardDay` kind onto a care-points kind. Kept as one
+ * table so the two ledgers can never disagree about what an act of care is.
+ * Anything not in the economy table pays nothing, which is how `contest` is
+ * worth zero care points without needing a special case.
+ */
+function careKindFor(kind) {
+  if (kind.indexOf('care:') === 0) return kind.slice(5);
+  if (kind.indexOf('trick:') === 0 || kind.indexOf('learn:') === 0) return 'trick';
+  return kind;
 }
 
 /* ---- the game api ---------------------------------------------------- */
@@ -436,6 +490,15 @@ export function createGame(state, opts = {}) {
          number — the one mutator in this file that could take the frame down
          rather than merely corrupt something */
       if (typeof kind !== 'string' || !kind) return 0;
+      /* ---- CARE POINTS RIDE ALONG HERE, AND ONLY HERE ------------------
+         `awardDay` already IS the attentiveness ledger — one call site set,
+         already day-boundaried, already correct — so paying care points from
+         anywhere else would be two ledgers that could drift. They are paid
+         BEFORE the affection logic and through their OWN cap, because the two
+         caps are different sizes and care points must not stop the moment the
+         bond has had its fill for the day. Nothing else in the game calls
+         `awardCare`, and a contest calls neither. */
+      api.awardCare(careKindFor(kind), now);
       const b = ledger(now);
       const D = A.day;
       let amount = 0;
@@ -450,6 +513,11 @@ export function createGame(state, opts = {}) {
          home safe is worth more than a fetched ball and less than a whole care
          action. Repeatable (three a day is normal) and still day-capped. */
       else if (kind === 'walk') { amount = D.walkBonus; once = false; }
+      /* A TRIAL IS A BONDING MOMENT AT ANY SCORE. Paid identically on a last
+         place and on a win, because the thing that bonded them was doing it
+         together, not the number. This is the ONLY ledger a contest touches:
+         `careKindFor('contest')` resolves to a care-points value of zero. */
+      else if (kind === 'contest') { amount = D.contestBonus; once = false; }
       /* TRAINING PAYS THROUGH THE SAME DAILY LEDGER as everything else, so an
          afternoon of drilling cannot outrun the day cap (stage 2's §12.1). */
       else if (kind && kind.indexOf('trick:') === 0) { amount = D.trickBonus; once = false; }
@@ -475,6 +543,10 @@ export function createGame(state, opts = {}) {
       b.sessionAt = Math.max(0, num(b.sessionAt, 0));
       if (b.sessionAt && (t - b.sessionAt) / 1000 > A.session.gapEndsSession) b.session = 0;
       b.sessionAt = t;
+      /* SITTING DOWN AND ACTUALLY TOUCHING HIM IS CARE. Once a day, like the
+         other care actions — it is turning up and paying attention, not a
+         per-stroke drip, so it cannot be farmed by tapping. */
+      api.awardCare('petSession', now);
     },
     /** what this session has earned so far (verification + debug) */
     get bondLedger() {
@@ -895,21 +967,260 @@ export function createGame(state, opts = {}) {
       return id;
     },
 
+    /* ==================================================================
+       THE ECONOMY — TWO CURRENCIES, AND THE SEPARATION IS THE DESIGN
+
+       COINS       skill and luck. Contest placings, selling walk finds.
+                   Spend on toys, treats, care tools, collars, decor.
+       CARE POINTS attentiveness. Earned ONLY by looking after him. They buy
+                   NOTHING. They are the only thing that unlocks a breed, a
+                   room or a piece of shop stock.
+
+       "Money is skill and luck; points are attentiveness. She cannot buy her
+       way to the Cockapoo, and she cannot grind contests for a new rug."
+       (SCOPE stage 5, research §7.)
+
+       THAT SEPARATION IS ENFORCED BY THERE BEING NO CODE TO BREAK IT:
+         - there is no `spendCarePoints`, and there must never be one;
+         - there is no exchange function in either direction;
+         - `spendCoins` touches `coins` and nothing else;
+         - `awardCare` touches `carePoints` and nothing else;
+         - `careUnlocks()` reads `carePoints` and NEVER reads `coins`.
+       A stage-6 shop that wants to sell an unlock is asking for the one thing
+       this stage exists to prevent. Sell OBJECTS for coins; gate CONTENT on
+       care points.
+       ================================================================== */
+    get coins() { return Math.max(0, Math.floor(num(state.player.coins, 0))); },
     addCoins(n) {
-      const cur = Math.max(0, num(state.player.coins, 0));
+      const cur = api.coins;
       state.player.coins = cur;
       if (!ok(n)) return cur;
       state.player.coins = Math.max(0, Math.floor(cur + (+n)));
       onChange();
       return state.player.coins;
     },
-    addTrainerPoints(n) {
-      const cur = Math.max(0, num(state.player.trainerPoints, 0));
-      state.player.trainerPoints = cur;
-      if (!ok(n)) return cur;
-      state.player.trainerPoints = Math.max(0, Math.floor(cur + (+n)));
+    /** can she afford this? A pure question — nothing is written. */
+    canAfford(n) {
+      const cost = Math.max(0, Math.floor(num(n, 0)));
+      return api.coins >= cost;
+    },
+    /**
+     * Spend coins. THE MUTATOR ARCHITECTURE §14.2 ASKED FOR.
+     *
+     * Refuses rather than clamps, for the same reason every other mutator in
+     * this file rejects instead of coercing: a purchase that silently went
+     * through at a different price, or took the balance to zero because the
+     * cost was NaN, is a bug the player pays for. A refusal is a no-op the
+     * caller can see.
+     *
+     * @param n a non-negative integer cost
+     * @returns {{ ok, coins, spent, short }} — `short` is how much she is
+     *   missing, so a shop can say "82 more" rather than "no"
+     */
+    spendCoins(n) {
+      const cur = api.coins;
+      state.player.coins = cur;
+      /* STRICTER THAN `ok()` ON PURPOSE, AND A GATE CAUGHT WHY. `ok()` coerces
+         before testing, so `+null` and `+''` are both a finite 0 — which meant
+         `spendCoins(null)` returned `{ok:true, spent:0}` and a shop with a
+         missing price handed the item over for free. Money is the one field
+         where a coercion is worse than a refusal, so this demands a real
+         number and rejects everything else outright. */
+      if (typeof n !== 'number' || !Number.isFinite(n)) {
+        return { ok: false, coins: cur, spent: 0, short: 0 };
+      }
+      const cost = Math.floor(n);
+      /* a NEGATIVE cost is not a refund. Refunds go through addCoins, where
+         they are visible; a negative spend is a caller bug and would be a
+         money printer. */
+      if (cost < 0) return { ok: false, coins: cur, spent: 0, short: 0 };
+      if (cost === 0) return { ok: true, coins: cur, spent: 0, short: 0 };
+      if (cost > cur) return { ok: false, coins: cur, spent: 0, short: cost - cur };
+      state.player.coins = cur - cost;
       onChange();
-      return state.player.trainerPoints;
+      return { ok: true, coins: state.player.coins, spent: cost, short: 0 };
+    },
+
+    /* ---- care points ------------------------------------------------- */
+    get carePoints() { return Math.max(0, Math.floor(num(state.player.carePoints, 0))); },
+    /** raw, unledgered — for migrations and tests only */
+    addCarePoints(n) {
+      const cur = api.carePoints;
+      state.player.carePoints = cur;
+      if (!ok(n)) return cur;
+      state.player.carePoints = Math.max(0, Math.floor(cur + (+n)));
+      onChange();
+      return state.player.carePoints;
+    },
+    /** the daily care ledger, repaired and day-rolled on every read */
+    careLedger(now) {
+      const p = state.player || (state.player = {});
+      if (!p.careDay || typeof p.careDay !== 'object') p.careDay = { day: -1, earned: 0, once: {} };
+      const L = p.careDay;
+      L.earned = Math.max(0, num(L.earned, 0));
+      if (!L.once || typeof L.once !== 'object') L.once = {};
+      const today = dayIndex(num(now, Date.now()));
+      /* the same NaN trap the bond ledger fell into: `NaN !== NaN`, so an
+         unguarded bad clock rolls the day over on EVERY call and uncaps the
+         cap the whole anti-grind design rests on */
+      if (Number.isFinite(today) && L.day !== today) {
+        L.day = today; L.earned = 0; L.once = {};
+        onChange();
+      }
+      if (!Number.isFinite(L.day)) L.day = Number.isFinite(today) ? today : 0;
+      return L;
+    },
+    /**
+     * Pay care points for an act of care, through the daily ledger.
+     *
+     * @param kind 'showUp' | 'reunion' | 'petSession' | 'toy' | 'walk' |
+     *             'trick' | 'contest' | 'care:feed|water|wash|brush'
+     *   `contest` is in the table AT ZERO, on purpose: a placing is skill, and
+     *   skill does not unlock content. Calling it is legal and pays nothing,
+     *   which is the separation stated as a number rather than as a comment.
+     * @returns the points actually paid
+     */
+    awardCare(kind, now) {
+      if (typeof kind !== 'string' || !kind) return 0;
+      const E = BALANCE.economy.care;
+      const L = api.careLedger(now);
+      const key = kind.indexOf('care:') === 0 ? kind.slice(5) : kind;
+      const amount = num(E[key], -1);
+      if (amount < 0) return 0;                       // not a kind we pay for
+      /* the once-a-day set: the four care actions, showing up, the greeting
+         and a petting session. Walks, toys and training reps are repeatable. */
+      const once = key === 'showUp' || key === 'reunion' || key === 'petSession'
+        || key === 'feed' || key === 'water' || key === 'wash' || key === 'brush';
+      if (once && L.once[key]) return 0;
+      const room = Math.max(0, E.dayCap - L.earned);
+      const paid = Math.min(amount, room);
+      if (paid <= 0) return 0;
+      L.earned += paid;
+      if (once) L.once[key] = 1;
+      api.addCarePoints(paid);
+      return paid;
+    },
+    /** what today has earned (verification + debug) */
+    get careToday() {
+      const L = api.careLedger();
+      return { day: L.day, earned: L.earned, cap: BALANCE.economy.care.dayCap, once: { ...L.once } };
+    },
+    /**
+     * What her care has unlocked, and what is next.
+     *
+     * READS `carePoints` AND NOTHING ELSE. There is deliberately no `coins`
+     * anywhere in this function — that is the demonstration that a fortune
+     * cannot buy the Cockapoo, and it is the thing a stage-6 kennel must not
+     * work around.
+     */
+    careUnlocks() {
+      const pts = api.carePoints;
+      const table = BALANCE.economy.unlocks;
+      const unlocked = table.filter((u) => pts >= u.at);
+      const next = table.find((u) => pts < u.at) || null;
+      return {
+        points: pts,
+        unlocked: unlocked.map((u) => ({ ...u })),
+        next: next ? { ...next, short: next.at - pts } : null,
+        word: api.describeCare(),
+      };
+    },
+    /** is this care-gated id unlocked? Coins can never make this true. */
+    isUnlocked(id) {
+      const u = BALANCE.economy.unlocks.find((x) => x.id === id);
+      if (!u) return false;
+      return api.carePoints >= u.at;
+    },
+    /** WORDS, NEVER A BAR — what her care says about her, not a score */
+    describeCare() {
+      const pts = api.carePoints;
+      for (const [at, word] of BALANCE.economy.careWords) if (pts >= at) return word;
+      return BALANCE.economy.careWords[BALANCE.economy.careWords.length - 1][1];
+    },
+
+    /** DEPRECATED alias kept for ARCHITECTURE §11.2's published surface. The
+        currency was renamed to `carePoints` in schema v5 because "trainer
+        points" describes the wrong thing: they are not earned by training. */
+    addTrainerPoints(n) { return api.addCarePoints(n); },
+
+    /* ==================================================================
+       CONTESTS — stage 5. The MODEL is state/contest.js (pure, testable);
+       these are the mutators, so nothing outside this file writes
+       `state.contests`. Coins are paid through `addCoins`, the bond through
+       `awardDay`, and CARE POINTS ARE NOT PAID AT ALL.
+       ================================================================== */
+    /** the repaired obedience record (day boundary checked on every read) */
+    get contest() { return contestState(state); },
+    /** the class he is in, as data */
+    contestClass() {
+      const r = contestState(state);
+      const c = classAt(r.classIdx);
+      return {
+        ...c, index: r.classIdx, top: isTop(r.classIdx),
+        entries: r.entries, wins: r.wins, best: r.best, won: !!r.won,
+        standing: champStanding(r.champScores),
+      };
+    },
+    /** entries left today. Past zero a trial is a PRACTICE ROUND, not a wall. */
+    get contestEntriesLeft() {
+      return Math.max(0, BALANCE.contest.perDay - contestState(state).entriesToday);
+    },
+    /**
+     * Bank a finished trial.
+     *
+     * @param o { score, placing, prize, practice, promoted, won }
+     * @returns what actually changed, for the result card and the harness
+     */
+    recordContest(o = {}, now) {
+      const r = contestState(state, num(now, Date.now()));
+      const score = clampNum(o.score, 0, 10, 0);
+      const placing = Math.max(1, Math.round(num(o.placing, 99)));
+      const practice = !!o.practice;
+      const before = r.classIdx;
+
+      r.lastEntryAt = num(now, Date.now());
+      if (score > r.best) r.best = score;
+
+      /* A PRACTICE ROUND CHANGES NOTHING BUT THE BEST SCORE. Past the daily
+         cap the ring is quiet, not closed: she still gets a whole trial and a
+         real number, it simply does not pay or promote. That is pacing; a
+         refusal would be a wall she hits and resents. */
+      if (practice) {
+        onChange();
+        return {
+          score, placing, practice: true, prize: 0, promoted: false,
+          classIdx: r.classIdx, wasClassIdx: before, won: false,
+        };
+      }
+
+      r.entries++;
+      r.entriesToday++;
+      if (placing === 1) r.wins++;
+
+      /* the Championship standing is measured over the last few TOP-CLASS
+         scores only — a Beginner 9.8 is not a Championship average */
+      let won = false;
+      if (isTop(before)) {
+        r.champScores.push(score);
+        while (r.champScores.length > BALANCE.contest.champion.holdWindow) r.champScores.shift();
+        if (o.won) { won = !r.won; r.won = true; }
+      }
+
+      /* PROMOTION ONLY. THERE IS NO DEMOTION AT ANY SCORE, EVER. */
+      let promoted = false;
+      if (o.promoted && !isTop(before)) { r.classIdx = before + 1; promoted = true; }
+
+      const prize = Math.max(0, Math.floor(num(o.prize, 0)));
+      if (prize > 0) api.addCoins(prize);
+      /* AND NOT ONE CARE POINT. See the block comment above `get coins`. */
+
+      api.log('contest', 'scored ' + score.toFixed(2) + ' in ' + classAt(before).name);
+      onChange();
+      return {
+        score, placing, practice: false, prize, promoted,
+        classIdx: r.classIdx, wasClassIdx: before, won,
+        standing: champStanding(r.champScores),
+      };
     },
 
     /* a non-string key would land on the object as "undefined" and then be

@@ -13,7 +13,13 @@
 import BALANCE from './balance.js';
 import { SCHEMA_VERSION, newState, DIRT_REGIONS, newTrick, trickLevelFromReps } from './game.js';
 import { FIND_BY_ID, walkState } from './walks.js';
+import { contestState } from './contest.js';
 import { dayIndex } from './time.js';
+/* The ONE remaining read of breed aptitude in the codebase, and it exists
+   purely to UNDO it: MIGRATIONS[5] has to know what breed term an old save's
+   roll was created with in order to subtract it back out. Nothing creates a
+   dog from this any more (SCOPE.md: "Breed is COSMETIC"). */
+import { getBreed } from '../dog/breeds.js';
 
 const KEY = BALANCE.save.key;
 
@@ -155,6 +161,81 @@ export const MIGRATIONS = {
     s.v = 4;
     return s;
   },
+
+  /* ---- v4 -> v5 : stage 5 (contests + economy) ------------------------
+     Three changes, and the first one is the interesting one.
+
+     1. THE BREED TERM IS STRIPPED OUT OF `aptitude`, RATHER THAN RE-ROLLED.
+        SCOPE.md stage 5 overrides ARCHITECTURE §4: aptitude may carry per-DOG
+        jitter but must carry no per-BREED bias, because the gift puppy is a
+        Schnoodle and the Cockapoo is the saving-up reward, and neither may be
+        the mechanically worse obedience dog.
+
+        An existing save's roll was `breed.aptitude[k] + jitter`. Re-rolling it
+        would throw away the individual — this dog's own small quirk, which is
+        the part that is WANTED. So the migration RE-CENTRES:
+
+            new = clamp(0.5 + (old - breed.aptitude[k]), 0, 1)
+
+        which recovers exactly the jitter and discards exactly the bias. For
+        the Shiba (obedience 0.40) that moves every existing dog from a
+        0.28-0.52 band to a 0.38-0.62 one — i.e. the breed penalty is lifted
+        and nobody's individuality is lost. Guarded so a breed the build no
+        longer knows about leaves the number alone rather than corrupting it.
+
+     2. THE CURRENCY IS RENAMED `trainerPoints` -> `carePoints`, and the value
+        carries across. "Trainer points" described the wrong thing: they are
+        not earned by training, they are earned by looking after him. Nothing
+        had ever paid any out, so in practice this is a rename of a zero — but
+        a hand-edited or imported save may have one and it is kept.
+
+     3. `contests` is reshaped for the ladder, and AGILITY'S RECORD IS DROPPED
+        because Agility is cut (SCOPE stage 5) and a dead key in a save file is
+        a promise to build it. `disc` stays: it is reframed as catch-and-leap
+        and may still ship. `contestState()` repairs whatever obedience record
+        was there, so an old `{rank, wins, lastEntryAt, entriesToday}` simply
+        becomes a Beginner with no history rather than being thrown away. */
+  5: (s) => {
+    /* ---- 1. the breed term ---- */
+    for (const d of (s.dogs || [])) {
+      if (!d.aptitude || typeof d.aptitude !== 'object') continue;
+      let breed = null;
+      try { breed = getBreed(d.breedId); } catch (e) { breed = null; }
+      const bias = (breed && breed.aptitude) || null;
+      for (const k of ['disc', 'agility', 'obedience']) {
+        const old = +d.aptitude[k];
+        if (!Number.isFinite(old)) { d.aptitude[k] = 0.5; continue; }
+        const term = bias && Number.isFinite(+bias[k]) ? +bias[k] : null;
+        /* no breed data to undo: leave the individual exactly as it is rather
+           than inventing a correction */
+        if (term === null) continue;
+        d.aptitude[k] = Math.min(1, Math.max(0, 0.5 + (old - term)));
+      }
+    }
+
+    /* ---- 2. the currencies ---- */
+    if (!s.player || typeof s.player !== 'object') s.player = {};
+    const p = s.player;
+    if (typeof p.coins !== 'number' || !Number.isFinite(p.coins)) {
+      p.coins = BALANCE.economy.startCoins;
+    }
+    p.coins = Math.max(0, Math.floor(p.coins));
+    const legacy = Number.isFinite(+p.trainerPoints) ? Math.max(0, Math.floor(+p.trainerPoints)) : 0;
+    if (typeof p.carePoints !== 'number' || !Number.isFinite(p.carePoints)) p.carePoints = legacy;
+    p.carePoints = Math.max(0, Math.floor(p.carePoints));
+    delete p.trainerPoints;
+    /* a fresh daily ledger, stamped with today. The same reasoning as v4's
+       `walksToday`: it belonged to a day index that was never recorded, so the
+       worst case is one extra day's allowance on update day — a gift. */
+    p.careDay = { day: dayIndex(Date.now()), earned: 0, once: {} };
+
+    /* ---- 3. the contest records ---- */
+    if (!s.contests || typeof s.contests !== 'object') s.contests = {};
+    delete s.contests.agility;
+    contestState(s, Date.now());
+    s.v = 5;
+    return s;
+  },
 };
 
 export function migrate(raw) {
@@ -221,6 +302,24 @@ function fillDefaults(s) {
      boundary. It is called here so a hand-edited or imported save can never put
      a walk the progress function cannot read in front of the first frame. */
   walkState(out);
+  /* ---- stage 5 fields ----
+     Same reasoning as `walkState` above: `contestState` repairs the whole
+     obedience record — a class index out of range, a NaN best score, a
+     champScores array that has grown past its window — and rolls the day
+     boundary, so a hand-edited or imported save can never put a record the
+     ladder cannot read in front of the first frame. The player block gets the
+     same treatment because `carePoints` gates content: a NaN there would
+     silently lock or unlock every breed in the game. */
+  out.player = out.player || {};
+  out.player.coins = Math.max(0, Math.floor(Number.isFinite(+out.player.coins)
+    ? +out.player.coins : BALANCE.economy.startCoins));
+  out.player.carePoints = Math.max(0, Math.floor(Number.isFinite(+out.player.carePoints)
+    ? +out.player.carePoints : 0));
+  if (!out.player.careDay || typeof out.player.careDay !== 'object') {
+    out.player.careDay = { day: dayIndex(Date.now()), earned: 0, once: {} };
+  }
+  delete out.player.trainerPoints;
+  contestState(out);
   if (!Array.isArray(out.inventory.toys) || !out.inventory.toys.length) out.inventory.toys = ['ball'];
   if (typeof out.inventory.activeToy !== 'string'
     || out.inventory.toys.indexOf(out.inventory.activeToy) < 0) {

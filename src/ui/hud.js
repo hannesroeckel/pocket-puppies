@@ -20,10 +20,30 @@
    The name pill is absent until the puppy HAS a name. She arrives unnamed and
    the naming beat (ui/naming.js) is the emotional centre of first launch, so
    nothing here may put a placeholder in its place.
+
+   ROUTED THROUGH ui/text.js IN STAGE 5. This file was the only one that read
+   `view.safe` before the helper existed, but it still hand-rolled three font
+   stacks and — the real problem — drew the HINT LINE as bare cream `#fff0d4` at
+   alpha 0.72 with a drop shadow, straight over whatever art happened to be
+   behind it. That is precisely the failure ui/text.js was built to make
+   impossible, and a shadow is a hope that the art is light.
+
+   The pill and the needs panel are different: they draw their own backing, so
+   they pass `over` and get their INK checked against that known colour rather
+   than acquiring a second scrim on top of a card that already reads fine.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, smooth, roundRect } from '../engine/draw.js';
 import { capitalise } from '../state/game.js';
+import { drawText, measure, safeBand } from './text.js';
+
+/* the pill and the needs panel are translucent cream over the room's warm
+   wall, so the WORST case an ink can composite against is close to the pill's
+   own colour on white. Naming them here means the contrast check has a real
+   number rather than a guess about what is behind. */
+const PILL = 12.5;
+const PILL_BG = '#f6e8d2';
+const PANEL_BG = '#f6e8d2';
 
 const W = BALANCE.view.W;
 const M = BALANCE.ui.meter;
@@ -86,42 +106,54 @@ export function createHud(game, opts = {}) {
       const d = game.dog;
       const named = game.isNamed;
 
-      /* ---- name pill: the only persistent chrome, and only once named --- */
-      c.save();
-      c.font = '700 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      /* ---- name pill: the only persistent chrome, and only once named ---
+         The pill is a translucent cream card over the wall, so the ink is
+         checked against the LIGHTEST thing it can composite to — measured
+         through the helper rather than assumed, and no extra plate is drawn
+         over a card that is already doing the job. */
       const P = game.pron;
       const label = named ? d.name : `How ${P.is} ${P.they}?`;
-      const nw = c.measureText(label).width + 26;
+      const m0 = measure(g, label, { x: 0, y: 0, size: PILL, weight: 700 });
+      const nw = m0.w + 26;
       box = { x: left, y: top, w: nw, h: M.h };
+      c.save();
       c.globalAlpha = named ? 0.30 : 0.22;
       c.fillStyle = '#fff8ea';
       roundRect(c, left, top, nw, M.h, 15); c.fill();
       c.globalAlpha = 0.18; c.strokeStyle = '#7c4a2f'; c.lineWidth = 1.2;
       roundRect(c, left, top, nw, M.h, 15); c.stroke();
-      c.globalAlpha = named ? 1 : 0.72;
-      c.fillStyle = '#5d3018';
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(label, left + nw / 2, top + M.h / 2 + 0.5);
       c.restore();
+      drawText(g, label, {
+        x: left + nw / 2, y: top + M.h / 2 + 0.5, anchor: 'free',
+        size: PILL, weight: 700, ink: '#5d3018', over: PILL_BG,
+        maxWidth: nw - 12, fade: named ? 1 : 0.72,
+      });
 
       /* ---- the needs, in WORDS ---- */
       if (statusT < SS.dur) {
         const u = statusT / SS.dur;
         const a = u < SS.fade / SS.dur ? smooth(statusT / SS.fade)
           : (u > 1 - SS.fade / SS.dur ? smooth((SS.dur - statusT) / SS.fade) : 1);
-        drawNeeds(c, left, top + M.h + 8, clamp(a, 0, 1));
+        drawNeeds(g, left, top + M.h + 8, clamp(a, 0, 1));
       }
 
-      /* ---- hint ---- */
+      /* ---- THE HINT LINE. THIS WAS THE DEFECT. ----
+         Bare cream over whatever art is behind, with a drop shadow standing in
+         for a contrast guarantee. Now a solved plate, and anchored DOWN FROM
+         THE SAFE TOP EDGE rather than from the raw frame, so it cannot crowd
+         the status bar on the target device. Full opacity at rest: the old
+         0.72 was a style, and the helper's guarantee is defined at full
+         opacity — `hintFade` is a transition and is allowed to pass through. */
       if (hintText) {
-        c.save();
-        c.globalAlpha = 0.72 * hintFade;
-        c.fillStyle = '#fff0d4';
-        c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.font = '500 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        c.shadowColor = 'rgba(48,24,12,0.6)'; c.shadowBlur = 5; c.shadowOffsetY = 1;
-        c.fillText(hintText, W / 2, top + M.h + (statusT < SS.dur ? 96 : 20));
-        c.restore();
+        drawText(g, hintText, {
+          x: W / 2,
+          /* clear of the needs panel when it is open: the panel is 4 rows plus
+             padding = 84 units tall and starts 8 below the pill, so it ends at
+             +92. 96 left the hint's plate touching its bottom edge — measured
+             by cropping in on it. */
+          y: (top - safeBand(view).top) + M.h + (statusT < SS.dur ? 106 : 20),
+          anchor: 'top', size: 12.5, weight: 600, fade: clamp(hintFade, 0, 1),
+        });
       }
     },
   };
@@ -131,7 +163,8 @@ export function createHud(game, opts = {}) {
    * mistaken for a quantity. Deliberately NOT a list of chores: it says how
    * she is, in the language the original used.
    */
-  function drawNeeds(c, x, y, a) {
+  function drawNeeds(g, x, y, a) {
+    const c = g.ctx;
     const rowH = SS.gap;
     const w = 148;
     const h = ROWS.length * rowH + 16;
@@ -142,22 +175,23 @@ export function createHud(game, opts = {}) {
     c.globalAlpha = a * 0.16;
     c.strokeStyle = '#7c4a2f'; c.lineWidth = 1.1;
     roundRect(c, x, y, w, h, 13); c.stroke();
-    c.textBaseline = 'middle';
+    c.restore();
+    /* The panel is a card this function drew, so `over` checks the ink against
+       it exactly and adds no plate. Both columns get a `maxWidth` so a long
+       label and a long word can never overlap in the middle. */
     for (let i = 0; i < ROWS.length; i++) {
       const [label, key] = ROWS[i];
       const ry = y + 8 + rowH * i + rowH / 2;
-      c.globalAlpha = a * 0.66;
-      c.fillStyle = '#5d3018';
-      c.textAlign = 'left';
-      c.font = '600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillText(label, x + 12, ry);
+      drawText(g, label, {
+        x: x + 12, y: ry, anchor: 'free', align: 'left', size: 10.5, weight: 600,
+        ink: '#5d3018', over: PANEL_BG, maxWidth: w * 0.52, fade: a,
+      });
       /* the WORD. The only thing that ever quantifies a need. */
-      c.globalAlpha = a * 0.95;
-      c.textAlign = 'right';
-      c.font = '700 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillText(game.describeNeed(key), x + w - 12, ry);
+      drawText(g, game.describeNeed(key), {
+        x: x + w - 12, y: ry, anchor: 'free', align: 'right', size: 10.5, weight: 700,
+        ink: '#5d3018', over: PANEL_BG, maxWidth: w * 0.44, fade: a,
+      });
     }
-    c.restore();
   }
 
   return hud;

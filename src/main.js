@@ -135,7 +135,7 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 4,
+    version: 5,
     app, loop, view, saver, BALANCE,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
@@ -487,6 +487,39 @@ async function boot() {
       off();
       return result || (p ? { ignored: false, pending: true } : { outcome: 'ignore' });
     },
+    /**
+     * Put practice on the books WITHOUT animating it, through the real state
+     * mutators (`trickRep`, `bindCue`) and nothing else.
+     *
+     * `teach()` above drives the whole ritual and is what PROVES the ritual
+     * works — stage 3 measured it (§13.6: 3 reps across sessions, 5 crammed).
+     * But a stage-5 gate needs a dog with six tricks at level 2-3, and paying
+     * for ~200 drawn frames per rep to get there made a scoring sweep take
+     * minutes. This is the same ledger, reached directly, and it deliberately
+     * resets the per-sitting counters each rep so the reps are full value —
+     * i.e. it produces exactly the dog that "trained him over several days"
+     * produces, rather than a dog with impossible numbers.
+     */
+    learn(trick, sig, reps = 5) {
+      if (!BALANCE.train.roster.includes(trick)) return null;
+      for (let i = 0; i < reps; i++) {
+        const rec = game.trickRecord(trick);
+        rec.sessReps = 0; rec.sessAt = 0; rec.dayAt = -1;
+        game.trickRep(trick, BALANCE.train.reward.quality.crisp, Date.now());
+      }
+      if (sig) game.bindCue(trick, sig, 0.95);
+      return { id: trick, ...game.trick(trick) };
+    },
+    /** a trained dog in one call: the roster, spread across the eight signals */
+    learnAll(reps = 5) {
+      const plan = [['sit', 'down'], ['lieDown', 'left'], ['beg', 'up'],
+        ['shake', 'right'], ['spin', 'circle'], ['jump', 'double'],
+        ['rollOver', 'tap'], ['playDead', 'hold']];
+      const out = {};
+      for (const [id, sig] of plan) out[id] = __pp.learn(id, sig, reps);
+      loop.stepFixed(1 / 60, 2);
+      return out;
+    },
     /** the obedience model at the current mood/trust, without rolling it */
     chance(trick) {
       const t = loop.scene.train;
@@ -697,6 +730,189 @@ async function boot() {
     },
     /** who owns the whole screen: '' | 'naming' | 'reunion' | 'walk' | 'away' */
     surface() { return loop.scene.surfaceOwner ? loop.scene.surfaceOwner() : ''; },
+    /* ---- stage 5 drivers: THE OBEDIENCE TRIAL -------------------------
+       Deterministic like everything else here. In particular NOTHING WAITS ON
+       A TIMER: a trial is a state machine driven by `update`, so the way to
+       run one is to STEP it and watch the phase change. `runTrial()` is the
+       whole thing end to end in one call, which is what makes a 400-trial
+       scoring sweep practical. */
+    /** open the entry panel (through the room's arbiter, never around it) */
+    ring(on = true) {
+      const sc = loop.scene;
+      if (!sc.startContest) return false;
+      if (on) { const r = sc.startContest(); loop.stepFixed(1 / 60, 2); return r; }
+      sc.stopContest(); loop.stepFixed(1 / 60, 2); return true;
+    },
+    /** the entry gate, without opening anything */
+    ringCheck() {
+      const k = loop.scene.contest;
+      return k ? k.check() : null;
+    },
+    /** skip the panel and go straight into the ring */
+    enterRing() {
+      const k = loop.scene.contest;
+      if (!k) return null;
+      if (!k.modal) loop.scene.startContest();
+      loop.stepFixed(1 / 60, 2);
+      const ok = k.enterRing();
+      loop.stepFixed(1 / 60, 2);
+      return ok ? k.debug : null;
+    },
+    /** what the judge is asking for right now */
+    asking() { const k = loop.scene.contest; return k ? k.asking() : ''; },
+    /** the free window's offer, deepest first */
+    choices() { const k = loop.scene.contest; return k ? k.choices() : null; },
+    /** give the steadying cue by id; omit to let him answer the judge alone */
+    cueRing(sig) {
+      const k = loop.scene.contest;
+      if (!k) return false;
+      const ok = k.injectCue(sig);
+      loop.stepFixed(1 / 60, 1);
+      return ok;
+    },
+    /**
+     * DRAW the steadying cue for real, as a synthetic pointer path in the cue
+     * pad, so the shared recogniser (dog/train.js `createSignalReader`) is
+     * exercised rather than bypassed. This is the tap path, at full status.
+     */
+    cueDraw(sig, { dt = 1 / 60 } = {}) {
+      const scene = loop.scene;
+      const A = BALANCE.contest.assist.pad;
+      const SGN = BALANCE.train.signal;
+      const cx = 195, cy = (A.top + A.bottom) / 2;
+      const send = (type, x, y, moved) => {
+        input.state.lastX = x; input.state.lastY = y;
+        scene.pointer(app, { type, x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: !!moved });
+      };
+      const L = SGN.minSwipe * 1.9;
+      const path = [];
+      if (sig === 'up') for (let i = 0; i <= 10; i++) path.push([cx, cy + L / 2 - (L * i) / 10]);
+      else if (sig === 'down') for (let i = 0; i <= 10; i++) path.push([cx, cy - L / 2 + (L * i) / 10]);
+      else if (sig === 'left') for (let i = 0; i <= 10; i++) path.push([cx + L / 2 - (L * i) / 10, cy]);
+      else if (sig === 'right') for (let i = 0; i <= 10; i++) path.push([cx - L / 2 + (L * i) / 10, cy]);
+      else if (sig === 'circle') {
+        for (let i = 0; i <= 22; i++) {
+          const th = (i / 22) * Math.PI * 2;
+          path.push([cx + Math.cos(th) * 34, cy + Math.sin(th) * 26]);
+        }
+      } else path.push([cx, cy]);
+      send('down', path[0][0], path[0][1], false);
+      loop.stepFixed(dt, 1);
+      if (sig === 'hold') loop.stepFixed(dt, Math.ceil((SGN.holdDur + 0.1) / dt));
+      for (let i = 1; i < path.length; i++) { send('move', path[i][0], path[i][1], true); loop.stepFixed(dt, 1); }
+      send('up', path[path.length - 1][0], path[path.length - 1][1], path.length > 1);
+      loop.stepFixed(dt, 1);
+      if (sig === 'double') {
+        send('down', cx, cy, false); loop.stepFixed(dt, 1);
+        send('up', cx, cy, false); loop.stepFixed(dt, 1);
+      }
+      return loop.scene.contest.debug;
+    },
+    /** pick a trick in the free window */
+    chooseFree(id) {
+      const k = loop.scene.contest;
+      if (!k) return false;
+      const ok = k.choose(id);
+      loop.stepFixed(1 / 60, 2);
+      return ok;
+    },
+    /**
+     * Run a whole trial to the result card.
+     *
+     * @param o.assist 'none' | 'hand' | 'auto' — 'hand' DRAWS the real cue
+     *   through the pointer path, 'auto' injects it. Both are the same
+     *   mechanic; drawing is slower and is what a screenshot run wants.
+     *   'none' is the hands-off trial, which must be winnable.
+     * @param o.free   which trick to pick in the free window: 'best' (deepest),
+     *   an explicit trick id, or 'none' to let the window lapse.
+     * @param o.sim    step without drawing (~15x cheaper) for statistics.
+     */
+    runTrial({ assist = 'auto', free = 'best', dt = 1 / 60, max = 90, sim = false } = {}) {
+      const sc = loop.scene;
+      const k = sc.contest;
+      if (!k) return null;
+      if (!k.modal) sc.startContest();
+      loop.stepFixed(dt, 2);
+      if (k.beat === 'entry' && !k.enterRing()) return { blocked: k.check() };
+      const stepOne = () => { if (sim) loop.stepSim(dt, 1); else loop.stepFixed(dt, 1); };
+      let guard = Math.round(max / dt);
+      let cued = '';
+      while (guard-- > 0 && k.beat === 'ring') {
+        /* the free window: pick, or deliberately let it lapse */
+        if (k.phase === 'choose' && free !== 'none') {
+          const list = k.choices();
+          const want = free === 'best' ? (list[0] && list[0].id) : free;
+          if (want) { k.choose(want); continue; }
+        }
+        /* the call beat: back him up, at most once per round */
+        if (k.phase === 'call' && assist !== 'none') {
+          const id = k.asking();
+          const sig = id ? game.cueFor(id) : '';
+          if (sig && cued !== id) {
+            cued = id;
+            if (assist === 'hand') __pp.cueDraw(sig, { dt });
+            else k.injectCue(sig);
+            continue;
+          }
+        }
+        if (k.phase !== 'call') cued = '';
+        stepOne();
+      }
+      /* let the card land */
+      for (let i = 0; i < 40 && !k.result; i++) stepOne();
+      return k.result;
+    },
+    /** the trial state, the class, the standing, the live grooming delta */
+    ringState() { const k = loop.scene.contest; return k ? k.debug : null; },
+
+    /* ---- stage 5 drivers: THE ECONOMY ---------------------------------
+       `purse()` is the one call that shows both currencies side by side, which
+       is how "you cannot buy an unlock" gets demonstrated rather than claimed:
+       pour coins in, and `unlocks` does not move. */
+    purse() {
+      return {
+        coins: game.coins,
+        carePoints: game.carePoints,
+        careToday: game.careToday,
+        unlocks: game.careUnlocks(),
+        contest: { ...game.contest },
+        cls: game.contestClass(),
+        entriesLeft: game.contestEntriesLeft,
+      };
+    },
+    coins: () => game.coins,
+    addCoins: (n) => game.addCoins(n),
+    /** the mutator ARCHITECTURE §14.2 asked for: {ok, coins, spent, short} */
+    spendCoins: (n) => game.spendCoins(n),
+    canAfford: (n) => game.canAfford(n),
+    carePoints: () => game.carePoints,
+    addCarePoints: (n) => game.addCarePoints(n),
+    awardCare: (kind) => game.awardCare(kind),
+    isUnlocked: (id) => game.isUnlocked(id),
+    careUnlocks: () => game.careUnlocks(),
+    /** set the ladder class directly, to photograph or measure one */
+    setClass(i) {
+      const r = game.contest;
+      r.classIdx = Math.max(0, Math.min(BALANCE.contest.classes.length - 1, i | 0));
+      saver.schedule();
+      loop.stepFixed(1 / 60, 1);
+      return game.contestClass();
+    },
+    /** set the coat and the gloss — this is how grooming gets measured */
+    setCoat(cleanliness, gloss) {
+      game.setNeed('cleanliness', cleanliness);
+      const dirt = game.dirt;
+      for (let i = 0; i < dirt.length; i++) game.setDirt(i, 1 - cleanliness);
+      if (gloss !== undefined) game.addGloss(gloss - game.gloss);
+      loop.stepFixed(1 / 60, 1);
+      return {
+        cleanliness: game.dog.needs.cleanliness, gloss: game.gloss,
+        word: game.describeNeed('cleanliness'), glossWord: game.describeGloss(),
+      };
+    },
+    /** fill him up so the entry gate is clear, without running a care action */
+    setNeed(key, v) { game.setNeed(key, v); return game.dog.needs[key]; },
+
     exportSave: () => exportSave(state),
     importSave: (s) => importSave(s),
     saveNow: () => saver.flush(),

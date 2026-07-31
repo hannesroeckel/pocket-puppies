@@ -2,10 +2,24 @@
    ui/sheet.js — a bottom sheet. Canvas-drawn rows with a spring slide-in,
    plus one small DOM escape hatch (`promptText`) for the save string, which
    genuinely needs a real text field the OS keyboard can talk to.
+
+   ROUTED THROUGH ui/text.js IN STAGE 5. The sheet was never the worst offender
+   — it draws an opaque panel, so its brown-on-cream was legible by
+   construction — but it hand-rolled four font stacks and, more usefully, gave
+   its labels, notes and right-hand words no width handling at all. A long note
+   ran straight under the right-hand status word with no ellipsis. `over` keeps
+   the panel unscrimmed and checks the ink against it exactly; `maxWidth`
+   divides the row so the two columns cannot collide.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, roundRect, smooth } from '../engine/draw.js';
 import { Spring } from '../engine/spring.js';
+import { drawText } from './text.js';
+
+/* the panel colour. The sheet is fully opaque, so `over` gives the contrast
+   check an exact answer rather than a bound. */
+const PANEL = '#fdf3df';
+const ROW = '#f7e7cd';
 
 const W = BALANCE.view.W;
 const H = BALANCE.view.H;
@@ -69,38 +83,51 @@ export function createSheet(opts = {}) {
       /* grabber */
       c.fillStyle = 'rgba(124,74,47,0.26)';
       roundRect(c, W / 2 - 20, top + 9, 40, 4, 2); c.fill();
-      /* title */
-      c.fillStyle = '#5d3018';
-      c.textAlign = 'left'; c.textBaseline = 'middle';
-      c.font = '700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.fillText(cfg.title, pad + 2, top + 34);
-      /* rows */
+      /* the row backings first, so `over` is true of what is behind the type */
       const y0 = top + 58;
+      for (let i = 0; i < cfg.rows.length; i++) {
+        const ry = y0 + i * rowH;
+        c.fillStyle = ROW;
+        roundRect(c, pad, ry + 4, W - pad * 2, rowH - 8, 13); c.fill();
+      }
+      c.restore();
+
+      drawText(g, cfg.title, {
+        x: pad + 2, y: top + 34, anchor: 'free', align: 'left',
+        size: 15, weight: 700, ink: '#5d3018', over: PANEL,
+        maxWidth: W - pad * 2 - 4, fade: a,
+      });
+
       for (let i = 0; i < cfg.rows.length; i++) {
         const r = cfg.rows[i];
         const ry = y0 + i * rowH;
-        c.fillStyle = 'rgba(233,149,79,0.10)';
-        roundRect(c, pad, ry + 4, W - pad * 2, rowH - 8, 13); c.fill();
-        c.textAlign = 'left';
-        c.fillStyle = '#5d3018';
-        c.font = '600 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        c.fillText(r.label, pad + 16, ry + (r.note ? rowH / 2 - 7 : rowH / 2));
+        /* THE ROW IS TWO COLUMNS, and they used to be able to overlap: a long
+           note ran straight under the right-hand word with nothing to stop it.
+           The label/note column now ends where the status column begins. */
+        const rightW = r.right ? 108 : 0;
+        const leftW = W - pad * 2 - 32 - rightW;
+        drawText(g, r.label, {
+          x: pad + 16, y: ry + (r.note ? rowH / 2 - 7 : rowH / 2), anchor: 'free',
+          align: 'left', size: 13.5, weight: 700, ink: '#5d3018', over: ROW,
+          maxWidth: leftW, fade: a,
+        });
         if (r.note) {
-          c.fillStyle = 'rgba(93,48,24,0.62)';
-          c.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-          c.fillText(r.note, pad + 16, ry + rowH / 2 + 9);
+          drawText(g, r.note, {
+            x: pad + 16, y: ry + rowH / 2 + 9, anchor: 'free', align: 'left',
+            size: 11, weight: 500, ink: 'rgba(93,48,24,0.72)', over: ROW,
+            maxWidth: leftW, fade: a,
+          });
         }
         /* `right` is the WORD-SCALE status of the need this row serves — the
            care sheet is the original's inspect screen. Words, never bars. */
         if (r.right) {
-          c.textAlign = 'right';
-          c.fillStyle = 'rgba(93,48,24,0.86)';
-          c.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-          c.fillText(r.right, W - pad - 16, ry + rowH / 2);
-          c.textAlign = 'left';
+          drawText(g, r.right, {
+            x: W - pad - 16, y: ry + rowH / 2, anchor: 'free', align: 'right',
+            size: 12, weight: 800, ink: '#5d3018', over: ROW,
+            maxWidth: rightW, fade: a,
+          });
         }
       }
-      c.restore();
     },
 
     /**

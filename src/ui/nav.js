@@ -5,9 +5,22 @@
    `items` list is data: stage 2..6 add entries and wire them to app.nav.go().
    Buttons whose target scene isn't registered yet are drawn dimmed and
    report `available:false` — the room scene toasts "coming soon".
+
+   ROUTED THROUGH ui/text.js IN STAGE 5, and it mattered more here than it
+   looks: stage 5 added a seventh pill (the ring), which cuts each one to about
+   47 virtual units. The old code drew labels with a hard `9.5px` and no width
+   handling at all, so a longer label than the ones that happen to be there
+   would simply overrun its pill. The helper shrinks to fit, and `over` checks
+   the ink against the pill the nav itself drew rather than adding a plate on
+   top of it.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, roundRect, TAU, rgba } from '../engine/draw.js';
+import { drawText } from './text.js';
+
+/* the pill colour, so a label's contrast is checked against what is actually
+   behind it rather than against a guess */
+const PILL_BG = '#f4e6d0';
 
 const N = BALANCE.ui.nav;
 const W = BALANCE.view.W;
@@ -104,14 +117,20 @@ export function createNav(items, opts = {}) {
         c.fillStyle = '#6b3a24'; c.strokeStyle = '#6b3a24';
         const glyph = GLYPH[it.icon || it.id];
         if (glyph) glyph(c, cx, cy, N.iconR);
-        c.globalAlpha = dim ? 0.55 : 0.95;
-        c.fillStyle = '#5d3018';
-        c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.font = '600 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        c.fillText(it.label.toUpperCase(), cx, b.y + b.h * 0.80);
       }
       c.globalAlpha = 1;
       c.restore();
+      /* the labels, after the pills, so `over` is true of what is behind them */
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const b = nav.bounds(i);
+        const dim = it.available === false;
+        drawText(g, it.label.toUpperCase(), {
+          x: b.x + b.w / 2, y: b.y + b.h * 0.80, anchor: 'free',
+          size: N.label, weight: 700, ink: '#5d3018', over: PILL_BG,
+          maxWidth: b.w - 6, fade: dim ? 0.55 : 1,
+        });
+      }
     },
   };
   nav.layout(opts.safeBottom || 0);

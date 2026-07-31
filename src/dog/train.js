@@ -121,6 +121,115 @@ const C = {
 /* ---- geometry helpers -------------------------------------------------- */
 const bias = (sp, v, k) => sp.to(sp.t * (1 - k) + v * k);
 
+/* ==========================================================================
+   THE GESTURE RECOGNISER — one implementation, two callers.
+
+   Lifted out of `createTraining` in stage 5 so the obedience trial can read a
+   cue WITHOUT the training UI being up. Stage 5 needs it because the judge
+   names a trick and she may back him up with the signal she taught, and a
+   second, parallel recogniser in dog/contest.js would be two definitions of
+   what a circle is — which is exactly the class of drift this project has
+   already paid for once (BALANCE.train.roster vs dog/anim/tricks.js).
+
+   Pure: `sinceTap` is passed in rather than read off an instance clock, and
+   `tapped` is returned so the caller owns its own double-tap timing.
+   ========================================================================== */
+export function classifyPath(g, sinceTap = 1e9) {
+  const netX = g.x - g.x0, netY = g.y - g.y0;
+  const net = Math.hypot(netX, netY);
+  const dur = g.dur;
+  const turn = Math.abs(g.turn);
+
+  /* a circle first: it has lots of travel for very little displacement */
+  if (turn > SG.circleTurn && g.travel > Math.max(SG.minSwipe, net * SG.circleRatio)) {
+    return {
+      sig: 'circle',
+      conf: clamp(turn / TAU, 0.3, 1) * clamp(g.travel / (SG.minSwipe * 2.4), 0.4, 1),
+      tapped: false,
+    };
+  }
+  /* a stationary touch: tap, double-tap, or hold */
+  if (g.travel < SG.tapTravel) {
+    if (dur >= SG.holdDur) {
+      return { sig: 'hold', conf: clamp(dur / (SG.holdDur * 2.2), 0.35, 1), tapped: false };
+    }
+    if (dur < SG.tapDur) {
+      const dbl = sinceTap < SG.doubleGap;
+      return {
+        sig: dbl ? 'double' : 'tap',
+        /* a tap that nearly became a hold, or nearly a drag, is a scruffy tap */
+        conf: clamp(1 - g.travel / SG.tapTravel, 0.3, 1) * clamp(1 - dur / SG.holdDur, 0.35, 1),
+        tapped: true,
+      };
+    }
+    /* between a tap and a hold: genuinely ambiguous, and she is allowed to be
+       unsure about it */
+    return { sig: 'hold', conf: 0.34, tapped: false };
+  }
+  /* a swipe */
+  if (net >= SG.minSwipe) {
+    const straight = clamp(net / Math.max(1, g.travel), 0, 1);
+    const axis = Math.abs(netX) > Math.abs(netY);
+    const purity = axis ? Math.abs(netX) / Math.max(1, net) : Math.abs(netY) / Math.max(1, net);
+    const sig = axis ? (netX > 0 ? 'right' : 'left') : (netY < 0 ? 'up' : 'down');
+    const conf = clamp((straight - SG.straightAt) / (1 - SG.straightAt), 0, 1) * 0.55
+      + clamp((purity - 0.6) / 0.4, 0, 1) * 0.30
+      + clamp(net / (SG.minSwipe * 2.2), 0, 1) * 0.15;
+    return { sig, conf: clamp(conf, 0.1, 1), tapped: false };
+  }
+  /* a short scribble that is not a circle and not a swipe: nothing */
+  return { sig: '', conf: 0, tapped: false };
+}
+
+/**
+ * An independent gesture capture that classifies with the SAME recogniser.
+ * Feed it pointer events and tick it; `up()` returns `{sig, conf}`.
+ *
+ * Deliberately does NOT do `maybeMisread`: a contest cue that is misheard
+ * would silently cost her the assist she just earned, and stage 5's rule is
+ * that helping him is always optional and always positive.
+ */
+export function createSignalReader() {
+  let cap = null;
+  let t = 0;
+  let lastTap = -1e9;
+  return {
+    tick(dt) { t += (Number.isFinite(+dt) ? +dt : 0); if (cap) cap.dur = t - cap.t0; },
+    get active() { return !!cap; },
+    down(x, y) {
+      cap = { t0: t, dur: 0, x0: x, y0: y, x, y, travel: 0, turn: 0, lastAng: null };
+    },
+    move(x, y) {
+      if (!cap) return;
+      const dx = x - cap.x, dy = y - cap.y;
+      const seg = Math.hypot(dx, dy);
+      if (seg > 0.001) {
+        cap.travel += seg;
+        if (seg > 1.2) {
+          const ang = Math.atan2(dy, dx);
+          if (cap.lastAng !== null) {
+            let d = ang - cap.lastAng;
+            while (d > Math.PI) d -= TAU;
+            while (d < -Math.PI) d += TAU;
+            cap.turn += d;
+          }
+          cap.lastAng = ang;
+        }
+      }
+      cap.x = x; cap.y = y;
+    },
+    up() {
+      if (!cap) return { sig: '', conf: 0 };
+      const g = cap;
+      cap = null;
+      const r = classifyPath(g, t - lastTap);
+      if (r.tapped) lastTap = t;
+      return { sig: r.sig, conf: r.conf };
+    },
+    cancel() { cap = null; },
+  };
+}
+
 export function createTraining(rig, opts = {}) {
   const game = opts.game;
   const pet = opts.pet;
@@ -269,51 +378,14 @@ export function createTraining(rig, opts = {}) {
   }
 
   /**
-   * Classify a finished pad gesture.
+   * Classify a finished pad gesture, with this layer's own tap clock.
    * @returns {{sig, conf}} — conf 0..1, and a LOW conf is what lets her
    *   mishear it. A crisp signal is never misread.
    */
   function classifySignal(g) {
-    const netX = g.x - g.x0, netY = g.y - g.y0;
-    const net = Math.hypot(netX, netY);
-    const dur = g.dur;
-    const turn = Math.abs(g.turn);
-
-    /* a circle first: it has lots of travel for very little displacement */
-    if (turn > SG.circleTurn && g.travel > Math.max(SG.minSwipe, net * SG.circleRatio)) {
-      return { sig: 'circle', conf: clamp(turn / TAU, 0.3, 1) * clamp(g.travel / (SG.minSwipe * 2.4), 0.4, 1) };
-    }
-    /* a stationary touch: tap, double-tap, or hold */
-    if (g.travel < SG.tapTravel) {
-      if (dur >= SG.holdDur) {
-        return { sig: 'hold', conf: clamp(dur / (SG.holdDur * 2.2), 0.35, 1) };
-      }
-      if (dur < SG.tapDur) {
-        const dbl = (clock - lastTapAt) < SG.doubleGap;
-        lastTapAt = clock;
-        return {
-          sig: dbl ? 'double' : 'tap',
-          /* a tap that nearly became a hold, or nearly a drag, is a scruffy tap */
-          conf: clamp(1 - g.travel / SG.tapTravel, 0.3, 1) * clamp(1 - dur / SG.holdDur, 0.35, 1),
-        };
-      }
-      /* between a tap and a hold: genuinely ambiguous, and she is allowed to
-         be unsure about it */
-      return { sig: 'hold', conf: 0.34 };
-    }
-    /* a swipe */
-    if (net >= SG.minSwipe) {
-      const straight = clamp(net / Math.max(1, g.travel), 0, 1);
-      const axis = Math.abs(netX) > Math.abs(netY);
-      const purity = axis ? Math.abs(netX) / Math.max(1, net) : Math.abs(netY) / Math.max(1, net);
-      const sig = axis ? (netX > 0 ? 'right' : 'left') : (netY < 0 ? 'up' : 'down');
-      const conf = clamp((straight - SG.straightAt) / (1 - SG.straightAt), 0, 1) * 0.55
-        + clamp((purity - 0.6) / 0.4, 0, 1) * 0.30
-        + clamp(net / (SG.minSwipe * 2.2), 0, 1) * 0.15;
-      return { sig, conf: clamp(conf, 0.1, 1) };
-    }
-    /* a short scribble that is not a circle and not a swipe: nothing */
-    return { sig: '', conf: 0 };
+    const r = classifyPath(g, clock - lastTapAt);
+    if (r.tapped) lastTapAt = clock;
+    return r;
   }
 
   /**
@@ -456,6 +528,12 @@ export function createTraining(rig, opts = {}) {
       hesitated: !!o.hesitated,
       outcome: o.outcome || (o.taught ? 'guided' : 'obey'),
       chain: (o.chain || []).slice(),
+      /* THE CHAIN AS IT WAS ASKED FOR. `chain` above is a work queue and is
+         `shift()`ed as he works through it, so by the time the result is
+         reported it is empty. A contest has to know what getting into position
+         cost him in order not to charge it to the stopwatch, so the original
+         list is kept. */
+      chain0: (o.chain || []).slice(),
       holdFor: o.hold === undefined ? holdFor(o.trick) : o.hold,
       held: 0, holdKept: false,
       rewarded: false, quality: 0, rewardAt: -1,
@@ -506,12 +584,28 @@ export function createTraining(rig, opts = {}) {
   function start(asked, o = {}) {
     if (perf && !perf.done) return null;
     const ch = chanceOf(asked);
+    /* ---- STAGE 5: A STEADYING CUE ------------------------------------
+       In a trial the judge names the trick out loud and he answers the judge;
+       she may back him up with the signal she taught, by hand or by voice.
+       `boost` is what that is worth. It shifts probability OUT OF the three
+       failure outcomes and INTO obeying, proportionally, so the shape of how
+       he fails is unchanged and only how often he fails moves.
+
+       It is always positive and never required: a trial with no assists at all
+       is winnable, because "tap cues at fully equal status" cannot mean "tap
+       cues or lose". */
+    const boost = clamp(Number.isFinite(+o.boost) ? +o.boost : 0, 0, 0.6);
+    const obeyP = clamp(ch.obey + boost * (1 - ch.obey), O.min, O.max);
+    const shed = obeyP - ch.obey;
+    const rest = Math.max(1e-6, ch.hesitate + ch.wrong + ch.ignore);
+    const pH = Math.max(0, ch.hesitate - shed * (ch.hesitate / rest));
+    const pW = Math.max(0, ch.wrong - shed * (ch.wrong / rest));
     let outcome = 'obey';
     if (!o.force) {
       const r = rng.next();
-      if (r < ch.obey) outcome = 'obey';
-      else if (r < ch.obey + ch.hesitate) outcome = 'hesitate';
-      else if (r < ch.obey + ch.hesitate + ch.wrong) outcome = 'wrong';
+      if (r < obeyP) outcome = 'obey';
+      else if (r < obeyP + pH) outcome = 'hesitate';
+      else if (r < obeyP + pH + pW) outcome = 'wrong';
       else outcome = 'ignore';
     }
     game.noteAsk(asked, outcome === 'obey' || outcome === 'hesitate');
@@ -521,7 +615,7 @@ export function createTraining(rig, opts = {}) {
       confuse(COPY.notInMood(P()), false);
       notify({
         trick: '', asked, sig: o.sig || '', outcome: 'ignore', correct: false,
-        latency: -1, quality: 0, held: 0, taught: false, judged: !!o.judged,
+        latency: -1, quality: 0, held: 0, chain: [], taught: false, judged: !!o.judged,
       });
       return null;
     }
@@ -539,15 +633,21 @@ export function createTraining(rig, opts = {}) {
 
     const chain = chainFor(doing);
     const hesitating = outcome === 'hesitate';
-    const wait = T.latency.base
+    /* `hurry` is the other half of a steadying cue: he is already looking at
+       her, so he starts a little sooner. Floored, never zero — an instant
+       answer would read as a machine rather than as a dog. */
+    const hurry = clamp(Number.isFinite(+o.hurry) ? +o.hurry : 0, 0, 0.5);
+    const wait = Math.max(0.18, T.latency.base
       + (1 - (game.trick(doing).level | 0) / 3) * T.latency.perLevel
       + (1 - game.moodLevel) * T.latency.perLowMood
       + (hesitating ? rng.span(T.latency.hesitate) : 0)
-      + chain.length * T.latency.chain;
+      + chain.length * T.latency.chain
+      - hurry);
 
     const p = beginPerf({
       trick: doing, asked, sig: o.sig || '', judged: !!o.judged,
       hesitated: hesitating, outcome, chain, wait,
+      hold: o.hold,
     });
     if (outcome === 'wrong') {
       /* she is CONFIDENT about it, which is what makes it read as her getting
@@ -849,7 +949,8 @@ export function createTraining(rig, opts = {}) {
     notify({
       trick: id, asked: perf.asked, sig, outcome: perf.outcome,
       correct: perf.correct, latency: perf.latency, quality,
-      held: perf.held, taught: perf.taught, judged: perf.judged,
+      held: perf.held, chain: (perf.chain0 || []).slice(), holdFor: perf.holdFor, holdKept: perf.holdKept,
+      taught: perf.taught, judged: perf.judged,
       confused, boundTo, level: rep.level, reps: rep.reps,
     });
   }
@@ -1294,7 +1395,8 @@ export function createTraining(rig, opts = {}) {
     notify({
       trick: perf.trick, asked: perf.asked, sig: perf.sig, outcome: perf.outcome,
       correct: perf.correct, latency: perf.latency, quality: 0,
-      held: perf.held, taught: perf.taught, judged: perf.judged,
+      held: perf.held, chain: (perf.chain0 || []).slice(), holdFor: perf.holdFor, holdKept: perf.holdKept,
+      taught: perf.taught, judged: perf.judged,
       confused: false, boundTo: '',
     });
   }
@@ -1711,32 +1813,44 @@ export function createTraining(rig, opts = {}) {
        that actually exist rather than a fixed rectangle. */
     const legendH = 16 + rows.length * UI.rowH + 10;
     const legendW = VW - T.pad.inset * 2 - 18;
-    drawPlate(g, x0 - 12, y - 14, legendW, legendH, { ink: C.glyph, fade: a });
+    /* `drawPlate` RETURNS THE PLATE COLOUR so the caller can pass it as `over`
+       and have its own content checked against it exactly — which is what it
+       was documented for and what stage 4 never got round to doing here. The
+       rows kept raw fillText and three hand-rolled font stacks; now the plate
+       is solved AND the ink on it is measured. */
+    const plateX = x0 - 12;
+    const plate = drawPlate(g, plateX, y - 14, legendW, legendH, { ink: C.glyph, fade: a });
+    /* THE RIGHT COLUMN IS DERIVED FROM THE PLATE, not from the frame. At
+       `VW - pad.inset - 18` its last glyph landed within a unit or two of the
+       plate's right edge — so `over: plate` was very nearly a lie about what
+       was behind the tail of the word. Inset from the plate and it is true by
+       construction. */
+    const rightX = plateX + legendW - 14;
 
-    c.save();
-    c.textBaseline = 'middle';
-    c.globalAlpha = a * 0.88;
-    c.fillStyle = C.glyph;
-    c.textAlign = 'left';
-    c.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    c.fillText(rows.length ? COPY.legendTitle(P()).toUpperCase() : COPY.legendEmpty(P()), x0, y);
+    drawText(g, rows.length ? COPY.legendTitle(P()).toUpperCase() : COPY.legendEmpty(P()), {
+      x: x0, y, anchor: 'free', align: 'left', size: 10, weight: 700,
+      ink: C.glyph, over: plate, maxWidth: legendW - 24, fade: a,
+    });
     y += 16;
     for (const r of rows) {
       drawSignalGlyph(c, x0 + 9, y, 9, r.sig, a * 0.98, false);
-      c.globalAlpha = a * 0.98;
-      c.fillStyle = C.glyph;
-      c.font = '600 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.textAlign = 'left';
-      c.fillText(trickName(r.id), x0 + 26, y);
+      /* two columns that must not collide: the name gets everything up to the
+         confidence word, which is right-aligned and sized for its longest
+         value ("fairly sure · learning") */
+      const wordText = r.word + ' · ' + r.lvl;
+      const wordW = 108;
+      drawText(g, trickName(r.id), {
+        x: x0 + 26, y, anchor: 'free', align: 'left', size: 11.5, weight: 700,
+        ink: C.glyph, over: plate, maxWidth: rightX - (x0 + 26) - wordW - 8, fade: a,
+      });
       /* the confidence word is the quiet half of the row, but "muddled" is the
          tell that he has the wrong idea — so it stays legible, just softer */
-      c.globalAlpha = a * 0.82;
-      c.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.textAlign = 'right';
-      c.fillText(r.word + ' · ' + r.lvl, VW - T.pad.inset - 18, y);
+      drawText(g, wordText, {
+        x: rightX, y, anchor: 'free', align: 'right', size: 10, weight: 600,
+        ink: C.glyph, over: plate, maxWidth: wordW, fade: a * 0.92,
+      });
       y += UI.rowH;
     }
-    c.restore();
   }
 
   /**
@@ -1824,7 +1938,21 @@ export function createTraining(rig, opts = {}) {
      * @param o  { judged:true } suppresses the treat, the hints and the
      *           reward window, so a contest scores the performance itself.
      *           { force:true } skips the obedience roll (demos, tutorials).
-     * @returns the live performance object, or null if she ignored it / is busy
+     *           { boost:0..0.6 } stage 5's steadying cue: shifts probability
+     *             out of the three failure outcomes into obeying, in
+     *             proportion, so only HOW OFTEN he fails moves and not the
+     *             shape of how he fails.
+     *           { hurry:0..0.5 } seconds off the latency roll, floored at
+     *             0.18s so an answer never becomes instant.
+     *           { hold } seconds to hold the pose for, overriding what he can
+     *             manage. A contest passes `min(holdFor(id), asked)` so a
+     *             round never drags when the judge asks for less than he has;
+     *             it must NOT be used to make him hold longer than his
+     *             practice allows, and scoring reads `held / asked` rather
+     *             than `holdKept` for exactly that reason.
+     * @returns the live performance object, or null if he ignored it / is
+     *   busy. **A null is not "nothing happened"** — the ignore case still
+     *   fires `onPerform`, so a judge must subscribe rather than poll this.
      */
     perform(id, o = {}) {
       if (!TRICKS[id]) return null;

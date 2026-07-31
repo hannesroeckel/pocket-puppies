@@ -29,6 +29,7 @@ import BALANCE from '../state/balance.js';
 import { Spring, makeSprings, approach } from '../engine/spring.js';
 import { TAU, clamp, lerp, smooth, hump, plateau, ell, rgba } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
+import { drawText } from '../ui/text.js';
 import { drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawDropRing, PC } from '../scenes/props.js';
 
 const C = BALANCE.care;
@@ -1262,17 +1263,19 @@ export function createCare(rig, opts = {}) {
     c.stroke();
     c.restore();
 
-    /* the hint: one quiet line, never a checklist */
+    /* THE HINT: one quiet line, never a checklist.
+       Routed through ui/text.js in stage 5. It was bare cream over whatever the
+       room happened to have behind it, with a drop shadow standing in for a
+       contrast guarantee — the identical defect to the hud's hint line, and the
+       exact failure that helper exists to make impossible. The 0.82 style alpha
+       is gone too: the guarantee is defined at full opacity, and the fade-in is
+       a transition. */
     if (hint) {
-      c.save();
-      const a = clamp(w, 0, 1) * clamp(hintT / 0.5, 0, 1) * 0.82;
-      c.globalAlpha = a;
-      c.fillStyle = '#fff0d4';
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.font = '500 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      c.shadowColor = 'rgba(48,24,12,0.65)'; c.shadowBlur = 6; c.shadowOffsetY = 1;
-      c.fillText(hint, VW / 2, BALANCE.ui.care.hintY);
-      c.restore();
+      drawText(g, hint, {
+        x: VW / 2, y: BALANCE.ui.care.hintY, anchor: 'top',
+        size: 12.5, weight: 600,
+        fade: clamp(w, 0, 1) * clamp(hintT / 0.5, 0, 1),
+      });
     }
   }
 
