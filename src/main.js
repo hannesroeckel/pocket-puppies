@@ -18,8 +18,23 @@ import { applyElapsed, timeOfDay } from './state/time.js';
 import { createRoomScene } from './scenes/room.js';
 import { resolveDims, stance, headRoom } from './dog/rig.js';
 import { BOWL_BASE, BOWL_WELL } from './scenes/props.js';
+import { BREED_IDS } from './dog/breeds.js';
 
 const V = BALANCE.view;
+
+/* ---- review affordance -------------------------------------------------
+   `?breed=<id>` renders any breed for side-by-side comparison, and
+   `?preview` (implied by ?breed) makes persistence a NO-OP for the session.
+   A reviewer poking at breeds must never be able to overwrite the real dog,
+   so the preview save path is disabled rather than merely discouraged.
+   ---------------------------------------------------------------------- */
+function readQuery() {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch (e) { return { breed: '', preview: false, bad: '' }; }
+  const raw = (q.get('breed') || '').trim().toLowerCase();
+  const ok = raw && BREED_IDS.indexOf(raw) >= 0;
+  return { breed: ok ? raw : '', bad: raw && !ok ? raw : '', preview: q.has('preview') || !!raw };
+}
 
 /* ---- canvas + view ---------------------------------------------------- */
 const canvas = document.getElementById('c');
@@ -206,11 +221,23 @@ function createPWA({ flush }) {
 async function boot() {
   resize();
 
+  const qs = readQuery();
   const loaded = load();
   const fresh = !loaded;
-  const state = loaded || newState(Date.now(), { rng });
+  const state = loaded || newState(Date.now(), { rng, breedId: qs.breed || undefined });
 
-  const saver = createSaver(() => state);
+  /* swap the breed on the live dog, without persisting it */
+  if (qs.breed) {
+    for (const d of state.dogs) d.breedId = qs.breed;
+    if (state.unlocks && state.unlocks.breeds && state.unlocks.breeds.indexOf(qs.breed) < 0) {
+      state.unlocks.breeds.push(qs.breed);
+    }
+  }
+
+  /* In preview the saver is inert: same interface, no writes. */
+  const saver = qs.preview
+    ? { schedule() {}, flush() {}, destroy() {}, writes: 0, pending: false }
+    : createSaver(() => state);
   const game = createGame(state, { onChange: () => saver.schedule() });
 
   /* elapsed-time decay runs BEFORE the first frame */
@@ -334,8 +361,11 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 8,
+    version: 9,
     app, loop, view, saver, BALANCE, pwa,
+    /* what ?breed= resolved to; `bad` is a rejected id (getBreed would have
+       silently fallen back to a Shiba and hidden the typo) */
+    query: qs, breeds: BREED_IDS,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
     get elapsed() { return elapsed; },

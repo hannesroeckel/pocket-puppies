@@ -182,6 +182,15 @@ export function derivePalette(p) {
     blush: p.blush,
     pad: p.pad,
   };
+  /* The MUZZLE ramp is named separately from the cream ramp, defaulting to it.
+     Most breeds have a pale muzzle, but a salt-and-pepper schnauzer has a DARK
+     facial mask with pale furnishings sitting on top of it, and that contrast
+     is the most recognisable thing about the colour. A breed overrides these
+     three via `palette.extra`; omitting them reproduces the old behaviour
+     exactly. */
+  out.muzHi = out.creamMid;
+  out.muzMid = out.cream;
+  out.muzSh = out.creamSh;
   if (p.extra) Object.assign(out, p.extra);
   return out;
 }

@@ -36,12 +36,21 @@ export const BALANCE = {
   },
 
   /* ---- the gift puppy ------------------------------------------------
-     She arrives UNNAMED — the naming moment is the emotional centre of
-     first launch (SCOPE.md stage 6). Breed and sex are not yet confirmed
-     by the human, so they live here as a ONE-LINE change.
+     The puppy arrives UNNAMED — the naming moment is the emotional centre
+     of first launch (SCOPE.md stage 6).
+     CONFIRMED by the human: the gift puppy is a male SCHNOODLE. He is the
+     dog she meets on first launch and names, so he is the hero asset — the
+     beard, moustache and eyebrows in dog/breeds.js get the polish budget.
+     The cockapoo is the second dog, offered later via the kennel.
+     NOTE: feminine copy is still hardcoded in several strings across
+     care.js / room.js / hud.js / game.js. That pronoun sweep is tracked
+     separately; nothing added for these breeds assumes a gender.
      ------------------------------------------------------------------- */
   gift: {
-    breedId: 'shiba',
+    /* THE GIFT PUPPY. Her dream breed — a warm auburn schnoodle. Was 'shiba'
+       only while the breed art lived on a branch; the Shiba stays in the game
+       as the reference breed the renderer was built against. */
+    breedId: 'schnoodle',
     /* CONFIRMED BY THE HUMAN: the gift puppy is male. Pronouns are resolved
        per-dog at runtime from this (state/game.js `game.pron`) — never
        hardcoded in copy, because a second dog may not be male. */
@@ -1624,6 +1633,68 @@ export const BALANCE = {
     eyeLead: { shiftX: 0.26, shiftY: 0.19, catchlight: 0.55, brow: 0.30 },
     /* ear angular-velocity kicks measured from the head's REAL per-frame rotation */
     earKick: { lateral: 0.0022, rotation: 0.06, vertical: 0.0011, clamp: 0.5, gain: 46 },
+    /* ---- hanging-ear spring chains (declarative, keyed by breed.ear) ----
+       A prick ear is one rigid triangle and needs no chain. A HANGING ear is
+       the best secondary-motion opportunity on the whole animal: it has
+       weight, it lags, it swings past the head and comes back. So a floppy
+       ear is a spring chain exactly like the tail — each joint inherits the
+       previous joint's deviation — driven by the SAME `earL`/`earR`/`earBack`
+       springs everything already kicks. That is why every existing clip,
+       petting response and the reunion get floppy motion for free.
+
+         n          joints in the chain
+         k / d      per-joint stiffness / damping ([root, rest])
+         inherit    how much of joint i-1's deviation joint i picks up
+         waveLag    phase lag of the driving swing down the chain
+         hang       RELATIVE resting angle per joint, in the canonical ear
+                    frame where +x is outward from the skull and +y is down.
+                    Cumulative sum = the hanging curve.
+         swing      how much of the earL/earR spring the root joint takes
+         backSweep  how far `earBack` sweeps the whole ear up and off the cheek
+         flop       extra tip deviation from a big MEASURED head shake
+         spread     base offset outward, x ear half-width
+       ------------------------------------------------------------------- */
+    earChain: {
+      /* A LONG SPANIEL EAR. It hangs FLAT AND CLOSE against the cheek — a
+         cockapoo ear standing away from the head like a running spaniel is a
+         named amateur tell — so the rest curve is very nearly vertical, with
+         only a slight outward set at the attachment. */
+      floppy: {
+        n: 5, k: [128, 152], d: [12.5, 11.2], inherit: 0.42, waveLag: 0.34,
+        hang: [1.26, 0.11, 0.07, 0.04, 0.03], swing: 0.95, backSweep: 0.52,
+        flop: 0.30,
+      },
+      /* A SEMI-FLOPPED DOODLE EAR: it leaves the skull at a slant, KNUCKLES
+         over, and hangs down beside the face.
+         `hang` is a chain of RELATIVE angles in a frame where 0 is straight
+         outward and +pi/2 is straight down, so the cumulative angle is what you
+         actually see. The previous table read [-0.40, 1.52, 0.30, 0.18] — the
+         root segment ran at -23 DEGREES, i.e. up and outward, for its whole
+         length before anything folded. Rendered, that put a hard straight edge
+         out to +15 units of x while still rising, and the pair came back as two
+         angular flaps sticking out sideways like leaves. It was authored as "a
+         lifted cartilaginous base", which is a correct description of an adult
+         button ear and is not what a young doodle wears.
+         Now: root at 40 degrees (out and already descending), a firm knuckle to
+         93 degrees at the first joint, then hanging down and drifting a couple of
+         degrees inward so the leather lies along the cheek and FRAMES the face.
+         The bend at the base is what still reads as semi-flopped rather than as
+         the Cockapoo's straight vertical curtain. */
+      /* AND THE FOLD IS SPREAD OVER FIVE JOINTS, NOT CONCENTRATED IN ONE.
+         With n=4 and the bend all at the first joint, the ribbon renderer had
+         only four segments to describe a 55-degree turn, so it drew two long
+         straight facets meeting at a corner — which is precisely the "angular
+         flap" read, and no amount of moving the anchor fixes a shape that has a
+         visible crease in it. Five shorter segments turning ~25 degrees each
+         describe the same total fold as a CURVE. (The Cockapoo gets away with
+         n=5 and near-zero relative angles because a straight hang needs no
+         segments to be smooth; a folded one does.) */
+      semi: {
+        n: 5, k: [186, 138], d: [14.0, 11.0], inherit: 0.34, waveLag: 0.28,
+        hang: [0.48, 0.72, 0.34, 0.16, 0.10], swing: 0.62, backSweep: 0.40,
+        flop: 0.24,
+      },
+    },
     /* idle weight shift (organic noise, not a loop) */
     wobble: { rate1: 0.24, rate2: 0.17, y: 0.8, x: 1.4, rot: 0.008 },
     gazeDrift: { yawRate: 0.33, yawAmp: 0.14, pitchRate: 0.29, pitchAmp: 0.10, tiltRate: 0.21, tiltAmp: 0.035 },
