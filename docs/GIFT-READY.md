@@ -27,10 +27,10 @@ Status legend: ✅ done · 🔧 in progress · ⬜ not started
 |---|---|---|
 | 2.1 | The Schnoodle's face reads as *pleased to see you* — not sad, sly, or stuck-together | 🔧 |
 | 2.2 | 60fps on her actual phone, including after 10 minutes of play (thermal throttling untested) | ⬜ |
-| 2.3 | Nothing in the nav leads to a "coming soon" stub | ⬜ |
+| 2.3 | Nothing in the nav leads to a "coming soon" stub | ✅ Shop was the last one; 8 pills, 0 unavailable, and the toast line is gone (§17.6) |
 | 2.4 | A first session with no instructions is obvious — petting discoverable without a tutorial | ⬜ |
 | 2.5 | Dark mode doesn't wash anything out (her phone is in dark mode) | partial |
-| 2.6 | The Cockapoo is reachable — a real thing to save for, not a locked door | ⬜ |
+| 2.6 | The Cockapoo is reachable — a real thing to save for, not a locked door | ✅ 400 care points, day 2–3 of attentive play, adopted through a milestone beat, and 10M coins still cannot reach her. 🔧 she renders as the fallback breed until the breed branch lands (§17.7) |
 
 ## 3. Explicitly NOT required for the gift
 
@@ -109,3 +109,34 @@ and the head has also already sunk into the torso for ~75% of those animations. 
 measured frame by frame, and handed over with the specific trap that will catch the next
 attempt — ARCHITECTURE §16.9. It belongs in §2 (quality bar) rather than §1: it looks wrong,
 but it cannot lose her anything.
+
+---
+
+## 7. Stage 6 update — 2026-08-03
+
+**The floating bowl is fixed, and 2.3 and 2.6 are closed.** Detail in `docs/ARCHITECTURE.md` §17.
+
+- **The bowl.** He now folds his front end down — shoulders and chest first, neck and muzzle
+  second — and eats from a bowl standing on the rug between his front paws. Both failure modes
+  are asserted **on every frame of the whole animation**, not sampled: the bowl's base is on the
+  floor on 805/805 feed and 856/856 water frames (gap 0.00), and the head sinks through the belly
+  on **0** frames, down from 184/247 and 164/243. The head-drop is now a share of each dog's own
+  head-to-belly room rather than a count of pixels measured on the Shiba, so it holds for breeds
+  nobody has drawn yet — checked against eight synthetic proportion distortions, 9/9 pass.
+- **2.3.** The Shop was the only "coming soon" left, and it is a real surface now. The nav has
+  eight pills, none unavailable, and `navAction`'s toast line has been replaced with a silent
+  programmer backstop — nothing a player can reach promises a feature.
+- **2.6.** The Cockapoo costs **400 care points and no coins**, reachable on day 2–3 of attentive
+  play. Verified that 10,000,000 coins unlocks nothing, cannot adopt her, and cannot buy any row
+  in the unlocks table; that buying an object and giving a treat both move **zero** care points;
+  and that adopting spends nothing at all. Adopting runs a short beat and then hands her to the
+  room, which opens the naming beat by itself.
+- **2.5 (dark mode)** re-checked: the full per-frame bowl gate and the whole stage-6 screenshot
+  pass were run in dark mode, in light mode and under `prefers-reduced-motion`, with identical
+  results and no errors. The earned blue rug is deliberately the cooler of the two, because the
+  warm rug is the brightest thing on screen at night.
+
+**Still open:** **1.1** (the Schnoodle — the breed branch), **1.7** (the real-phone pass, which
+1.4 and 2.2 depend on), **2.1**, **2.2**, **2.4**. And one honest gap inside 2.6: the Cockapoo is
+reachable, adoptable and correct in the save, but until the breed data lands she renders with the
+Shiba's silhouette, so the two dogs currently look alike.

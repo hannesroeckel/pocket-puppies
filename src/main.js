@@ -16,6 +16,8 @@ import { createGame, newState } from './state/game.js';
 import { load, createSaver, requestPersistence, isStandalone, exportSave, importSave, writeNow, clear as clearSave } from './state/save.js';
 import { applyElapsed, timeOfDay } from './state/time.js';
 import { createRoomScene } from './scenes/room.js';
+import { resolveDims, stance, headRoom } from './dog/rig.js';
+import { BOWL_BASE, BOWL_WELL } from './scenes/props.js';
 
 const V = BALANCE.view;
 
@@ -332,7 +334,7 @@ async function boot() {
      Deterministic drivers on purpose: animation is verified by STEPPING
      the sim, never by sleeping and hoping. */
   window.__pp = {
-    version: 7,
+    version: 8,
     app, loop, view, saver, BALANCE, pwa,
     get reduced() { return reduced; },
     get standalone() { return standalone; },
@@ -1087,6 +1089,99 @@ async function boot() {
     awardCare: (kind) => game.awardCare(kind),
     isUnlocked: (id) => game.isUnlocked(id),
     careUnlocks: () => game.careUnlocks(),
+
+    /* ---- stage 6 drivers: SHOP + KENNEL --------------------------------
+       The separation of the two currencies is the strongest structural idea
+       in the design and it is now the first thing with code that could break
+       it, so it gets the most drivers: everything below either moves ONE
+       currency or reads what the other would allow, and nothing converts. */
+    shop: () => (loop.scene.debug && loop.scene.debug.shop) || null,
+    kennel: () => (loop.scene.debug && loop.scene.debug.kennel) || null,
+    openShop() { const r = loop.scene.openShop && loop.scene.openShop(); loop.stepFixed(1 / 60, 6); return r; },
+    openKennel() { const r = loop.scene.openKennel && loop.scene.openKennel(); loop.stepFixed(1 / 60, 6); return r; },
+    /* buy through the MUTATOR, so a test exercises the same refusal path the
+       shop surface does rather than a parallel one */
+    buy: (id) => game.buyItem(id),
+    stock: () => game.shopStock(),
+    owned: (id) => game.ownedCount(id),
+    giveTreat: (id) => game.giveTreat(id),
+    wearable: () => game.wearable(),
+    equipWear: (id) => game.equipWear(id),
+    worn: () => game.worn,
+    hasTool: (id) => game.hasTool(id),
+    roster: () => game.roster(),
+    /* ---- THE BREED-INDEPENDENCE PROOF ----------------------------------
+       The eating pose was tuned by looking at the Shiba, which is the only
+       breed in this tree. Three are landing that differ in muzzle length, ear
+       type and body mass, so "it will still work" has to be checked rather
+       than asserted. This runs `dog/care.js`'s solve — the same arithmetic,
+       not a copy — against arbitrary proportions and reports whether the two
+       invariants survive:
+         A  the bowl's base lands exactly on the floor the rig reports
+         B  the head's drop stays inside that dog's own head-to-belly room
+       Both are true BY CONSTRUCTION, which is the point: the solve cannot
+       express a floating bowl or a sunken head. This is how we find out if
+       that is really so for proportions nobody has seen yet. */
+    solveFor(proportions) {
+      const C = BALANCE.care, S = C.stoop, ST = C.stage;
+      const dims = resolveDims({ proportions });
+      const posture = { sit: S.sit, down: S.down, squash: S.squash, pitch: C.headPitch };
+      const bob = Math.max(C.feed.bobDepth, C.water.bobDepth) * C.bobPeak;
+      /* the budget, measured in the crouch it is spent in — see care.js */
+      const crouched = stance(dims, { ...posture, headLift: 0 });
+      const room = crouched.bodyBottom - crouched.headBottom;
+      const standingRoom = headRoom(dims);
+      const maxDrop = room * C.headMaxShare;
+      const drop = Math.max(0, Math.min(room * C.headDownShare, maxDrop));
+      /* what the deepest bite ACTUALLY reaches, after applyBowl's clamp */
+      const deepest = Math.min(drop + bob, maxDrop);
+      const stand = stance(dims, {});
+      const eat = stance(dims, { ...posture, headLift: -drop });
+      const eatY = BALANCE.rig.place.y + S.fwd;
+      const eatS = BALANCE.rig.place.scale * (1 + S.near);
+      const muzBottomV = eatY + (eat.muzY + proportions.muzzleH / 2) * eatS;
+      const floorV = BALANCE.rig.place.y + stand.pawSole * BALANCE.rig.place.scale;
+      const wellV = muzBottomV - ST.dipInto;
+      const span = BOWL_BASE - BOWL_WELL;
+      const range = ST.scaleRange;
+      const raw = (floorV - wellV) / span;
+      const scale = Math.min(range[1], Math.max(range[0], raw));
+      const targetY = floorV - BOWL_BASE * scale;
+      /* the two invariants, restated as measurements */
+      const baseV = targetY + BOWL_BASE * scale;
+      const chestBelowChinAtRest = (eat.bodyBottom - eat.headBottom) * eatS;
+      const chestBelowChinAtBob =
+        (eat.bodyBottom - (eat.headBottom + (deepest - drop))) * eatS;
+      return {
+        room: +room.toFixed(2), drop: +drop.toFixed(2),
+        maxDrop: +maxDrop.toFixed(2), deepest: +deepest.toFixed(2),
+        share: +(drop / room).toFixed(3),
+        floorV: +floorV.toFixed(2), targetY: +targetY.toFixed(2),
+        baseV: +baseV.toFixed(2), gap: +(baseV - floorV).toFixed(4),
+        scale: +scale.toFixed(4), scaleClamped: raw !== scale,
+        rawScale: +raw.toFixed(4),
+        muzBottomV: +muzBottomV.toFixed(2), wellV: +(floorV - span * scale).toFixed(2),
+        chestBelowChinAtRest: +chestBelowChinAtRest.toFixed(2),
+        chestBelowChinAtBob: +chestBelowChinAtBob.toFixed(2),
+        muzIntoBowl: +(muzBottomV - (floorV - span * scale)).toFixed(2),
+      };
+    },
+    breedProportions: (id) => {
+      const b = window.__ppBreeds && window.__ppBreeds[id];
+      return b ? b.proportions : null;
+    },
+    adoptCheck: () => game.adoptCheck(),
+    adopt: (now) => game.adoptDog(now === undefined ? Date.now() : now),
+    switchDog: (id) => game.switchDog(id),
+    /* tap a surface for real, as a pointer, so the hit tests are exercised */
+    tapAt(x, y) {
+      const sc = loop.scene;
+      sc.pointer(app, { type: 'down', x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+      loop.stepFixed(1 / 60, 2);
+      sc.pointer(app, { type: 'up', x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+      loop.stepFixed(1 / 60, 2);
+      return loop.scene.debug;
+    },
     /** set the ladder class directly, to photograph or measure one */
     setClass(i) {
       const r = game.contest;

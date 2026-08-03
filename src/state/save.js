@@ -55,6 +55,13 @@ function normVoice(raw) {
    save reaches SCHEMA_VERSION. A missing key must always be filled in here
    rather than defended against at every read site.
    --------------------------------------------------------------------- */
+/* every id the collar slot may legally hold: the earned ones and the bought
+   ones, from the two tables that define them. Used by MIGRATIONS[6]. */
+const WEARABLE_IDS = new Set([
+  ...BALANCE.economy.unlocks.filter((u) => u.kind === 'wear').map((u) => u.id),
+  ...BALANCE.economy.shop.items.filter((i) => i.kind === 'wear').map((i) => i.id),
+]);
+
 export const MIGRATIONS = {
   /* ---- v1 -> v2 : stage 2 (care + bonding) --------------------------
      Adds the coat model (per-region dirt + gloss) and the slow-axis bond
@@ -234,6 +241,76 @@ export const MIGRATIONS = {
     delete s.contests.agility;
     contestState(s, Date.now());
     s.v = 5;
+    return s;
+  },
+
+  /* ---- v5 -> v6 : stage 6 (shop + kennel) ----------------------------
+     THE STATE SHAPE DID NOT GROW. `inventory.food` / `.care` / `.accessories`,
+     `unlocks.items` / `.breeds`, `dogs[]`, `activeDogId` and `dog.wear` were
+     all put there by stage 1 and have been merged forward ever since. What
+     changed is that stage 6 is the first code that WRITES to them, and a
+     reader that only ever read them tolerated types a writer cannot.
+
+     `inv.food[id] = n` against a string does nothing and reports nothing. So
+     the bump exists to make the types true on disk before the shop touches
+     them, rather than to add a field:
+
+       1. the three inventory containers are coerced to their real types, and
+          anything unrecognisable is replaced rather than repaired — an
+          inventory nobody can parse is not a save worth rescuing, and losing
+          `{}` costs nothing;
+       2. `unlocks.items` / `.breeds` likewise, and the ACTIVE dog's breed is
+          guaranteed to be in `unlocks.breeds` (a save could otherwise say she
+          owns a dog of a breed she has not unlocked, which the kennel would
+          then offer to unlock for her);
+       3. every dog gets a `wear` object, because `equipWear` writes
+          `wear.collar` and stage 1 only guaranteed `wear` on dogs it made;
+       4. TWO ROWS LEAVE `BALANCE.economy.unlocks` (`bedBasket`,
+          `roomSeaside`) and nothing has to be done about it — unlocks are
+          DERIVED from `carePoints` on every read and were never stored. That
+          is worth saying out loud: it is why trimming the table cannot cost
+          anybody anything they had earned.
+
+     Care points, coins, the bond, names, tricks and voices are not touched. */
+  6: (s) => {
+    const inv = (s.inventory && typeof s.inventory === 'object' && !Array.isArray(s.inventory))
+      ? s.inventory : (s.inventory = {});
+    if (!inv.food || typeof inv.food !== 'object' || Array.isArray(inv.food)) inv.food = {};
+    if (!inv.care || typeof inv.care !== 'object' || Array.isArray(inv.care)) inv.care = {};
+    if (!Array.isArray(inv.accessories)) inv.accessories = [];
+    inv.accessories = inv.accessories.filter((x) => typeof x === 'string' && x);
+    if (!Array.isArray(inv.toys) || !inv.toys.length) inv.toys = ['ball'];
+    /* counts are integers, and a negative or NaN count is zero */
+    for (const bag of [inv.food, inv.care]) {
+      for (const k of Object.keys(bag)) {
+        const n = Math.floor(+bag[k]);
+        if (!Number.isFinite(n) || n <= 0) delete bag[k];
+        else bag[k] = n;
+      }
+    }
+
+    if (!s.unlocks || typeof s.unlocks !== 'object' || Array.isArray(s.unlocks)) s.unlocks = {};
+    for (const k of ['breeds', 'items', 'rooms']) {
+      if (!Array.isArray(s.unlocks[k])) s.unlocks[k] = [];
+      s.unlocks[k] = s.unlocks[k].filter((x) => typeof x === 'string' && x);
+    }
+    if (!s.unlocks.rooms.length) s.unlocks.rooms = ['room'];
+
+    const dogs = Array.isArray(s.dogs) ? s.dogs : (s.dogs = []);
+    for (const d of dogs) {
+      if (!d || typeof d !== 'object') continue;
+      if (!d.wear || typeof d.wear !== 'object' || Array.isArray(d.wear)) d.wear = { collar: null, accessory: null };
+      /* A LEGACY COLLAR ID IS DROPPED, not kept. Stage 1 wrote `collar: 'red'`
+         into `wear` and nothing ever read it, so the string was free to mean
+         anything; stage 6 gives that slot real ids and a real palette, and a
+         value outside `BALANCE.ui.wear` would draw as the fallback colour —
+         i.e. she would appear to be wearing a red collar she had never
+         earned, which is exactly the promise the 90-point unlock makes. */
+      if (typeof d.wear.collar !== 'string' || !WEARABLE_IDS.has(d.wear.collar)) d.wear.collar = null;
+      if (typeof d.breedId === 'string' && d.breedId
+          && s.unlocks.breeds.indexOf(d.breedId) < 0) s.unlocks.breeds.push(d.breedId);
+    }
+    s.v = 6;
     return s;
   },
 };

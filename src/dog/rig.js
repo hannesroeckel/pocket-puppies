@@ -69,6 +69,76 @@ export function resolveDims(breed) {
   };
 }
 
+/* ==========================================================================
+   STANCE — where a posture PUTS things, for a rig that does not exist yet.
+
+   `rig.update()` resolves the live pose from springs. This resolves the same
+   quantities from plain numbers, so a caller can ask "if he sat down this far
+   and dropped his head that far, where would his muzzle be?" WITHOUT running
+   a frame, and — the point — without knowing anything about the breed.
+
+   THIS IS WHAT MAKES THE EATING POSE BREED-INDEPENDENT. Stage 6's first pass
+   put the bowl at y=726 and the head drop at 52 rig units, both measured by
+   looking at the Shiba. Three breeds are landing that differ in muzzle
+   length, ear type and body mass, and every one of those numbers would have
+   been wrong for two of them: a longer muzzle reaches further, a deeper chest
+   moves the belly line the head must stay clear of, and shorter legs move the
+   floor. So `dog/care.js` asks this instead of being told.
+
+   Only the LOAD-BEARING terms are here. Breathing, the fbm weight shift, the
+   shiver and the ear kicks are deliberately absent: they are small, they are
+   noise by design, and a preview that included them would not be a preview.
+   `C:\tmp\pp8\bowl2.py` asserts per frame that what this predicts matches
+   what rig.update actually produced, so the two cannot drift apart quietly.
+
+   All values are RIG-LOCAL, y down, 0 at the floor line.
+   ========================================================================== */
+/** the `sit` channel's body drop, shared with rig.update below */
+const SIT_DROP = 17;
+const SIT_HEAD = 2;
+
+export function stance(dims, ch = {}) {
+  const R2 = BALANCE.rig;
+  const TR = R2.trick;
+  const LG = R2.leg;
+  const sit = +ch.sit || 0;
+  const dn = +ch.down || 0;
+  const sq = +ch.squash || 0;
+  const headLift = +ch.headLift || 0;      // NEGATIVE drops the head, as in the springs
+  const pitch = +ch.pitch || 0;
+
+  const bodyHH = dims.bodyHH * (1 - sq * 0.55) * (1 + sit * 0.03) * (1 - dn * TR.downSquash);
+  const grew = dims.bodyHH - bodyHH;
+  const bodyY = dims.bodyY + sit * SIT_DROP + dn * TR.downDrop + grew;
+  const neckY = bodyY + dims.neckDY - grew * 0.55;
+  const headY = neckY - dims.headOffset - headLift + sit * SIT_HEAD - pitch * 3;
+  const muzY = headY + dims.muzY - pitch * R2.parallax.vMuz;
+  const pawY = -1 + sit * LG.sitLift + dn * LG.downPawY;
+  const pawR = dims.legW * 1.06 * (1 + dn * 0.10);
+  return {
+    bodyY, bodyHH,
+    bodyTop: bodyY - bodyHH,
+    bodyBottom: bodyY + bodyHH,
+    neckY, headY,
+    headTop: headY - dims.headHH,
+    headBottom: headY + dims.headHH,
+    muzY,
+    pawY,
+    pawSole: pawY + 0.6 + pawR * 0.80,
+  };
+}
+
+/**
+ * How far the head's bottom edge may travel before it reaches the belly, on
+ * THIS dog, standing. The whole floating-bowl defect is one number against
+ * this one: stage 7 spent 99 virtual units of a 100-unit budget and then put
+ * the bowl wherever the muzzle had ended up.
+ */
+export function headRoom(dims) {
+  const st = stance(dims, {});
+  return st.bodyBottom - st.headBottom;
+}
+
 export function createRig(opts = {}) {
   const breed = typeof opts.breed === 'string' ? getBreed(opts.breed) : (opts.breed || getBreed('shiba'));
   const reduced = !!opts.reduced;
@@ -134,6 +204,16 @@ export function createRig(opts = {}) {
     tailNodes: [], eyeOpenEff: 1, sit: 0, down: 0, hop: 0, breathe: 0,
     pupilX: 0, pupilY: 0,
     neckX: 0, neckY: 0,
+    /* WHERE THE FLOOR IS, in rig-local units, for a planted front paw:
+         pawY    the paw's own anchor
+         pawSole the bottom edge of the drawn paw — the contact point
+       dog/draw.js used to derive both privately, which meant nothing outside
+       the renderer could say where the floor was. That is why stage 7 could
+       not tell how far its bowl was floating and settled for "about 40"
+       (ARCHITECTURE §16.9): the reference it compared against was the paw's
+       ANCHOR, which is most of a paw above the rug. Anything placing a prop
+       on the floor, and anything verifying one, reads these. */
+    pawY: -1, pawSole: -1,
     lastHX: undefined, lastHY: undefined, lastHR: undefined,
   };
 
@@ -141,6 +221,10 @@ export function createRig(opts = {}) {
 
   const rig = {
     breed, dims, pal, sil, springs: s, pawLift, tail, fur, pose, gaze, reduced,
+    /** this dog's head-to-belly budget, standing. See `headRoom` above. */
+    get headRoom() { return headRoom(dims); },
+    /** where a posture would put things on THIS dog, without running a frame */
+    stance(ch) { return stance(dims, ch); },
     /* placement in virtual space */
     x: R.place.x, y: R.place.y, s: R.place.scale,
     /* Non-uniform vertical scale, default 1. This is how the frontal rig fakes
@@ -161,6 +245,10 @@ export function createRig(opts = {}) {
          affection  the SLOW bond, kept for anything that wants the long game
        Stage 1 only had `affection` and used it for both. */
     drive: { petLevel: 0, mood: 0, affection: 0, wiggle: 0, pant: 0 },
+    /* WHAT HE IS WEARING, written per frame by scenes/room.js from
+       `game.worn`. A drive, like `drive.neck`: the renderer is told, it does
+       not go and ask, so dog/draw.js still imports nothing above itself. */
+    wear: '',
     /* motion multipliers for prefers-reduced-motion */
     mo: {
       parallax: reduced ? RM.parallaxScale : 1,
@@ -293,7 +381,7 @@ export function createRig(opts = {}) {
       pose.sit = sit; pose.down = dn; pose.hop = hp;
       pose.bodyHH = dims.bodyHH * (1 - sq * 0.55) * (1 + sit * 0.03) * (1 - dn * TR.downSquash);
       pose.bodyHW = dims.bodyHW * (1 + sq * 0.34) * (1 + sit * 0.06) * (1 + dn * TR.downWiden);
-      pose.bodyY = dims.bodyY + sit * 17 + melt * 7 - s.lift.x - s.perk.x * 3
+      pose.bodyY = dims.bodyY + sit * SIT_DROP + melt * 7 - s.lift.x - s.perk.x * 3
         + dn * TR.downDrop - hp * TR.hopHeight
         + (dims.bodyHH - pose.bodyHH) + wob * W.y;
       pose.bodyX = s.sway.x + wob2 * W.x;
@@ -313,6 +401,17 @@ export function createRig(opts = {}) {
         pose.bodyRot += Math.sin(rig.t * R.shiverRate[1]) * R.shiverRot * sv;
       }
 
+      /* --- the floor line (see the note on pose.pawY) ---
+             The planted front paw, i.e. with no paw lift: a lifted paw is not
+             touching anything, so it is not where the floor is. `sitLift` and
+             `downPawY` both push the paw NEARER the camera and therefore lower
+             (§12.6), which is real floor travel and not a paw sinking. The
+             sole offset mirrors dog/draw.js's paw ellipse exactly. */
+      const LGf = R.leg;
+      pose.pawY = -1 + sit * LGf.sitLift + dn * LGf.downPawY - hp * TR.hopHeight * LGf.hopPawShare;
+      const pawR = dims.legW * 1.06 * (1 + dn * 0.10);
+      pose.pawSole = pose.pawY + 0.6 + pawR * 0.80;
+
       /* --- head placement (follows the body, with lag) --- */
       pose.yaw = clamp(s.yaw.x, -R.yawClamp, R.yawClamp);
       pose.pitch = clamp(s.pitch.x, -R.pitchClamp, R.pitchClamp);
@@ -323,7 +422,7 @@ export function createRig(opts = {}) {
          care action drives the head right down into a bowl (rig.drive.neck) */
       pose.neckX = neckX; pose.neckY = neckY;
       pose.headX = neckX + pose.yaw * 7 + s.headPush.x * 6;
-      pose.headY = neckY - dims.headOffset - s.headLift.x + sit * 2 + melt * 5
+      pose.headY = neckY - dims.headOffset - s.headLift.x + sit * SIT_HEAD + melt * 5
         - pose.pitch * 3 + breathe * 0.8 - s.perk.x * 4;
       pose.headRot = s.tilt.x + pose.bodyRot * 0.55 + pose.yaw * 0.05;
 

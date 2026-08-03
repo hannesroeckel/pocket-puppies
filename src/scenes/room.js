@@ -33,6 +33,8 @@ import { createToasts } from '../ui/toast.js';
 import { createSheet } from '../ui/sheet.js';
 import { createNaming } from '../ui/naming.js';
 import { createInstall } from '../ui/install.js';
+import { createShop } from '../ui/shop.js';
+import { createKennel } from '../ui/kennel.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
@@ -212,30 +214,47 @@ function drawPouf(c) {
   c.restore();
 }
 
-function drawRug(c) {
+/* THE RUG'S TWO PALETTES. `rugBlue` is a CARE unlock (220 points) and this is
+   what it buys — the one reward in the table that changes the room itself.
+   Coins cannot reach it: nothing in the shop names `rugBlue`, and
+   `game.buyItem` refuses any id that appears in the unlocks table. */
+const RUG = {
+  warm: { edge: '#e9d3ac', a: '#d97a62', mid: '#cf6e58', b: '#b85a48',
+          band: '#f3e0c2', ring: '#8fa89c', in1: '#cf7460', in2: '#bd5b4a',
+          heart: '#e2937c', stitch: 'rgba(253,244,226,0.55)' },
+  /* cooler, softer, and DARKER-MODE FRIENDLY: the warm rug is the brightest
+     thing on screen at night, which is why the blue one is the reward rather
+     than a second red */
+  blue: { edge: '#cfd9d2', a: '#6f93a8', mid: '#5d8399', b: '#4a6c80',
+          band: '#e6ecdf', ring: '#8fa89c', in1: '#6d94a4', in2: '#4f7385',
+          heart: '#8fb3bd', stitch: 'rgba(240,248,244,0.55)' },
+};
+
+function drawRug(c, pal) {
+  const R = pal || RUG.warm;
   const cx = 192, cy = 698, rx = 196, ry = 84;
   c.save();
   c.fillStyle = 'rgba(104,58,32,0.13)'; ell(c, cx + 3, cy + 7, rx * 1.01, ry * 1.02); c.fill();
-  c.strokeStyle = '#e9d3ac'; c.lineWidth = 3; c.lineCap = 'round';
+  c.strokeStyle = R.edge; c.lineWidth = 3; c.lineCap = 'round';
   for (let f = 0; f < 30; f++) {
     const a = (f / 30) * TAU;
     const ex = cx + Math.cos(a) * rx, ey = cy + Math.sin(a) * ry;
     c.beginPath(); c.moveTo(ex, ey); c.lineTo(ex + Math.cos(a) * 11, ey + Math.sin(a) * 7); c.stroke();
   }
   const g = c.createLinearGradient(cx - rx, cy - ry, cx + rx, cy + ry);
-  g.addColorStop(0, '#d97a62'); g.addColorStop(0.5, C.rug1); g.addColorStop(1, '#b85a48');
+  g.addColorStop(0, R.a); g.addColorStop(0.5, R.mid); g.addColorStop(1, R.b);
   c.fillStyle = g; ell(c, cx, cy, rx, ry); c.fill();
-  c.fillStyle = C.rug2; ell(c, cx, cy, rx * 0.88, ry * 0.85); c.fill();
-  c.fillStyle = C.rug4; ell(c, cx, cy, rx * 0.80, ry * 0.76); c.fill();
-  c.fillStyle = C.rug2; ell(c, cx, cy, rx * 0.74, ry * 0.70); c.fill();
+  c.fillStyle = R.band; ell(c, cx, cy, rx * 0.88, ry * 0.85); c.fill();
+  c.fillStyle = R.ring; ell(c, cx, cy, rx * 0.80, ry * 0.76); c.fill();
+  c.fillStyle = R.band; ell(c, cx, cy, rx * 0.74, ry * 0.70); c.fill();
   const g2 = c.createLinearGradient(cx - rx, cy - ry, cx + rx, cy + ry);
-  g2.addColorStop(0, '#cf7460'); g2.addColorStop(1, C.rug3);
+  g2.addColorStop(0, R.in1); g2.addColorStop(1, R.in2);
   c.fillStyle = g2; ell(c, cx, cy, rx * 0.64, ry * 0.60); c.fill();
-  c.fillStyle = '#e2937c'; ell(c, cx, cy, rx * 0.30, ry * 0.30); c.fill();
-  c.fillStyle = C.rug2; ell(c, cx, cy, rx * 0.22, ry * 0.22); c.fill();
-  c.fillStyle = C.rug4; ell(c, cx, cy, rx * 0.11, ry * 0.11); c.fill();
+  c.fillStyle = R.heart; ell(c, cx, cy, rx * 0.30, ry * 0.30); c.fill();
+  c.fillStyle = R.band; ell(c, cx, cy, rx * 0.22, ry * 0.22); c.fill();
+  c.fillStyle = R.ring; ell(c, cx, cy, rx * 0.11, ry * 0.11); c.fill();
   c.setLineDash([7, 9]); c.lineWidth = 2.2;
-  c.strokeStyle = 'rgba(253,244,226,0.55)';
+  c.strokeStyle = R.stitch;
   c.beginPath(); c.ellipse(cx, cy, rx * 0.955, ry * 0.94, 0, 0, TAU); c.stroke();
   c.strokeStyle = 'rgba(120,66,42,0.22)';
   c.beginPath(); c.ellipse(cx, cy, rx * 0.70, ry * 0.655, 0, 0, TAU); c.stroke();
@@ -279,6 +298,7 @@ export function createRoomScene() {
   let care = null, toy = null, reunion = null, naming = null;
   let train = null, voice = null, walk = null, contest = null;
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
+  let shop = null, kennel = null;
   let roomCv = null, ovCv = null;
   /* CONTENTED PANTING (research §1.9). Driven off the rig's own `drive.pant`
      channel rather than by a clip, because panting is a STATE he is in, not an
@@ -400,7 +420,19 @@ export function createRoomScene() {
   }
 
   /* ---- baked layers ----------------------------------------------- */
+  /* pronoun-parameterised, like every other line the room says */
+  const rugToast = (P) => `A new rug turned up for ${P.them}`;
+
+  /** which rug is on the floor. A CARE unlock, read from carePoints only. */
+  function rugPalette() {
+    return (app && app.game && app.game.isUnlocked('rugBlue')) ? RUG.blue : RUG.warm;
+  }
+  /* the room art is a prebuilt offscreen canvas, so the rug changing means
+     rebuilding it — once, on the frame the unlock lands, not every frame */
+  let rugShown = '';
+
   function buildRoom(view) {
+    rugShown = (app && app.game && app.game.isUnlocked('rugBlue')) ? 'blue' : 'warm';
     roomRng.reseed(BALANCE.rng.roomSeed);
     roomCv = makeOff(view.cw, view.ch);
     const c = roomCv.getContext('2d');
@@ -489,7 +521,7 @@ export function createRoomScene() {
     c.restore();
     c.restore();
 
-    drawRug(c);
+    drawRug(c, rugPalette());
     drawBone(c, 96, 792, -0.22);
     drawPouf(c);
     /* The bowls and the ball are NOT baked any more: they are the same objects
@@ -573,6 +605,8 @@ export function createRoomScene() {
     if (n.id === 'train') { startTrain(); return; }
     if (n.id === 'walk') { startWalk(); return; }
     if (n.id === 'ring') { startContest(); return; }
+    if (n.id === 'shop') { openShop(); return; }
+    if (n.id === 'dogs') { openKennel(); return; }
     if (n.id === 'play') {
       /* Play is not a scene: the ball is in the room. Point at it and get out
          of the way — flicking it up-screen is the whole interface. */
@@ -585,7 +619,26 @@ export function createRoomScene() {
       toasts.show('Flick the ball up — never sideways');
       return;
     }
-    if (!a.nav.go(n.id)) toasts.show(n.label + ' — coming soon');
+    /* NO "COMING SOON" ANY MORE (GIFT-READY quality item 2.3). Every id in
+       the nav is handled above; `shop` was the last stub and stage 6 built it.
+       This line is now a programmer's backstop for an id nobody wired, not a
+       thing a player can reach — so it says nothing rather than promising a
+       feature. Reaching it is a bug, and a silent one is better than a lie. */
+    if (!a.nav.go(n.id)) blockedToast('');
+  }
+
+  /** open the shop — through the arbiter, never a private `if` */
+  function openShop() {
+    if (sheet.isOpen) sheet.close();
+    const why = shop.toggle();
+    if (why) blockedToast(why);
+  }
+
+  /** open the kennel — same route */
+  function openKennel() {
+    if (sheet.isOpen) sheet.close();
+    const why = kennel.toggle();
+    if (why) blockedToast(why);
   }
 
   /* ---- THE SURFACE ARBITER --------------------------------------------
@@ -632,6 +685,14 @@ export function createRoomScene() {
        is (§14.1): being in the list is what makes the guard work in BOTH
        directions, so care, training, the walk, the trial and the naming beat all
        refuse to open over it without a line being added to any of them. */
+    /* STAGE 6: the shop and the kennel. Both are full surfaces, and both are
+       here rather than behind a private `if` for exactly the reason §14.1
+       gives — being in this list is what makes the guard work in BOTH
+       directions. The kennel's `busy` is checked as well as its `modal`
+       because the adoption beat must survive the panel closing under it: it is
+       the one moment in stage 6 that is a one-shot. */
+    if (kennel && (kennel.modal || kennel.busy)) return 'kennel';
+    if (shop && shop.modal) return 'shop';
     if (install && install.modal) return 'install';
     return '';
   }
@@ -1024,6 +1085,43 @@ export function createRoomScene() {
 
       toasts = createToasts();
       sheet = createSheet({ reduced: app.reduced });
+      shop = createShop({
+        game: app.game, reduced: app.reduced,
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        blocked: (who) => surfaceBlockedFor(who),
+        /* a treat is a real beat: he takes it, and the reward clip stage 3
+           already owns is what "he took it" looks like */
+        onTreat: () => {
+          /* HE TAKES IT. `trick.nom` is the reward clip stage 3 already owns —
+             the chew, the swallow, the pleased look — so a treat looks exactly
+             like the thing a treat is, with no new animation. The hearts and
+             the mood come from the same place training's reward puts them. */
+          idle.cancel(1.4);
+          idle.play('trick.nom');
+          const h = rig.headWorld();
+          const n = app.reduced ? 3 : 6;
+          for (let i = 0; i < n; i++) spawn('heart', h.x + rng.range(-26, 26), h.y + rng.range(-26, 6));
+          rig.blinkNow(1);
+        },
+      });
+      kennel = createKennel({
+        game: app.game, reduced: app.reduced,
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        blocked: (who) => surfaceBlockedFor(who),
+        /* SWAPPING DOGS REMOUNTS THE ROOM. `enter()` builds the rig, the
+           renderer, petting, idle and every care layer from `game.dog`, so a
+           different breed with different needs only actually arrives by going
+           through there. Mutating `activeDogId` under a live scene would leave
+           one dog's rig wearing another dog's state. */
+        onSwitch: (id, d) => {
+          app.nav.go('room', { switched: true, dogId: id });
+        },
+        onAdopted: (id) => {
+          app.nav.go('room', { adopted: true, dogId: id });
+        },
+      });
       hud = createHud(app.game, { hint: 'Stroke the puppy', getTime: () => time });
 
       care = createCare(rig, {
@@ -1172,7 +1270,20 @@ export function createRoomScene() {
            units leaves 47 each, and ui/nav.js draws its labels at a fixed
            size rather than shrinking them. */
         { id: 'ring', label: 'Ring', available: true },
-        { id: 'shop', label: 'Shop', available: app.nav.has('shop') },
+        /* STAGE 6. `available` is now literally `true` rather than
+           `app.nav.has('shop')`: the shop is not a registered SCENE, it is an
+           in-room surface like the ring and the walk, so asking the scene
+           registry about it always answered false and drew it dimmed with a
+           "coming soon" toast behind it. That was quality item 2.3, and this
+           line was half of it. */
+        { id: 'shop', label: 'Shop', available: true },
+        /* the kennel. EIGHT PILLS across 390 virtual units leaves 40.5 each,
+           which is under the 44 tap-target guideline — but ui/nav.js makes the
+           whole band a hit target and gives the gap to the NEAREST pill, so a
+           thumb between two buttons still presses one of them rather than
+           poking the dog. Labelled 'Dogs' because at this width the label has
+           to be short, and because that is what is behind it. */
+        { id: 'dogs', label: 'Dogs', icon: 'dogs', available: true },
         { id: 'settings', label: 'More', icon: 'settings', available: true },
       ], { safeBottom: app.view.safe.bottom / app.view.vs });
 
@@ -1198,7 +1309,13 @@ export function createRoomScene() {
          the first launch is a one-shot moment and the install card waits a long
          time on it, but from the second launch on she has already met him and
          the seven-day storage clock is running, so the wait is short. */
-      app.game.setFlag('launches', (+(app.game.state.flags.launches) || 0) + 1);
+      /* NOT ON A REMOUNT. Swapping dogs and adopting both re-enter this scene,
+         and `ui/install.js` reads this counter to decide how long to wait
+         before asking to be installed — so counting a dog swap as a launch
+         would bring the install card forward for no reason. */
+      if (!(params && (params.switched || params.adopted))) {
+        app.game.setFlag('launches', (+(app.game.state.flags.launches) || 0) + 1);
+      }
 
       /* ---- WAS HE OUT? --------------------------------------------------
          THE "SURVIVES BEING FULLY CLOSED" PATH, and there is only one of it.
@@ -1220,8 +1337,19 @@ export function createRoomScene() {
         /* ---- the reunion ---------------------------------------------- */
         playReunion(el.intensity !== undefined ? el.intensity : 0.5, el.hours || 8);
       } else if (!app.game.isNamed) {
-        /* first launch: she arrives and she has no name yet */
+        /* First launch — OR the Cockapoo's first moment, which is the same
+           beat and deliberately reuses it: she has no name, so she gets named.
+           The kennel does not own the most important thing it causes. */
         openNaming('first');
+      } else if (params && params.switched) {
+        /* a swap between two named dogs. One warm line, pronoun-parameterised
+           from the dog who is now in the room — which is why the copy could
+           not be written with a fixed pronoun (he is a Schnoodle, she is a
+           Cockapoo, and this is the line both of them use). */
+        const P = app.game.pron;
+        toasts.show(`${app.game.dog.name} ${P.is} here`, 2.2);
+        idle.cancel(1.2);
+        rig.blinkNow(2);
       }
       /* if she came back to an unnamed puppy, name it once the greeting lands */
       if (!app.game.isNamed && (reunion.active || walk.active)) pendingNaming = true;
@@ -1244,6 +1372,11 @@ export function createRoomScene() {
       if (voice) voice.abort();
       /* the install card holds a `beforeinstallprompt` listener on `window` */
       if (install) install.destroy();
+      /* the kennel's adoption beat must not straddle a remount: it has already
+         written the dog by the time it hands over, and the room it hands to is
+         the one being built */
+      if (shop) shop.stop();
+      if (kennel) { kennel.stop(); }
     },
 
     resize(a) {
@@ -1253,6 +1386,8 @@ export function createRoomScene() {
       initMotes();
       if (nav) nav.layout(view.safe.bottom / view.vs);
       if (sheet) sheet.setInset(view.safe.bottom / view.vs);
+      if (shop) shop.setInset(view.safe.bottom / view.vs);
+      if (kennel) kennel.setInset(view.safe.bottom / view.vs);
       if (naming) naming.resize(view);
     },
 
@@ -1288,6 +1423,9 @@ export function createRoomScene() {
          back to home on every idle frame, which would fight the spin. Same
          reason the reunion skips it. */
       const mood = game.mood;
+      /* what he is wearing, told to the rig once a frame. A bought or earned
+         collar is only a reward if it is ON him in the room. */
+      rig.wear = game.worn;
       rig.base(mood, dt);
       /* the idle director is skipped while he is OUT: an invisible dog quietly
          playing clips would still spawn particles and call for sounds */
@@ -1309,8 +1447,20 @@ export function createRoomScene() {
          trial is that dog/train.js is doing the work */
       contest.apply(dt, mood);
       /* `toy.apply` rewrites rig.x/y/s back to home every idle frame, which
-         would fight the return's arrival exactly as it fights the spin */
-      if (!reunion.active && !train.busy && !walk.busy && !contest.busy) toy.apply(dt, mood);
+         would fight the return's arrival exactly as it fights the spin.
+
+         `care.active` JOINED THIS LIST IN STAGE 6, and its absence was the
+         defect behind the floating bowl (ARCHITECTURE §16.9). Stages 3, 4 and
+         5 each added themselves here the moment they moved the rig; care never
+         had, so every attempt to lower the dog's body for a floor-level bowl
+         was silently erased on the very frame it was written, and it looked
+         like the pose code simply not working. Whoever ended up moving the
+         bowl up to chest height instead was fighting this line, not geometry.
+         It is `active` rather than `modal` so the stoop's forward lean gets to
+         spring back on the way OUT too — `modal` goes false the moment the
+         action ends, which would snap the placement home mid-return. */
+      if (!reunion.active && !train.busy && !walk.busy && !contest.busy
+          && !care.active) toy.apply(dt, mood);
       reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
@@ -1349,6 +1499,16 @@ export function createRoomScene() {
       updateParts(dt);
       toasts.update(dt);
       sheet.update(dt);
+      shop.update(dt);
+      kennel.update(dt);
+      /* THE REWARD LANDS IN THE WORLD, on the frame she earns it. `rugBlue` is
+         the only unlock that changes the prebuilt room art, so this is the one
+         place that has to notice. */
+      const wantRug = a.game.isUnlocked('rugBlue') ? 'blue' : 'warm';
+      if (roomCv && wantRug !== rugShown) {
+        buildRoom(a.view);
+        toasts.show(rugToast(a.game.pron));
+      }
       /* the install card. Its own `eligible()` is the whole cadence policy, and
          it consults the arbiter, so there is nothing to guard here. */
       install.update(dt, a.view);
@@ -1440,7 +1600,8 @@ export function createRoomScene() {
       train.drawOver(g);
       hud.draw(g, view);
       if (!naming.active && !care.modal && !train.modal && !reunion.active
-        && !walk.modal && !contest.modal && !install.modal) nav.draw(g);
+        && !walk.modal && !contest.modal && !install.modal
+        && !shop.modal && !kennel.modal) nav.draw(g);
       toasts.draw(g, nav.y - 22);
       /* the map is a full-surface overlay, so it goes over the nav — and the
          absence panel and the find card go over everything but the sheet */
@@ -1448,6 +1609,10 @@ export function createRoomScene() {
       /* the judge's board, the chips and the result card, likewise */
       contest.drawOver(g);
       sheet.draw(g);
+      /* the shop and the kennel sit ABOVE the sheet and BELOW the install card,
+         which is the same order surfaceOwner() puts them in */
+      shop.draw(g);
+      kennel.draw(g);
       /* the install card sits over the sheet (it is opened FROM the sheet) and
          under the naming beat, which the arbiter already makes mutually
          exclusive — the ordering is belt and braces, not a second guard */
@@ -1473,6 +1638,26 @@ export function createRoomScene() {
         return;
       }
       if (capture === 'install') { capture = ''; if (ev.type !== 'down') return; }
+
+      /* THE KENNEL AND THE SHOP, and they consume EVERYTHING while they are up
+         — including a touch that lands on him. A touch falling through a scrim
+         to the petting field is the defect the ring had to fix (§15.4 defect 1)
+         and the install card had to fix again; here it would also mean petting
+         a dog she cannot see, and during the adoption beat it would mean
+         petting a dog who is not in the room yet. The kennel is first because
+         its beat outranks everything, its own `stop()` refuses while `busy`. */
+      if (kennel.isOpen || kennel.busy) {
+        kennel.pointer(ev);
+        capture = (kennel.isOpen || kennel.busy) ? 'kennel' : '';
+        return;
+      }
+      if (capture === 'kennel') { capture = ''; if (ev.type !== 'down') return; }
+      if (shop.isOpen) {
+        shop.pointer(ev);
+        capture = shop.isOpen ? 'shop' : '';
+        return;
+      }
+      if (capture === 'shop') { capture = ''; if (ev.type !== 'down') return; }
 
       if (ev.type === 'down') {
         if (sheet.isOpen) {
@@ -1656,6 +1841,14 @@ export function createRoomScene() {
           ? [+rig.pose.tailNodes[3].x.toFixed(1), +rig.pose.tailNodes[3].y.toFixed(1)] : null,
         zones: pet.zones.map((q) => ({ id: q.id, kind: q.kind, x: +q.x.toFixed(1), y: +q.y.toFixed(1), r: q.r })),
         scale: rig.s, origin: [rig.x, rig.y],
+        /* ---- stage 6 ---- */
+        shop: shop ? shop.debug : null,
+        kennel: kennel ? kennel.debug : null,
+        wear: rig.wear || '',
+        rug: rugShown,
+        navIds: nav ? nav.items.map((i) => i.id) : [],
+        navUnavailable: nav ? nav.items.filter((i) => i.available === false).map((i) => i.id) : [],
+        owner: surfaceOwner(),
       };
     },
     get rig() { return rig; },
@@ -1671,7 +1864,11 @@ export function createRoomScene() {
     get walk() { return walk; },
     get contest() { return contest; },
     get install() { return install; },
+    get shop() { return shop; },
+    get kennel() { return kennel; },
     /* drivers the verification harness needs; see window.__pp in main.js */
+    openShop() { openShop(); return shop.isOpen; },
+    openKennel() { openKennel(); return kennel.isOpen; },
     startCare(kind) { return startCare(kind); },
     stopCare() { care.stop(); },
     startTrain() { return startTrain(); },

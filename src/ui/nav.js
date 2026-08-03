@@ -60,6 +60,17 @@ const GLYPH = {
     c.lineWidth = r * 0.24;
     c.beginPath(); c.arc(x, y - r * 0.35, r * 0.42, Math.PI, 0); c.stroke();
   },
+  dogs(c, x, y, r) {          // two heads, one behind the other: the kennel
+    c.save();
+    c.globalAlpha = 0.55;
+    c.beginPath(); c.arc(x + r * 0.42, y - r * 0.10, r * 0.52, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(x + r * 0.08, y - r * 0.62, r * 0.20, r * 0.28, -0.35, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(x + r * 0.80, y - r * 0.60, r * 0.20, r * 0.28, 0.35, 0, TAU); c.fill();
+    c.restore();
+    c.beginPath(); c.arc(x - r * 0.34, y + r * 0.16, r * 0.56, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(x - r * 0.72, y - r * 0.42, r * 0.22, r * 0.30, -0.38, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(x + r * 0.04, y - r * 0.42, r * 0.22, r * 0.30, 0.38, 0, TAU); c.fill();
+  },
   settings(c, x, y, r) {      // heart-in-gear-ish: three dots
     for (let i = -1; i <= 1; i++) { c.beginPath(); c.arc(x + i * r * 0.62, y, r * 0.20, 0, TAU); c.fill(); }
   },

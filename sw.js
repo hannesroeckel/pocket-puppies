@@ -55,7 +55,8 @@
    browser see a byte-different `sw.js`, which starts a new install into a new
    cache; leaving it alone while changing a module would serve the module from
    the old cache forever. */
-const VERSION = '7.0.0';
+/* stage 6 added two modules to PRECACHE, so the cache generation moves */
+const VERSION = '8.0.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -110,6 +111,11 @@ const PRECACHE = [
   './src/ui/nav.js',
   './src/ui/routemap.js',
   './src/ui/sheet.js',
+  /* stage 6. Two new modules mean two new lines here, and forgetting them is
+     exactly the failure the note at the fetch handler describes: the game
+     would boot online and 404 the shop and the kennel on a plane. */
+  './src/ui/shop.js',
+  './src/ui/kennel.js',
   './src/ui/text.js',
   './src/ui/toast.js',
   /* the real-device capability probe. Cheap, and it is the thing that will

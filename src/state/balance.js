@@ -246,30 +246,125 @@ export const BALANCE = {
     /* Where the props live, in virtual design space. `bowlHome` / `waterHome`
        are exactly where scenes/room.js draws the resting bowls, so the bowl she
        picks up IS the bowl that was sitting by the wall.
-       `bowlTarget` sits just in front of her paws: near enough to the camera
-       that the bowl rim occludes her muzzle when the head goes down, which is
-       what makes "her head is in the bowl" read on a frontal rig. */
+
+       A PLACED BOWL STANDS ON THE FLOOR, and `bowlTarget`'s y is DERIVED from
+       that rather than typed in — `dog/care.js` computes it as
+           bowlFloorY - BOWL_BASE * placedScale
+       from the offsets `scenes/props.js` publishes. Stage 7 shipped a bowl
+       hanging ~40 virtual units clear of the rug (ARCHITECTURE §16.9) because
+       this y was a literal that nobody could check against anything; now
+       changing `placedScale` moves the bowl to keep its base on the floor, and
+       floating again would take editing `bowlFloorY` on purpose.
+
+       `bowlFloorY` is the floor line at the placed bowl's depth. It is a touch
+       BELOW `rig.place.y` (706) because the bowl sits between and just forward
+       of the front paws, and on this rig nearer the camera means lower (§12.6).
+       `placedScale` is up from stage 7's 1.15 for the same reason: a bowl down
+       there is nearer the lens, and the taller rim it gets is also what lets a
+       muzzle reach the food without the head having to travel to the rug. */
     stage: {
       bowlHome: [66, 626], waterHome: [306, 610],
-      bowlTarget: [178, 644], targetR: 34, snap: 44,
-      bowlScale: 0.86, placedScale: 1.15,
+      /* BOTH OF THESE ARE SOLVED PER DOG, not authored. `dog/care.js`
+         `solveBowl()` writes the answers back here on every care action, so
+         anything reading BALANCE still sees the truth — these literals are
+         only what an unsolved build would show. See `scaleRange` below. */
+      bowlTarget: [178, 700], bowlFloorY: 726, placedScale: 1.42,
+      /* HOW THE SOLVE WORKS, and why there is no y in this file any more.
+           the floor  = where his paws are STANDING, from rig.stance()
+           the scale  = whatever makes the food surface meet his muzzle at the
+                        depth the stoop actually gets it to
+         A Schnoodle with a longer muzzle reaches further and gets a slightly
+         shallower bowl; a heavier dog's belly line moves and the head budget
+         moves with it. Typed numbers could only ever be right for one of the
+         three breeds, and stage 7's were right for none of them. */
+      /* HOW DEEP HIS NOSE GOES INTO THE FOOD, in virtual units. This is the
+         one number in the solve that is about the BOWL rather than the dog,
+         which is why it stays a literal: a muzzle level with the rim reads as
+         sniffing at it, and the rim occluding the lower muzzle is what reads
+         as eating from it (§12.6 — on a frontal rig, occlusion is depth).
+         Tuned by looking at five candidates; 2 was the first guess and made a
+         bowl so shallow it sat under his chin like a saucer. */
+      dipInto: 16,
+      scaleRange: [1.10, 1.95], // a solved scale outside this is a bug, clamped
+      targetR: 34, snap: 44,
+      bowlScale: 0.86,
     },
     /* the dog's gaze follows a dragged prop — this is most of why it feels
        physical rather than like a menu */
     gazeFollow: true,
 
-    /* HOW FAR THE HEAD DROPS to reach a bowl at bowlTarget, in rig units, and
-       how far it pitches over.
+    /* ---- THE EATING STOOP (stage 6; replaces stage 2's head-only reach) ----
 
-       TUNED BY LOOKING, and the first attempt was wrong in an instructive way:
-       dropping the head far enough to reach a bowl standing on the floor in
-       front of her paws (132 units) puts the head group entirely over the body,
-       and the dog reads as a disembodied head on the rug. On a frontal rig the
-       bowl has to come UP to the dog rather than the head going all the way
-       down to the floor: 74 units of drop and a bowl at chest height reads as
-       "her muzzle is in the bowl" and keeps the whole animal in frame. */
-    headDown: 74,
-    headPitch: -0.62,
+       A dog that reaches a bowl on the floor commits its whole front end. The
+       shoulders drop, the chest comes down and forward, the front legs splay,
+       and only THEN does the neck extend so the muzzle gets to the food. Head
+       travel alone cannot cover the distance and stage 2 proved it twice: at
+       132 units the head group ended up entirely over the body (a disembodied
+       head on the rug) and at 74 units it was the same bug, milder, plus a bowl
+       parked at chest height to meet it (ARCHITECTURE §16.9).
+
+       So the BODY is the primary motion. `sit` and `down` are the only two
+       channels that actually move the torso's bottom edge — `squash` cannot,
+       because rig.update compensates it to keep the paws planted — and `down`
+       brings the front-paw splay, the leg bow and the hind tuck along with it,
+       so the crouch costs the renderer nothing new. `fwd` / `near` are the
+       small forward commitment: on this rig nearer the camera is lower and
+       bigger (§12.6), and this is the same trick `rig.trick.call` uses for
+       "he came over".
+
+       MEASURED, not guessed. At rest the head's bottom edge sits 100 virtual
+       units above the belly's, and 74 units of head drop is 99 of them — which
+       is the whole defect in one line. `headDown` is now well inside that
+       budget and the stoop carries the rest. */
+    stoop: {
+      sit: 1.0,          // the haunches go down first
+      down: 0.92,        // ...then the elbows: a deep sphinx, not a flop
+      squash: 0.05,      // the chest spreads a little as it settles
+      fwd: 7,            // rig.y, virtual units nearer the camera
+      near: 0.030,       // rig.s gain to match — depth is scale
+      rise: 0.55,        // how much of it survives the shake-the-drips beat
+    },
+    /* HOW FAR THE HEAD DROPS once the stoop has done its work, in rig units,
+       and how far it pitches over. `headDown` came DOWN from stage 7's 74: the
+       body is carrying the travel now, so the head only has to finish the
+       reach, and keeping it inside the budget above is what keeps his chest
+       and front legs visible underneath his chin. `headPitch` went the other
+       way — a deeper nose-down costs nothing (pitchClamp is 1.1), moves the
+       muzzle without moving the head group, and is what reads as "he is nosing
+       into it" rather than "his face is resting on it". */
+    /* A SHARE OF HIS OWN HEAD ROOM, not a count of rig units. `rig.headRoom`
+       is how far this dog's head bottom can fall before it reaches his belly,
+       and it differs by breed — so the ONE number that decides whether the
+       head sinks into the torso is now expressed against the thing it has to
+       stay inside. 0.70 leaves 30% of the chest showing under his chin at the
+       resting eating depth; `headMaxShare` is the hard ceiling once the
+       per-bite bob is added on top, so assertion B holds on every frame for
+       any proportions. Stage 7's `headDown: 52` was 0.88 of the Shiba's room
+       and would have been over 1.0 on a deeper-chested dog. */
+    headDownShare: 0.77,
+    /* THE HARD CEILING, and it is enforced where the value is USED, not where
+       it is solved. `dog/care.js applyBowl` clamps `headDrop + bite * bobDepth`
+       to `headRoom * headMaxShare` on every frame, so no bite, no lick and no
+       future tweak to the bob can put the head into the chest on any breed.
+
+       The first attempt budgeted for the bob at SOLVE time by subtracting a
+       guess from the ceiling, which is a different and much weaker thing: the
+       breed-independence sweep found a chest 25% shallower than the Shiba's
+       where it left 0.8 virtual units of clearance at the bottom of a bite,
+       and the Shiba only passed because it happened to have room to spare. A
+       bound that holds for the dog you tested is not a bound. */
+    headMaxShare: 0.82,
+    /* HOW BIG A BITE ACTUALLY GETS. `applyBowl` dips the head by
+       `bite * bobDepth` where `bite` is a KICKED spring clamped to this, so
+       the deepest frame of a bite is 1.4x the nominal bob — and the ceiling
+       above has to budget for the deepest frame, not the nominal one.
+       It did not, and the breed-independence sweep (C:	mp\pp8reedproof.py)
+       caught it: on a chest 25% shallower than the Shiba's, the head reached
+       the belly at the bottom of a bite with 0.8 virtual units to spare. The
+       Shiba had enough room to hide it. */
+    bobPeak: 1.4,
+    /* an ANGLE, so this one is breed-independent and stays a literal */
+    headPitch: -0.92,
     feed: {
       sackHome: [318, 664],
       pourRate: 0.62,           // bowl fill per second while tipping
@@ -1154,18 +1249,121 @@ export const BALANCE = {
        unlock, not a purchase. It sits at 400 — reachable on day 2 or 3 by
        someone who looks after him, and unreachable by someone with a fortune
        in coins, which is the entire point. */
+    /* EVERY ROW HERE IS CONSUMED BY REAL CODE. Stage 5 left six rows and stage
+       6 found that the complaint "a table nothing consumes" would have survived
+       a shop and a kennel being built, because three of them described things
+       that are out of scope for the gift (GIFT-READY §3 rules out room variety
+       and decor variety outright). A reward she has EARNED that does nothing is
+       worse than a reward that was never promised, so the table now lists only
+       what stage 6 actually delivers:
+
+         collarRed   -> ui/kennel.js puts it on him; dog/draw.js draws it
+         rugBlue     -> scenes/room.js repaints the rug
+         cockapoo    -> ui/kennel.js adopts her
+         treatsGood  -> ui/shop.js stocks a row that coins alone can never reach
+
+       `bedBasket` and `roomSeaside` are gone rather than deferred. They can
+       come back the day something renders them. */
     unlocks: [
-      { id: 'collarRed', kind: 'decor', at: 90, name: 'A red collar' },
-      { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug' },
-      { id: 'cockapoo', kind: 'breed', at: 400, name: 'The Cockapoo' },
-      { id: 'bedBasket', kind: 'decor', at: 700, name: 'A basket bed' },
-      { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats' },
-      { id: 'roomSeaside', kind: 'room', at: 1600, name: 'The seaside room' },
+      { id: 'collarRed', kind: 'wear', at: 90, name: 'A red collar',
+        note: 'For looking after him from the start' },
+      { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug',
+        note: 'The room warms up a little' },
+      { id: 'cockapoo', kind: 'breed', at: 400, name: 'A Cockapoo puppy',
+        note: 'Someone new, once he is properly settled' },
+      { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats',
+        note: 'The shop starts stocking the nice ones' },
     ],
     /* the word-scale for how well she is looking after him. WORDS, NEVER A
        BAR — care points are a number she can see (they are a currency), but
        what they SAY about her is a word. */
     careWords: [[1600, 'devoted'], [700, 'attentive'], [220, 'settled in'], [0, 'getting to know each other']],
+
+    /* ================================================================
+       THE SHOP (stage 6) — COINS ONLY, AND OBJECTS ONLY.
+
+       THE ONE ABSOLUTE RULE: sell OBJECTS for coins, gate CONTENT on care
+       points. Nothing in this list may share an id with anything in
+       `unlocks` above, and `state/game.js buyItem()` refuses any id that
+       does — so the rule is enforced by code rather than by everyone
+       remembering it. Stage 5 verified that 10,000,000 coins unlocks
+       nothing; stage 6's job was to still be true afterwards.
+
+       DELIBERATELY SMALL. The original's hundreds of SKUs were 2005
+       retention scaffolding (research §7) and every one of them was a
+       reason to open a menu instead of touching the dog. Nine rows, each of
+       which does something you can see:
+
+         kind 'toy'    joins `inventory.toys` and can be the toy on the rug
+         kind 'treat'  a count in `inventory.food`; giving one is a real beat
+         kind 'tool'   a count in `inventory.care`; changes a care action
+         kind 'wear'   joins `inventory.accessories`; goes on his collar slot
+
+       `needs` names a care unlock that must be EARNED before the row can be
+       bought at all. That is the two currencies cooperating without ever
+       touching: care points decide what the shop is allowed to stock, coins
+       pay for the goods. There is no path the other way.
+       ================================================================ */
+    shop: {
+      /* what a walk-and-a-placing day earns, for calibrating prices: a walk
+         pays 18-40 and an obedience placing 30-120, so ~120 coins a day is a
+         normal haul and nothing here should take more than about two days */
+      items: [
+        { id: 'bone', kind: 'toy', name: 'A chew bone', cost: 55,
+          note: 'He can fetch this one instead of the ball' },
+        { id: 'treatPlain', kind: 'treat', name: 'Bag of biscuits', cost: 25,
+          give: 5, note: 'Five of them. He will hear the bag.' },
+        { id: 'treatGood', kind: 'treat', name: 'The good treats', cost: 60,
+          give: 5, needs: 'treatsGood',
+          note: 'The ones from behind the counter' },
+        { id: 'brushSoft', kind: 'tool', name: 'A softer brush', cost: 70,
+          note: 'Brushing brings his coat up faster' },
+        { id: 'soapOat', kind: 'tool', name: 'Oatmeal soap', cost: 45,
+          note: 'He minds the bath less' },
+        { id: 'collarBlue', kind: 'wear', name: 'A blue collar', cost: 35,
+          note: 'Plain, and it suits him' },
+        { id: 'collarGreen', kind: 'wear', name: 'A green collar', cost: 35,
+          note: 'A bit smarter' },
+        { id: 'collarTag', kind: 'wear', name: 'A collar with a tag', cost: 90,
+          note: 'His name on a little brass disc' },
+      ],
+      /* how much a bought tool actually changes its care action. Small on
+         purpose: a tool may be a nicer way to do the thing, never a reason to
+         have waited to do it. */
+      brushGloss: 1.35,         // gloss per stroke, multiplier
+      soapMood: 0.16,           // extra mood from a bath, absolute
+      /* a treat: a real beat, not an inventory decrement. He gets the reward
+         clip, a mood lift, and it is worth NO care points — being pleased is
+         not the same as being looked after (that is the whole separation). */
+      treat: { mood: 0.20, plainMood: 0.20, goodMood: 0.34, cooldown: 6 },
+      /* consumables she can stack. A cap so a rich player cannot buy a year of
+         treats and never think about it again. */
+      maxTreats: 20,
+    },
+
+    /* ================================================================
+       THE KENNEL (stage 6) — CARE POINTS ONLY, AND NO PRICES ON IT.
+
+       Where the second dog is adopted and where she swaps between them.
+       Adopting is deliberately NOT a row tap: `ui/kennel.js` runs a short
+       beat for it, because "adopting a second dog is a real milestone, not a
+       menu" (SCOPE stage 6) and a milestone that resolves in one frame is a
+       menu with better copy.
+       ================================================================ */
+    kennel: {
+      max: 2,                   // the Schnoodle and the Cockapoo. Nothing else.
+      adoptId: 'cockapoo',      // which unlocks row the adoption consumes
+      adoptBreed: 'cockapoo',   // which breed the new puppy is
+      adoptSex: 'f',            // she may be female — pronouns resolve per dog
+      beat: {
+        hold: 0.55,             // the pause before the door opens
+        reveal: 1.9,            // she comes out
+        settle: 2.6,            // ...and the name prompt follows
+      },
+      /* switching dogs remounts the room, so the other dog gets a real arrival
+         rather than a cross-fade. This is the pause before that happens. */
+      switchHold: 0.42,
+    },
   },
 
   /* ---- the reunion ----------------------------------------------------
@@ -1356,6 +1554,13 @@ export const BALANCE = {
     prop:     [128, 15],    // a dragged bowl / sack / jug settling into place
     tip:      [90, 13],     // the pour tilt
     fill:     [40, 11],     // bowl contents level
+    /* ---- stage 6 ----
+       The eating stoop's envelope. Deliberately a little SLOWER and softer
+       than `sit`/`down` (42/46) so the small forward lean it drives arrives
+       just behind the crouch: he folds down first and settles toward the
+       bowl second, which is the difference between committing to a meal and
+       being pushed into one. */
+    stoop:    [34, 11],
     eat:      [150, 14],    // the per-bite head dip
     lap:      [260, 17],    // lapping is much faster than chewing
     suds:     [34, 11],
@@ -1571,6 +1776,62 @@ export const BALANCE = {
        47 virtual units. `label` is here rather than hardcoded because
        ui/text.js shrinks to fit from it, so it is now a real tunable. */
     nav: { h: 58, gap: 6, pad: 12, r: 15, iconR: 11, label: 9.5 },
+
+    /* WHAT A COLLAR LOOKS LIKE. Here rather than in either place that draws
+       one, because BOTH draw one: `dog/draw.js` puts it on his neck and
+       `ui/shop.js` / `ui/kennel.js` put it on a row and a portrait, and a
+       shop swatch that did not match the collar on the dog would be a small
+       lie in the one place the player is deciding. `collarRed` is the EARNED
+       one (90 care points); the rest are bought. */
+    wear: {
+      collarRed: '#c9563f',
+      collarBlue: '#5d90ad',
+      collarGreen: '#7ba36a',
+      collarTag: '#8d6a4a',
+    },
+
+    /* ---- the shop (stage 6) -------------------------------------------
+       Eight rows at 58 plus a header and a Done button comes to 604 of the
+       844 the screen has, so THE SHOP DOES NOT SCROLL. That is a constraint
+       on the catalogue, not a thing to solve with a scroll view: a shop you
+       cannot see the bottom of is the retention scaffolding research §7 warns
+       about, and a list that fits is a list she can hold in her head.
+
+       `sfx` MAPS ONTO THE STAGE-7 BANK and invents nothing. engine/audio.js
+       records every unresolved name in `audio.pending`, which stage 7 got to
+       empty for the first time — a made-up `ui-open` would put it back. So
+       these are real recipes chosen for what they mean: a bought object is
+       SET DOWN (`bowl-set`), a refusal is him huffing (`huff`), a treat is a
+       `crunch`, and a collar going on makes him `perk` up. */
+    shop: {
+      pad: 14, headH: 62, rowH: 58, rowGap: 6,
+      chipW: 62, chipH: 28,
+      flash: 0.28,              // the press highlight, seconds
+      sfx: {
+        open: 'cue', close: 'pat-soft', buy: 'bowl-set', deny: 'huff',
+        give: 'crunch', wear: 'perk',
+      },
+    },
+
+    /* ---- the kennel (stage 6) -----------------------------------------
+       NO PRICES ON THIS SURFACE, EVER. The only number it shows is care
+       points, and the only number the shop shows is coins; between them that
+       is how a player learns the rule without being lectured.
+
+       `sfx.reveal` and `sfx.settle` carry the adoption beat. `praise` then
+       `proud-yip` is the same pairing the reunion uses for its payoff, which
+       is the right family of sound for meeting somebody. */
+    kennel: {
+      pad: 14, headH: 62,
+      cardH: 92, cardGap: 8,
+      rowH: 46,                 // the earned-list rows
+      portraitR: 30,
+      flash: 0.28,
+      sfx: {
+        open: 'cue', close: 'pat-soft', deny: 'huff', pick: 'perk',
+        knock: 'sit-thump', reveal: 'praise', settle: 'proud-yip',
+      },
+    },
     handGlow: { r: 52, rPet: 16, alpha: 0.30 },
     hintAt: [0.30, 0.80],
     /* WORDS, NEVER BARS. The status line names the need and its word-state;

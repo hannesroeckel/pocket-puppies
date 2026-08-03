@@ -32,6 +32,23 @@ const KIBBLE = [
   [-9, -2.6, 3.2], [8, -2.8, 3.1], [-3, -15.5, 3.4], [3, -16.0, 3.2],
 ];
 
+/* ---- THE BOWL'S OWN GEOMETRY, PUBLISHED ------------------------------
+   `drawBowl` draws around its own origin, so "the bowl is standing on the
+   floor" is a statement about these three offsets and nothing else. They
+   used to be magic numbers inside the path below, which is how a bowl came
+   to be positioned at chest height and nobody could say by how much it was
+   floating (ARCHITECTURE §16.9). Anything that places a bowl, and anything
+   that verifies where a bowl ended up, reads them from here.
+
+   All three are in the bowl's own local units, before `s`:
+     BOWL_BASE  the underside — the point that must touch the floor
+     BOWL_WELL  the food/water surface — where a muzzle has to reach
+     BOWL_TOP   the top of the rim plate — the highest drawn pixel
+   ---------------------------------------------------------------------- */
+export const BOWL_BASE = 18;
+export const BOWL_WELL = -8;
+export const BOWL_TOP = -17.5;
+
 /**
  * A dog bowl.
  * @param kind  'food' | 'water'
@@ -665,4 +682,6 @@ export default {
   drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawBall, drawBone, drawDropRing, PC,
   /* stage 4 */
   drawLeash, drawCollar, drawFind, drawPawPrint, inkLine, WC,
+  /* stage 6 */
+  BOWL_BASE, BOWL_WELL, BOWL_TOP,
 };

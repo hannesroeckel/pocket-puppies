@@ -914,8 +914,10 @@ export function createDogRenderer(rig) {
       const hi = Math.max(0, lf - LG.liftOutFrom);
       const out = lf * 3 + hi * s.pawOut.x * LG.liftOut;
       const pawX = P.bodyX + sd * D.pawX + sd * sit * 2 + sd * out + sd * dn * LG.downSpread;
-      const pawY = -1 + sit * LG.sitLift - lf * LG.liftAmt
-        + dn * LG.downPawY - hop * TR.hopHeight * LG.hopPawShare;
+      /* the planted paw's y comes from rig.update now (pose.pawY) so the floor
+         line is a published number rather than a private one; only the LIFT is
+         per-leg, because only a lifted paw has left the floor */
+      const pawY = P.pawY - lf * LG.liftAmt;
       drawLeg(c, P.bodyX + sd * D.shoulderX, fHipY - 4, pawX, pawY,
         sd * (LG.bow + sit * LG.sitBow + lf * LG.liftBow + dn * LG.downBow),
         D.legW, false, 1 + lf * 0.06 + dn * 0.10);
@@ -930,6 +932,41 @@ export function createDogRenderer(rig) {
     c.fillStyle = G.ruff;
     c.beginPath(); c.arc(0, 0, D.bodyHW * 0.44 * D.neckRuff, 0, TAU); c.fill();
     c.restore();
+
+    /* ---- THE COLLAR (stage 6) ----
+       Drawn between the chest and the head group, which is where a collar is.
+       IT KNOWS NOTHING ABOUT THE BREED: it sits on the published neck joint
+       (`pose.neckX/neckY`, the same point the neck bridge uses) and takes its
+       width from `dims`, so a floppy-eared Cockapoo, a long-muzzled Schnoodle
+       and the Shiba all get a collar on the neck rather than three hand-placed
+       ones. It also follows the head DOWN into the bowl, because the neck
+       joint does — which is the difference between a collar and a sticker. */
+    const wearId = rig.wear || '';
+    if (wearId) {
+      const wc = BALANCE.ui.wear[wearId] || BALANCE.ui.wear.collarRed;
+      const nx = P.neckX, ny = P.neckY;
+      /* the head pulls the collar with it: sit it a little below the neck
+         point, on the line toward the head, so it stays on the throat */
+      const dx = P.headX - nx, dy = (P.headY + D.headHH * 0.42) - ny;
+      const cx = nx + dx * 0.34, cy = ny + dy * 0.34;
+      const hw = Math.min(D.bodyHW * 0.52, D.headHW * 0.80);
+      c.save();
+      c.translate(cx, cy);
+      c.rotate(Math.atan2(dx, -dy) * 0.35 + P.bodyRot * 0.4);
+      c.fillStyle = 'rgba(60,32,18,0.30)';
+      ell(c, 0, 2.4, hw * 1.02, hw * 0.30); c.fill();
+      c.fillStyle = wc;
+      ell(c, 0, 0, hw, hw * 0.29); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.20)';
+      ell(c, -hw * 0.16, -hw * 0.07, hw * 0.52, hw * 0.09); c.fill();
+      if (wearId === 'collarTag') {
+        c.fillStyle = '#e0b23f';
+        c.beginPath(); c.arc(0, hw * 0.34, hw * 0.17, 0, TAU); c.fill();
+        c.fillStyle = 'rgba(120,84,20,0.45)';
+        c.beginPath(); c.arc(0, hw * 0.34, hw * 0.09, 0, TAU); c.fill();
+      }
+      c.restore();
+    }
 
     /* ---- occlusion where the head meets the chest ---- */
     c.save();

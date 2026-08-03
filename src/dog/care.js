@@ -30,11 +30,34 @@ import { Spring, makeSprings, approach } from '../engine/spring.js';
 import { TAU, clamp, lerp, smooth, hump, plateau, ell, rgba } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
 import { drawText } from '../ui/text.js';
-import { drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawDropRing, PC } from '../scenes/props.js';
+import {
+  drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawDropRing, PC,
+  BOWL_BASE, BOWL_WELL,
+} from '../scenes/props.js';
 
 const C = BALANCE.care;
 const ST = C.stage;
+/* stage 6: the bought care tools live in the economy, not in `care` */
+const SHOP = BALANCE.economy.shop;
 const N = BALANCE.needs;
+
+/* ---- WHERE A PLACED BOWL ACTUALLY SITS -------------------------------
+   SOLVED PER DOG, in `solveBowl()` below, from the rig's own geometry — not
+   typed here and not typed in BALANCE either.
+
+   THIS IS THE FIX FOR THE FLOATING BOWL. Stage 7's bowlTarget was a literal,
+   [178, 644], with nothing tying it to the rug: it drifted 40 virtual units
+   into the air and the only way to find out was to look at it (ARCHITECTURE
+   §16.9). A literal cannot be checked against anything, so it cannot be
+   wrong in a way that shows up. Now:
+
+     the floor  comes from `rig.stance()` — where his paws actually are
+     the y      comes from the floor minus the bowl's own published base
+                offset, so the base IS the floor by construction
+     the scale  comes from where the stoop actually gets his muzzle to
+
+   and all three change with the breed, which is the point: three breeds are
+   landing that differ in muzzle length, ear type and body mass. */
 
 /* particle kinds */
 const K_KIBBLE = 0, K_WATER = 1, K_FOAM = 2, K_DROP = 3, K_TUFT = 4, K_SPARK = 5;
@@ -52,8 +75,12 @@ export function createCare(rig, opts = {}) {
   const RM = BALANCE.reducedMotion;
   const partScale = reduced ? RM.particleScale : 1;
 
-  /* care-owned springs */
-  const sp = makeSprings(['prop', 'tip', 'fill', 'eat', 'lap', 'suds', 'wet', 'gloss', 'care', 'brushA', 'flinch'], reduced);
+  /* care-owned springs. `stoop` is the eating crouch's own envelope: the
+     posture channels it drives are rig springs and smooth themselves, but the
+     small forward lean writes rig.y / rig.s, which are final values, so it
+     needs a spring of its own or the lean would pop (same reason
+     dog/train.js springs its `call` step). */
+  const sp = makeSprings(['prop', 'tip', 'fill', 'eat', 'lap', 'suds', 'wet', 'gloss', 'care', 'brushA', 'flinch', 'stoop'], reduced);
 
   let mode = '';
   let phase = '';
@@ -72,6 +99,104 @@ export function createCare(rig, opts = {}) {
   let biteIn = 0;
   let bites = 0;
   let appetite = 1;   // sampled once, when she puts her head down
+  /* WHERE THE BOWL IS ACTUALLY DRAWN this frame. Resolved in update() rather
+     than inside drawFront so the geometry exists whether or not anyone drew,
+     and so `debug` reports the bowl that is on screen instead of the bowl
+     BALANCE asked for. The floating bowl survived stage 7 partly because
+     those were two different bowls and nothing compared them (§16.9). */
+  let bowlDrawY = bowl.y;
+  let bowlScaleNow = ST.bowlScale;
+
+  /* ==================================================================
+     SOLVE THE EATING GEOMETRY FOR THIS DOG.
+
+     Run once per care action, before the bowl is drawn. Everything it needs
+     comes from `rig.stance()` and `rig.headRoom`, so it knows nothing about
+     any breed and nothing about the Shiba it happened to be tuned against.
+
+     THE ORDER MATTERS and it is the whole lesson of §16.9:
+       1. decide how far the HEAD may drop — a share of this dog's own
+          head-to-belly room, so it can never sink into his chest;
+       2. ask where that, plus the stoop, actually puts his MUZZLE;
+       3. put the bowl's FOOD SURFACE there;
+       4. put the bowl's BASE on the floor, and let the SCALE be whatever
+          spans the two.
+     Stage 7 did it the other way round — it chose a head drop, saw the muzzle
+     end up at chest height, and moved the bowl up to meet it. That is how a
+     bowl comes to be hanging in mid-air: nothing in the chain ever mentioned
+     the floor.
+     ================================================================== */
+  let geo = null;
+
+  function solveBowl() {
+    const S = C.stoop;
+    const posture = { sit: S.sit, down: S.down, squash: S.squash, pitch: C.headPitch };
+    const stand = rig.stance({});
+    /* 1. THE BUDGET, MEASURED IN THE POSE IT IS SPENT IN. `rig.headRoom` is
+          the standing figure and it flatters: folding into the stoop moves the
+          belly and the chin by different amounts and costs ~7 rig units of
+          clearance before the head has dropped at all. Budgeting against the
+          standing number is how the Shiba passed while a shallower chest was
+          left with 3 virtual units at the bottom of a bite. */
+    const crouched = rig.stance({ ...posture, headLift: 0 });
+    const room = crouched.bodyBottom - crouched.headBottom;
+    /* the resting eating depth; the per-bite bob rides on top and is clamped
+       separately at apply time against `maxDrop` */
+    const maxDrop = room * num(C.headMaxShare, 0.82);
+    const drop = Math.max(0, Math.min(room * num(C.headDownShare, 0.77), maxDrop));
+
+    /* 2. where that actually puts him, before any bite dips him deeper. */
+    const eat = rig.stance({ ...posture, headLift: -drop });
+    /* the forward commitment moves the whole animal, so it moves the ruler */
+    const eatY = rig.home.y + S.fwd;
+    const eatS = rig.home.s * (1 + S.near);
+    const muzHY = rig.breed.proportions.muzzleH / 2;
+    const muzBottomV = eatY + (eat.muzY + muzHY) * eatS;
+
+    /* 3+4. the floor is where his paws STAND — she puts the bowl down in
+       front of a standing dog, and he then folds forward over it, his paws
+       arriving either side and a little nearer the camera than its base. */
+    const floorV = rig.home.y + stand.pawSole * rig.home.s;
+    const wellV = muzBottomV - num(ST.dipInto, 2);
+    const span = BOWL_BASE - BOWL_WELL;
+    const range = ST.scaleRange || [1.1, 1.95];
+    const raw = (floorV - wellV) / span;
+    const scale = clamp(Number.isFinite(raw) ? raw : range[0], range[0], range[1]);
+
+    geo = {
+      room, drop, maxDrop, floorV, scale,
+      /* the base sits ON the floor by construction: this is the only place
+         the bowl's y is ever computed, and it cannot be written without the
+         floor being in the expression */
+      targetY: floorV - BOWL_BASE * scale,
+      wellV: floorV - span * scale,
+      muzBottomV,
+      soleStandV: floorV,
+      soleEatV: eatY + eat.pawSole * eatS,
+      predict: {
+        bodyBottomV: eatY + eat.bodyBottom * eatS,
+        headBottomV: eatY + eat.headBottom * eatS,
+        muzBottomV,
+      },
+    };
+    /* write the answers back so BALANCE still tells the truth to anything
+       reading it — the drop ring, the snap test and the harness all do */
+    ST.placedScale = scale;
+    ST.bowlFloorY = floorV;
+    ST.bowlTarget[1] = geo.targetY;
+    return geo;
+  }
+  /** the solved head drop, in rig units. Falls back to a solve if asked early. */
+  function headDrop() { return (geo || solveBowl()).drop; }
+  /** the hard ceiling on TOTAL head drop, bob included. Never exceeded. */
+  function maxHeadDrop() { return (geo || solveBowl()).maxDrop; }
+
+  function resolveBowlDraw() {
+    const lift = bowl.held ? 5 : 0;
+    const base = bowl.placed ? ST.placedScale : ST.bowlScale;
+    bowlScaleNow = base * (1 + sp.prop.x * 0.012) * (bowl.held ? 1.05 : 1);
+    bowlDrawY = bowl.y - lift;
+  }
 
   /* ---- the coat model (live even when no care action is running) ------
      A dirty dog is dirty in the room, not only in the bath. `dirt` is the
@@ -148,9 +273,14 @@ export function createCare(rig, opts = {}) {
     pile.length = 0;
     brush.bad = 0; brush.good = 0; brush.tufts = 0; brush.down = false;
     served = 0; bites = 0; biteIn = 0; ripple = 0;
+    sp.stoop.set(0);
     coat.dirt = game.dirt;
 
     if (kind === 'feed' || kind === 'water') {
+      /* SOLVE BEFORE ANYTHING IS PLACED. The drop ring, the snap radius and
+         the bowl's resting chase all read ST.bowlTarget, so the answer has to
+         exist before the first frame she can drag on. */
+      solveBowl();
       bowl.kind = kind === 'feed' ? 'food' : 'water';
       const home = kind === 'feed' ? ST.bowlHome : ST.waterHome;
       bowl.x = home[0];
@@ -192,6 +322,8 @@ export function createCare(rig, opts = {}) {
     sp.wet.to(0);
     sp.suds.to(0);
     sp.tip.to(0);
+    /* stand up on the way out, whatever beat we were interrupted in */
+    sp.stoop.to(0);
     pourer.held = false;
     bowl.held = false;
     brush.down = false;
@@ -205,6 +337,12 @@ export function createCare(rig, opts = {}) {
     if (!finishedNeed) {
       finishedNeed = true;
       game.addMood(BALANCE.mood.gain[mode] || 0.25);
+      /* THE OATMEAL SOAP (stage 6): he minds the bath less. Mood only — the
+         cleanliness it reaches and the care points it pays are untouched, so a
+         player with no coins is not washing him worse. */
+      if (mode === 'wash' && game.hasTool && game.hasTool('soapOat')) {
+        game.addMood(num(SHOP.soapMood, 0));
+      }
       game.awardDay('care:' + mode);
       game.log('care', mode);
     }
@@ -361,7 +499,11 @@ export function createCare(rig, opts = {}) {
     if (dot > B.withAt) {
       /* ---- with the grain: gloss rises visibly ---- */
       const q = clamp((dot - B.withAt) / (1 - B.withAt), 0, 1);
-      game.addGloss(travel * B.glossPerUnit * (0.5 + q * 0.5));
+      /* THE SOFTER BRUSH (stage 6). A bought TOOL is a nicer way to do the
+         thing, never a reason to have waited to do it: it multiplies the gloss
+         a stroke earns and changes nothing else — not the need it fills, not
+         the care points it pays, not the grain she has to follow. */
+      game.addGloss(travel * B.glossPerUnit * (0.5 + q * 0.5) * toolMul('brushSoft', SHOP.brushGloss));
       game.fillNeed('brush', travel * B.cleanPerUnit);
       /* brushing also lifts loose dirt, just never all of it */
       for (let i = 0; i < coat.regions.length; i++) {
@@ -458,6 +600,7 @@ export function createCare(rig, opts = {}) {
         pourer.x = approach(pourer.x, home[0], 7, dt);
         pourer.y = approach(pourer.y, home[1], 7, dt);
       }
+      resolveBowlDraw();
     }
 
     updateParts(dt);
@@ -830,15 +973,71 @@ export function createCare(rig, opts = {}) {
   function apply(dt, mood) {
     const w = sp.care.x;
     rig.drive.neck = 0;
-    if (w < 0.002) return;
+    if (w < 0.002) {
+      /* HAND THE PLACEMENT BACK. `toy.apply` is skipped for the whole of
+         `care.active` now, so once the care weight is spent nobody else is
+         going to put rig.x/y/s back — and the stoop's forward lean is the
+         first thing care has ever moved them with. By here the spring has
+         unwound to within a fraction of a unit, so this is a tidy-up rather
+         than a jump. */
+      if (sp.stoop.x > 0.0001 || rig.y !== rig.home.y || rig.s !== rig.home.s) {
+        sp.stoop.set(0);
+        rig.y = rig.home.y; rig.s = rig.home.s;
+      }
+      return;
+    }
 
     if (mode === 'feed' || mode === 'water') applyBowl(dt, w);
     else if (mode === 'wash') applyWash(dt, w);
     else if (mode === 'brush') applyBrush(dt, w);
   }
 
+  /* a bought tool's multiplier, or 1. Guarded: a missing game, a missing
+     mutator and a NaN tunable all resolve to "she does not have it", which is
+     the safe answer in both directions. */
+  function toolMul(id, mul) {
+    if (!game || !game.hasTool || !game.hasTool(id)) return 1;
+    const m = +mul;
+    return Number.isFinite(m) && m > 0 ? m : 1;
+  }
+  function num(v, d) { const n = +v; return Number.isFinite(n) ? n : d; }
+
   /** blend a spring target toward `v` by weight `k`, targets only */
   function bias(spring, v, k) { spring.to(spring.t * (1 - k) + v * k); }
+
+  /* ====================================================================
+     THE EATING STOOP — the body's half of the reach.
+
+     `k` is 0..1: how far into the crouch he is. Everything here is a TARGET
+     (§6) except the forward lean, which is a placement and is lerped from a
+     spring so it cannot pop.
+
+     Why the body and not the head: at rest his head's bottom edge is 100
+     virtual units above his belly's, so a head-only reach spends its whole
+     budget before it gets anywhere near the rug — which is exactly what
+     stage 2's 132 units and stage 7's 74 units both did. The torso's bottom
+     edge only moves on `sit`, `down`, `melt` and `lift` (rig.update
+     compensates `squash` to keep the paws planted), and `down` brings the
+     front-paw splay, the leg bow and the hind tuck with it for free.
+
+     THE FORWARD LEAN IS WHY THE toy.apply GUARD MATTERS. `toy.apply` rewrites
+     rig.x/y/s back to home on every idle frame and runs after this, so before
+     scenes/room.js added `care.active` to its guard, these two lines were
+     silently erased every frame — see ARCHITECTURE §16.9.
+     ==================================================================== */
+  function stoopTo(k, w) {
+    const S = C.stoop;
+    const kw = clamp(k, 0, 1);
+    bias(s.sit, S.sit * kw, w);
+    bias(s.down, S.down * kw, w);
+    bias(s.squash, S.squash * kw, w);
+    /* `lift` raises the body, so the stoop must not fight it */
+    bias(s.lift, 0, w);
+    sp.stoop.to(kw);
+    const lean = sp.stoop.x * w;
+    rig.y = lerp(rig.y, rig.home.y + S.fwd, lean);
+    rig.s = lerp(rig.s, rig.home.s * (1 + S.near), lean);
+  }
 
   function applyBowl(dt, w) {
     const cfg = mode === 'feed' ? C.feed : C.water;
@@ -853,6 +1052,8 @@ export function createCare(rig, opts = {}) {
         const py = pourer.shown && pourer.held ? pourer.y : bowl.y;
         rig.lookAtVirtual(px, py);
       }
+      /* standing, watching, weight still over all four paws */
+      stoopTo(0, w);
       const keen = clamp(1 - game.dog.needs[N.fills[mode].key], 0, 1);
       bias(s.perk, 0.30 + keen * 0.45, w);
       bias(s.earBack, -0.18 * keen, w);
@@ -865,32 +1066,35 @@ export function createCare(rig, opts = {}) {
     }
 
     if (approaching) {
-      /* commits: head forward and down, ears pinned forward */
-      const u = smooth(phaseT / 0.85);
+      /* THE COMMIT, and the order is the whole point: the body goes down
+         FIRST and the neck follows it. `u` drives the crouch on a smoothed
+         ramp and the head lags it (u^1.6), so what she sees is a dog folding
+         its front end down and then reaching, not a head being winched. */
+      const u = smooth(clamp(phaseT / 0.85, 0, 1));
       rig.lookAtVirtual(bowl.x, bowl.y);
+      stoopTo(u, w);
       bias(s.perk, 0.5 * (1 - u), w);
-      bias(s.sit, 0, w);
-      bias(s.headLift, -(u * C.headDown * 0.55), w);
-      s.pitch.to(s.pitch.t * (1 - w * u) + C.headPitch * 0.85 * w * u);
+      const lag = Math.pow(u, 1.6);
+      bias(s.headLift, -(lag * headDrop()), w);
+      s.pitch.to(s.pitch.t * (1 - w * lag) + C.headPitch * 0.85 * w * lag);
       bias(s.earBack, 0.30 * u, w);
       bias(s.eyeOpen, 1 - 0.30 * u, w);
-      bias(s.squash, 0.05 * u, w);
-      rig.drive.neck = u * w * 0.6;
+      rig.drive.neck = lag * w * 0.7;
       return;
     }
 
     if (eating) {
       const drink = mode === 'water';
-      const bite = clamp((drink ? sp.lap.x : sp.eat.x) * 0.11, 0, 1.4);
+      const bite = clamp((drink ? sp.lap.x : sp.eat.x) * 0.11, 0, num(C.bobPeak, 1.4));
       /* HEAD DOWN INTO THE BOWL. The rig has no drawn neck, so
          rig.drive.neck asks dog/draw.js to bridge the gap — without it the
          head reads as having slid down over the chest. */
-      const down = C.headDown + bite * cfg.bobDepth;
+      stoopTo(1, w);
+      /* THE CLAMP THAT MAKES ASSERTION B TRUE ON EVERY FRAME, for any breed
+         and any bob: the total never passes this dog's own ceiling. */
+      const down = Math.min(headDrop() + bite * cfg.bobDepth, maxHeadDrop());
       bias(s.headLift, -down, w);
       s.pitch.to(s.pitch.t * (1 - w) + C.headPitch * w);
-      bias(s.sit, 0, w);
-      bias(s.squash, 0.10 + bite * 0.05, w);
-      bias(s.lift, -3, w);
       bias(s.earBack, 0.34 + bite * 0.22, w);
       /* Half-lidded, not shut. Squeezing the eyes below ~0.6 makes the pale
          brow markings above them read AS the eyes, which is very strange. */
@@ -923,7 +1127,7 @@ export function createCare(rig, opts = {}) {
       if (phase === 'lick') {
         /* licks the bowl clean: faster, shallower bobs, tongue right out */
         const lick = 0.5 + 0.5 * Math.sin(phaseT * 17);
-        bias(s.headLift, -(C.headDown - 4 + lick * 6), w);
+        bias(s.headLift, -Math.min(headDrop() - 4 + lick * 6, maxHeadDrop()), w);
         bias(s.tongue, 1.15, w);
         bias(s.mouth, 0.30 + lick * 0.16, w);
         bias(s.eyeSmile, 0.5, w);
@@ -935,7 +1139,9 @@ export function createCare(rig, opts = {}) {
       const u = clamp(phaseT / 0.9, 0, 1);
       const env = Math.exp(-u * 2.6);
       const f = Math.sin(u * TAU * 5.4);
-      bias(s.headLift, -40 * (1 - u), w);
+      /* the drips come off before he gets up, so he is still part-way down */
+      stoopTo(lerp(1, C.stoop.rise, smooth(u)), w);
+      bias(s.headLift, -headDrop() * 0.85 * (1 - u), w);
       s.pitch.to(s.pitch.t * (1 - w) + (-0.3 + u * 0.5) * w);
       bias(s.tilt, f * 0.24 * env * rig.mo.shake, w);
       bias(s.noseTw, f * 0.9 * env, w);
@@ -948,10 +1154,13 @@ export function createCare(rig, opts = {}) {
     }
 
     if (phase === 'finish') {
-      /* head comes up and she looks straight at her: the thank-you */
+      /* head comes up, he gets back on all four paws, and he looks straight at
+         her: the thank-you. The stoop unwinds a little AHEAD of the head so he
+         pushes up off his elbows rather than levitating out of the crouch. */
       const u = smooth(clamp(phaseT / 0.7, 0, 1));
       rig.lookAtVirtual(195, 990);
-      bias(s.headLift, -C.headDown * 0.8 * (1 - u), w);
+      stoopTo(1 - Math.min(1, u * 1.25), w);
+      bias(s.headLift, -headDrop() * 0.9 * (1 - u), w);
       s.pitch.to(s.pitch.t * (1 - w * u) + 0.12 * w * u);
       bias(s.eyeSmile, 0.7 * u, w);
       bias(s.smile, 0.8 * u, w);
@@ -1102,12 +1311,10 @@ export function createCare(rig, opts = {}) {
         const hot = clamp(1 - d / (ST.snap * 2.4), 0, 1);
         drawDropRing(c, ST.bowlTarget[0], ST.bowlTarget[1] + 8, ST.targetR, t, hot, w);
       }
-      /* The bowl. It grows a little once placed: it is nearer the camera down
-         there, and a bigger rim occludes more of her muzzle when she eats. */
-      const lift = bowl.held ? 5 : 0;
-      const base = bowl.placed ? ST.placedScale : ST.bowlScale;
-      const bs = base * (1 + sp.prop.x * 0.012) * (bowl.held ? 1.05 : 1);
-      drawBowl(c, bowl.x, bowl.y - lift, bs, bowl.kind, sp.fill.x, t, ripple);
+      /* The bowl, at the position update() resolved. It grows once placed: it
+         is nearer the camera down there, and the taller rim is what occludes
+         the lower muzzle when he noses into it. */
+      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple);
       c.restore();
     }
 
@@ -1307,6 +1514,29 @@ export function createCare(rig, opts = {}) {
         w: +sp.care.x.toFixed(3), parts: parts.length, pile: pile.length,
         brushGood: Math.round(brush.good), brushBad: brush.bad,
         placed: bowl.placed, bowlAt: [Math.round(bowl.x), Math.round(bowl.y)],
+        /* THE FLOATING-BOWL NUMBERS, straight from the values that draw it —
+           `bowlScaleNow` is the scale actually passed to drawBowl this frame,
+           so `bowlBaseY` is where the bowl's underside really is and not where
+           BALANCE hoped it would be. Verification reads these (§16.9). */
+        bowlScaleNow: +bowlScaleNow.toFixed(4),
+        bowlBaseY: +(bowlDrawY + BOWL_BASE * bowlScaleNow).toFixed(2),
+        bowlWellY: +(bowlDrawY + BOWL_WELL * bowlScaleNow).toFixed(2),
+        bowlFloorY: ST.bowlFloorY,
+        stoop: +sp.stoop.x.toFixed(3),
+        /* THE SOLVE, so a harness can check that what rig.stance() predicted
+           is what rig.update() actually produced. If those two ever drift the
+           bowl is being placed against a dog that does not exist. */
+        geo: geo ? {
+          headRoom: +geo.room.toFixed(2), headDrop: +geo.drop.toFixed(2),
+          maxDrop: +geo.maxDrop.toFixed(2),
+          share: +(geo.drop / Math.max(0.001, geo.room)).toFixed(3),
+          scale: +geo.scale.toFixed(4), floorV: +geo.floorV.toFixed(2),
+          targetY: +geo.targetY.toFixed(2), wellV: +geo.wellV.toFixed(2),
+          soleStandV: +geo.soleStandV.toFixed(2), soleEatV: +geo.soleEatV.toFixed(2),
+          predictBodyBottomY: +geo.predict.bodyBottomV.toFixed(2),
+          predictHeadBottomY: +geo.predict.headBottomV.toFixed(2),
+          predictMuzBottomY: +geo.predict.muzBottomV.toFixed(2),
+        } : null,
       };
     },
   };

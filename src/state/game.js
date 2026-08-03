@@ -40,7 +40,7 @@ import {
   collected as collectedFinds, FIND_BY_ID,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -293,10 +293,33 @@ export function createGame(state, opts = {}) {
     return state.dogs.find((d) => d.id === state.activeDogId) || state.dogs[0];
   }
 
+  /* ---- THE INVENTORY, GUARANTEED TO BE THE RIGHT SHAPE ----------------
+     Stage 6 is the first code that WRITES to `inventory.food`, `.care` and
+     `.accessories`. `state/save.js` merges the inventory object forward from
+     base, so those keys always exist on a fresh normalise — but a save
+     hand-edited, half-written, or produced by a build that stored something
+     else there can still hand us a string where a map should be, and
+     `inv.food[id] = n` on a string silently does nothing while reporting
+     success. MIGRATIONS[6] repairs this on load; this is the same repair at
+     the point of use, so a shop cannot be defeated by a bad save either way. */
+  function invOf() {
+    const inv = state.inventory || (state.inventory = {});
+    if (!inv.food || typeof inv.food !== 'object' || Array.isArray(inv.food)) inv.food = {};
+    if (!inv.care || typeof inv.care !== 'object' || Array.isArray(inv.care)) inv.care = {};
+    if (!Array.isArray(inv.accessories)) inv.accessories = [];
+    if (!Array.isArray(inv.toys) || !inv.toys.length) inv.toys = ['ball'];
+    return inv;
+  }
+
   /* Repair anything already poisoned on disk before a single frame runs. A
      save written by a build without the guards below can legitimately contain
      `affection: null`; the rig would then render nothing at all. */
   for (const d of (state.dogs || [])) sanitiseDog(d);
+  invOf();
+  if (!state.unlocks || typeof state.unlocks !== 'object') state.unlocks = { breeds: [], items: [], rooms: ['room'] };
+  if (!Array.isArray(state.unlocks.items)) state.unlocks.items = [];
+  if (!Array.isArray(state.unlocks.breeds)) state.unlocks.breeds = [];
+  if (!state.flags || typeof state.flags !== 'object') state.flags = {};
 
   /* ---- MOOD: fast, in-memory only -----------------------------------
      Never persisted: a mood that survives a cold start is not a mood, it's
@@ -1142,6 +1165,265 @@ export function createGame(state, opts = {}) {
         currency was renamed to `carePoints` in schema v5 because "trainer
         points" describes the wrong thing: they are not earned by training. */
     addTrainerPoints(n) { return api.addCarePoints(n); },
+
+    /* ==================================================================
+       THE SHOP — stage 6. COINS BUY OBJECTS. THAT IS ALL THIS DOES.
+
+       `buyItem` is the only way anything enters the inventory, and it is
+       where the one absolute rule is ENFORCED rather than trusted:
+
+         1. the id must be in BALANCE.economy.shop.items — you cannot buy
+            something that is not for sale, including by id-guessing an
+            unlock;
+         2. the id must NOT be in BALANCE.economy.unlocks — a care unlock is
+            not purchasable at any price, and `ITEM_IS_UNLOCK` below refuses
+            it before a single coin moves;
+         3. a row's `needs` (a care unlock) must already be EARNED. Coins
+            cannot satisfy it, because the check reads `isUnlocked`, which
+            reads `carePoints` and nothing else.
+
+       Stage 5 proved the currencies were separate by there being no code to
+       break it. This is the code, and it still cannot.
+       ================================================================== */
+    /** the catalogue row for an id, or null */
+    shopItem(id) {
+      if (typeof id !== 'string' || !id) return null;
+      return BALANCE.economy.shop.items.find((x) => x.id === id) || null;
+    },
+    /** does this id name a CARE unlock? Then coins may never touch it. */
+    isCareUnlockId(id) {
+      return !!BALANCE.economy.unlocks.find((x) => x.id === id);
+    },
+    /**
+     * The shop's shelf, resolved. `locked` is a CARE gate, never a coin one:
+     * `afford` and `locked` are computed from different currencies and are
+     * reported separately so a surface can never conflate them.
+     */
+    shopStock() {
+      const S = BALANCE.economy.shop;
+      return S.items.map((it) => {
+        const need = it.needs || '';
+        const locked = need ? !api.isUnlocked(need) : false;
+        const owned = api.ownedCount(it.id);
+        const cap = it.kind === 'treat' ? S.maxTreats : 1;
+        return {
+          ...it,
+          owned,
+          full: owned >= cap,
+          locked,
+          /* what the row needs from her CARE, if anything */
+          needsAt: locked ? (BALANCE.economy.unlocks.find((u) => u.id === need) || {}).at || 0 : 0,
+          needsShort: locked
+            ? Math.max(0, ((BALANCE.economy.unlocks.find((u) => u.id === need) || {}).at || 0) - api.carePoints)
+            : 0,
+          /* ...and what it needs from her PURSE. Two numbers, never one. */
+          afford: api.canAfford(it.cost),
+          short: Math.max(0, Math.floor(num(it.cost, 0)) - api.coins),
+        };
+      });
+    },
+    /** how many of a shop id she owns (0 or 1 for anything not a treat) */
+    ownedCount(id) {
+      const it = api.shopItem(id);
+      if (!it) return 0;
+      const inv = invOf();
+      if (it.kind === 'treat') return Math.max(0, Math.floor(num(inv.food[id], 0)));
+      if (it.kind === 'toy') return inv.toys.indexOf(id) >= 0 ? 1 : 0;
+      if (it.kind === 'wear') return inv.accessories.indexOf(id) >= 0 ? 1 : 0;
+      return Math.max(0, Math.floor(num(inv.care[id], 0)));
+    },
+    /** does she own this care tool? (dog/care.js asks) */
+    hasTool(id) { return api.ownedCount(id) > 0; },
+
+    /**
+     * Buy one. Hardened to the §13.4 standard: a bad argument is a REFUSAL,
+     * never a free item — `spendCoins(null)` once handed goods over for
+     * nothing because `+null` is 0, and this is the caller that would have
+     * done it.
+     *
+     * @returns {{ ok, reason, short, item, coins, owned }}
+     *   reason: '' | 'unknown' | 'unlock' | 'locked' | 'full' | 'poor'
+     */
+    buyItem(id) {
+      const fail = (reason, extra) => ({
+        ok: false, reason, short: 0, item: null, coins: api.coins, owned: 0, ...(extra || {}),
+      });
+      /* RULE 2 FIRST, before anything else can go wrong: a care unlock is not
+         for sale. This is checked ahead of the catalogue lookup on purpose —
+         if an unlock id ever appeared in the shop table by mistake, this
+         still refuses it. */
+      if (api.isCareUnlockId(id)) return fail('unlock');
+      const it = api.shopItem(id);
+      if (!it) return fail('unknown');
+      const cost = Math.floor(num(it.cost, NaN));
+      if (!Number.isFinite(cost) || cost < 0) return fail('unknown');
+      /* RULE 3: a care gate. Reads carePoints; cannot be paid off. */
+      if (it.needs && !api.isUnlocked(it.needs)) {
+        const u = BALANCE.economy.unlocks.find((x) => x.id === it.needs) || { at: 0 };
+        return fail('locked', { needsShort: Math.max(0, u.at - api.carePoints) });
+      }
+      const S = BALANCE.economy.shop;
+      const cap = it.kind === 'treat' ? Math.max(1, Math.floor(num(S.maxTreats, 1))) : 1;
+      const owned = api.ownedCount(id);
+      if (owned >= cap) return fail('full', { owned });
+      const pay = api.spendCoins(cost);
+      if (!pay.ok) return fail('poor', { short: pay.short });
+
+      const inv = invOf();
+      if (it.kind === 'treat') {
+        const give = Math.max(1, Math.floor(num(it.give, 1)));
+        inv.food[id] = Math.min(cap, owned + give);
+      } else if (it.kind === 'toy') {
+        if (inv.toys.indexOf(id) < 0) inv.toys.push(id);
+      } else if (it.kind === 'wear') {
+        if (inv.accessories.indexOf(id) < 0) inv.accessories.push(id);
+      } else {
+        inv.care[id] = 1;
+      }
+      /* `unlocks.items` is the lifetime record of what she has ever owned, so
+         a consumable that runs out is still remembered */
+      if (state.unlocks.items.indexOf(id) < 0) state.unlocks.items.push(id);
+      onChange();
+      return { ok: true, reason: '', short: 0, item: { ...it }, coins: api.coins, owned: api.ownedCount(id) };
+    },
+
+    /**
+     * Give him a treat. A count comes off the inventory and he gets a mood
+     * lift — and NOT ONE CARE POINT, which is the separation from the other
+     * direction: pleasing him is not the same as looking after him, and a
+     * player with coins must not be able to buy her way up the care scale.
+     */
+    giveTreat(id) {
+      const it = api.shopItem(id);
+      if (!it || it.kind !== 'treat') return { ok: false, reason: 'unknown', left: 0 };
+      const inv = invOf();
+      const have = Math.max(0, Math.floor(num(inv.food[id], 0)));
+      if (have <= 0) return { ok: false, reason: 'none', left: 0 };
+      inv.food[id] = have - 1;
+      const T = BALANCE.economy.shop.treat;
+      const lift = num(id === 'treatGood' ? T.goodMood : T.plainMood, 0.2);
+      api.addMood(lift);
+      /* deliberately no awardCare(...) call of any kind here */
+      onChange();
+      return { ok: true, reason: '', left: inv.food[id], mood: lift };
+    },
+
+    /** how many treats of any kind she has to hand */
+    get treatsLeft() {
+      const inv = invOf();
+      return BALANCE.economy.shop.items
+        .filter((x) => x.kind === 'treat')
+        .reduce((n, x) => n + Math.max(0, Math.floor(num(inv.food[x.id], 0))), 0);
+    },
+
+    /**
+     * Put something on his collar slot. Accepts a bought accessory OR an
+     * EARNED one (`collarRed` is a care unlock, not a purchase), which is why
+     * this checks both sources — and why buying can never produce the earned
+     * one and earning can never produce a bought one.
+     */
+    wearable() {
+      const inv = invOf();
+      const out = [{ id: '', name: 'Nothing', from: 'none' }];
+      for (const u of BALANCE.economy.unlocks) {
+        if (u.kind === 'wear' && api.isUnlocked(u.id)) out.push({ id: u.id, name: u.name, from: 'earned' });
+      }
+      for (const id of inv.accessories) {
+        const it = api.shopItem(id);
+        if (it) out.push({ id, name: it.name, from: 'bought' });
+      }
+      return out;
+    },
+    /** @returns true if it was applied */
+    equipWear(id) {
+      const d = dog();
+      if (!d.wear || typeof d.wear !== 'object') d.wear = { collar: null, accessory: null };
+      if (id === '' || id === null || id === undefined) { d.wear.collar = null; onChange(); return true; }
+      if (typeof id !== 'string') return false;
+      if (!api.wearable().some((w) => w.id === id)) return false;
+      d.wear.collar = id;
+      onChange();
+      return true;
+    },
+    get worn() {
+      const d = dog();
+      return (d.wear && typeof d.wear.collar === 'string') ? d.wear.collar : '';
+    },
+
+    /* ==================================================================
+       THE KENNEL — stage 6. CARE POINTS ONLY, AND NO PRICE ANYWHERE.
+       ================================================================== */
+    /** the roster, with just enough for a surface to draw a card each */
+    roster() {
+      return state.dogs.map((d) => ({
+        id: d.id, name: d.name, breedId: d.breedId, sex: d.sex,
+        active: d.id === state.activeDogId,
+        affection: num(d.affection, 0),
+        worn: (d.wear && typeof d.wear.collar === 'string') ? d.wear.collar : '',
+        pron: PRONOUNS[d.sex] || PRONOUNS.n,
+      }));
+    },
+    /**
+     * May she adopt right now, and if not, exactly what is missing? `reason`
+     * is never 'poor' — there is no price. The only thing that can be short
+     * here is care points.
+     */
+    adoptCheck() {
+      const K = BALANCE.economy.kennel;
+      const u = BALANCE.economy.unlocks.find((x) => x.id === K.adoptId) || { at: 0, name: '' };
+      const pts = api.carePoints;
+      if (state.dogs.length >= Math.max(1, Math.floor(num(K.max, 2)))) {
+        return { ok: false, reason: 'full', short: 0, at: u.at, points: pts };
+      }
+      if (state.dogs.some((d) => d.breedId === K.adoptBreed)) {
+        return { ok: false, reason: 'already', short: 0, at: u.at, points: pts };
+      }
+      if (!api.isUnlocked(K.adoptId)) {
+        return { ok: false, reason: 'locked', short: Math.max(0, u.at - pts), at: u.at, points: pts };
+      }
+      return { ok: true, reason: '', short: 0, at: u.at, points: pts };
+    },
+    /**
+     * Adopt her. SPENDS NOTHING — not coins, and not care points either.
+     * Care points are a lifetime total that gates content; they are not a
+     * balance and there is deliberately no `spendCarePoints` anywhere in this
+     * file. Passing the gate does not consume it, so she keeps the standing
+     * she earned and the unlock is permanent (ARCHITECTURE §15.6).
+     *
+     * @returns the new dog's public shape, or null if refused
+     */
+    adoptDog(now = Date.now(), opts = {}) {
+      const chk = api.adoptCheck();
+      if (!chk.ok) return null;
+      const K = BALANCE.economy.kennel;
+      /* ids are derived from the clock and the first dog took `dog-<t36>`, so a
+         same-millisecond adopt would collide. Suffix until it does not. */
+      const d = newDog(num(now, Date.now()), {
+        breedId: K.adoptBreed, sex: K.adoptSex, name: '', rng: opts.rng,
+      });
+      let n = 1;
+      while (state.dogs.some((x) => x.id === d.id)) { d.id = 'dog-' + num(now, 0).toString(36) + '-' + (++n); }
+      state.dogs.push(d);
+      if (state.unlocks.breeds.indexOf(d.breedId) < 0) state.unlocks.breeds.push(d.breedId);
+      state.flags.adoptedAt = num(now, Date.now());
+      onChange();
+      return { id: d.id, name: d.name, breedId: d.breedId, sex: d.sex };
+    },
+    /**
+     * Make another dog the one in the room. The CALLER remounts the scene —
+     * scenes/room.js builds the rig, the renderer, petting, idle and every
+     * care layer from `game.dog` in `enter()`, so a remount is how a different
+     * breed and a different set of needs actually arrive. Mutating the id
+     * under a live scene would leave a Shiba rig wearing a Cockapoo's state.
+     */
+    switchDog(id) {
+      if (typeof id !== 'string' || !id) return false;
+      if (id === state.activeDogId) return false;
+      if (!state.dogs.some((d) => d.id === id)) return false;
+      state.activeDogId = id;
+      onChange();
+      return true;
+    },
 
     /* ==================================================================
        CONTESTS — stage 5. The MODEL is state/contest.js (pure, testable);

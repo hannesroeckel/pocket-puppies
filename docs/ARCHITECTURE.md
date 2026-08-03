@@ -1741,3 +1741,230 @@ from 74, not up, once the body is carrying the travel. Verify with `C:\tmp\pp7\b
 already reports both failure modes per frame and crops screenshots at the deepest part of the
 action — the endpoints look fine in both the broken and the working case, which is why it steps
 rather than samples.
+
+> **FIXED IN STAGE 6.** Both failure modes are gone and both are asserted per frame, on every
+> frame, for feed and water. The trap above was real and is now closed: `care.active` is in the
+> `toy.apply` guard, and the eating pose does write `rig.y`/`rig.s`. The starting numbers
+> suggested here turned out to be the wrong *kind* of number — see §17.2. Verify with
+> `C:\tmp\pp8\bowl2.py` (per-frame) and `C:\tmp\pp8\breedproof.py` (per breed).
+
+---
+
+## 17. Stage 6 (shop + kennel) and the floating bowl — as built
+
+Two pieces of work: the reported floating-bowl defect (§16.9) and stage 6's economy surfaces.
+
+### 17.1 The floating bowl — what it actually was
+
+Three separate faults, and only the first was the one in the handover.
+
+**1. The guard.** `scenes/room.js` omitted care from the `toy.apply` guard, so any `rig.x/y/s`
+written by `care.apply` was overwritten on the same frame. Fixed; the guard now reads
+
+```js
+if (!reunion.active && !train.busy && !walk.busy && !contest.busy && !care.active) toy.apply(...)
+```
+
+`care.active` rather than `care.modal` on purpose: `modal` goes false the instant the action
+ends, which would snap the placement home in the middle of the return. **Confirmed surviving to
+the frame:** the eating pose moves `rig.y` 706 → 713 and `rig.s` 1.34 → 1.38, measured live, and
+returns to exactly `rig.home` afterwards (assertion D, 0 failing frames).
+
+**2. The bowl's position was a literal.** `bowlTarget: [178, 644]` had nothing in the program
+tying it to the floor, so nobody could check it and it drifted 40 units into the air. It is now
+**solved**, in `dog/care.js solveBowl()`, and the base cannot be written without the floor being
+in the expression:
+
+```
+floor   = rig.stance({}).pawSole            -> where his paws stand
+targetY = floor - BOWL_BASE * scale         -> so base == floor, by construction
+scale   = (floor - (muzzleAtEatingDepth - dipInto)) / (BOWL_BASE - BOWL_WELL)
+```
+
+`scenes/props.js` now publishes `BOWL_BASE` / `BOWL_WELL` / `BOWL_TOP` next to the path that
+draws them, and `dog/rig.js` publishes `pose.pawY` / `pose.pawSole` — the floor line was
+previously derived privately inside `dog/draw.js`, which is why stage 7 could only say the bowl
+floated by "about 40": the reference it compared against was the paw's **anchor**, which is
+most of a paw above the rug.
+
+**3. The head-only reach.** `headDown: 74` was 99 virtual units of a 100-unit head-to-belly
+budget, which is the sunken head in one line. The body now carries the travel: `sit` to 1.0 and
+`down` to 0.92 (a deep sphinx), plus a small forward commitment, and the head finishes the reach.
+`sit` and `down` are the only channels that move the torso's bottom edge — `squash` cannot,
+because `rig.update` compensates it to keep the paws planted — and `down` brings the front-paw
+splay, the leg bow and the hind tuck for free, so the crouch cost the renderer nothing new.
+
+### 17.2 Why the pose is derived rather than tuned
+
+The handover's suggested numbers (`bowlTarget` y ~700, `placedScale` up, `headDown` down) were
+all correct in direction and all the wrong *kind* of number: absolute units measured against the
+Shiba, which is the only breed in the tree. With three breeds landing that differ in muzzle
+length, ear type and body mass, every one of them would have been wrong for two dogs.
+
+So `dog/rig.js` gained **`stance(dims, channels)`** — the same arithmetic `rig.update` uses,
+resolved from plain numbers, so a caller can ask where a posture would put a muzzle without
+running a frame and without knowing the breed. BALANCE now holds **shares and depths** instead:
+
+| was | is | why |
+|---|---|---|
+| `headDown: 74` (units) | `headDownShare: 0.77` | a share of *this dog's* head-to-belly room |
+| — | `headMaxShare: 0.82` | a hard ceiling, clamped where the value is USED |
+| — | `bobPeak: 1.4` | the deepest frame of a bite, which the ceiling must budget for |
+| `bowlTarget[1]` (literal) | derived from `pawSole` | the base is the floor by construction |
+| `placedScale: 1.15` | derived from the muzzle | 1.399 on the Shiba, solved not typed |
+| — | `dipInto: 16` | how deep his nose goes — about the bowl, not the dog |
+
+**Two mistakes worth recording, both found by the breed sweep rather than by looking:**
+
+- Budgeting the bob at *solve* time by subtracting a guess from the ceiling is much weaker than
+  clamping the total at *apply* time. The first version left a chest 25% shallower than the
+  Shiba's with **0.8 virtual units** of clearance at the bottom of a bite. The Shiba passed only
+  because it had room to spare, and a bound that holds for the dog you tested is not a bound.
+- `rig.headRoom` (standing) flatters by ~7 rig units: folding into the stoop moves the belly and
+  the chin by different amounts before the head has dropped at all. The budget is now measured in
+  the crouch it is spent in.
+
+### 17.3 Stage 6 — the shop and the kennel
+
+Two in-room modal surfaces, `ui/shop.js` and `ui/kennel.js`, both in `surfaceOwner()` rather than
+behind a private `if` (§14.1), both consuming every pointer while up. **One currency each, and
+that is the design, not a layout accident:** the shop draws a coin purse and never mentions care
+points; the kennel draws her care standing and has no price on it anywhere.
+
+The rule is enforced in `state/game.js buyItem()`, not trusted:
+
+1. an id in `BALANCE.economy.unlocks` is refused **before a coin moves** — checked ahead of the
+   catalogue lookup, so an unlock id appearing in the shop table by mistake is still refused;
+2. a row's `needs` gate reads `isUnlocked`, which reads `carePoints` and nothing else;
+3. there is still no `spendCarePoints` and there must never be one. Passing 400 does not consume
+   400 — care points are a lifetime total that gates content, not a balance.
+
+`BALANCE.economy.unlocks` was **trimmed from six rows to four**. `bedBasket` and `roomSeaside`
+described things GIFT-READY §3 rules out, and a reward she has *earned* that does nothing is
+worse than one never promised. Every remaining row is consumed by real code: `collarRed` →
+`ui/kennel.js` + `dog/draw.js`, `rugBlue` → the room repaints its rug, `cockapoo` → the adoption,
+`treatsGood` → a shop row coins alone can never reach. Nothing is lost: unlocks are **derived**
+from `carePoints` on every read and were never stored.
+
+Adopting runs a short beat (knock → reveal → settle) and then hands her to the room, which opens
+the naming beat by itself because she has no name. The kennel deliberately does not own the most
+important moment it causes. The dog is created at the **reveal**, not at the tap, so an
+interrupted beat cannot leave a half-written adoption in the save. Swapping dogs remounts the
+room scene, because `enter()` builds the rig, the renderer, petting, idle and every care layer
+from `game.dog` — mutating `activeDogId` under a live scene would leave one dog's rig wearing
+another dog's state.
+
+### 17.4 Schema v6
+
+The state shape **did not grow** — `inventory.food` / `.care` / `.accessories`, `unlocks.items`,
+`dogs[]`, `activeDogId` and `dog.wear` were all stage 1's and have been merged forward since.
+What changed is that stage 6 is the first code that *writes* to them, and a reader that only ever
+read them tolerated types a writer cannot: `inv.food[id] = n` against a string does nothing and
+reports nothing. So `MIGRATIONS[6]` coerces the three containers, integer-ises the counts, drops
+a legacy `collar: 'red'` (not a real id, and it would have drawn as the *earned* red collar she
+had never earned), and guarantees the active dog's breed is in `unlocks.breeds`.
+
+### 17.5 Contract deviations
+
+1. **`dog/care.js` writes back into `BALANCE`.** `solveBowl()` sets `ST.bowlTarget[1]`,
+   `ST.placedScale` and `ST.bowlFloorY` so anything reading BALANCE sees the truth — the drop
+   ring, the snap radius, the prop chase and the harness all do. The alternative was a second
+   source of truth for where the bowl is, which is the defect being fixed. The authored inputs
+   (`bowlFloorY` fallback, `dipInto`, `scaleRange`, the shares) all still live in BALANCE.
+2. **The bowl's own offsets live in `scenes/props.js`, not BALANCE.** `BOWL_BASE` / `BOWL_WELL` /
+   `BOWL_TOP` are properties of the path that draws the bowl and would drift from it if they were
+   filed anywhere else. They are exported, which is what makes them checkable.
+3. **`dog/rig.js` gained a second resolver.** `stance()` duplicates the load-bearing part of
+   `rig.update`'s arithmetic. The two share their literals (`SIT_DROP`, `SIT_HEAD`) and
+   `bowl2.py` asserts per frame that the prediction matches the live pose within 3 units
+   (measured: 0.00–0.17). Drift is possible in principle and would fail the gate.
+4. **The nav went to eight pills**, 40.5 virtual units each, under the 44 tap-target guideline.
+   `ui/nav.js` already makes the whole band a hit target and gives the gaps to the nearest pill,
+   so a thumb between two buttons presses one of them rather than poking the dog.
+5. **The shop does not scroll**, which is a constraint on the catalogue rather than a thing to
+   solve with a scroll view. Eight rows fit in 604 of 844.
+6. **The shop sells no decor**, against the brief's "toys, treats, care tools, collars, a little
+   decor". Decor is where `BALANCE.economy.unlocks` already put it — `rugBlue` is earned, not
+   bought — and putting two currencies on the same shelf is the confusion the one absolute rule
+   exists to prevent. Collars appear on both sides deliberately: a plain one is an object and
+   costs coins, the red one is earned and cannot be bought at any price. Same neck, no exchange.
+7. **`BALANCE.ui.wear` holds the collar colours**, read by both `dog/draw.js` and the two
+   surfaces, because a shop swatch that did not match the collar on the dog would be a lie in the
+   one place the player is deciding.
+
+### 17.6 Measured
+
+Headless Chromium, 390x844, `--enable-gpu`, dark mode.
+
+**The bowl, per frame** (`C:\tmp\pp8\bowl2.py`, 975 feed frames / 1026 water frames, stepped one
+at a time from care opening to care closing — not sampled):
+
+| assertion | feed | water |
+|---|---|---|
+| A bowl base on the floor, every frame | **PASS** 805/805, gap 0.00 | **PASS** 856/856, gap 0.00 |
+| B head clear of the belly, every frame | **PASS** 805/805, min 18.38 | **PASS** 856/856, min 19.05 |
+| frames with the head sunk through the belly | **0** (was 184/247) | **0** (was 164/243) |
+| C bowl on the same floor as his paws | PASS | PASS |
+| D `rig.x/y/s` handed back to home exactly | PASS | PASS |
+| E `stance()` predicts the live pose (<=3.0) | PASS, err <=0.17 | PASS, err <=0.05 |
+| muzzle depth into the food | 18.4 | 18.1 |
+
+`wash` and `brush` unchanged: 0 sunk frames, 0 placement drift, min chest 83.5 / 87.0.
+
+**Per breed** (`C:\tmp\pp8\breedproof.py`, the Shiba plus eight deliberate distortions —
++-70% muzzle, +-35% chest, +-60% leg, +30% head, and a heavy short-legged combination): **9/9 pass
+both invariants.** Bowl-base gap exactly 0.000 in every case; chest visible under the chin at the
+deepest bite 11.5–24.0 virtual units. Three cases hit the bowl's scale clamp, where the bowl
+becomes the nearest sane size rather than the exact one — the nose sits at a different depth, but
+the base cannot leave the floor.
+
+**Stage 6 gate** (`C:\tmp\pp8\stage6.py`, `stage6b.py`):
+
+| check | result |
+|---|---|
+| 10,000,000 coins: unlocks, adoption, gated row | nothing, refused, refused |
+| every `unlocks` id offered to `buyItem` | 4/4 refused, reason `unlock`, 0 coins moved |
+| buying an object | -55 coins, **0** care points |
+| giving a treat | 0 coins, **0** care points |
+| adopting | **0** coins, **0** care points, roster 1 -> 2 |
+| nav ids | 8, **0** unavailable, no "coming soon" reachable |
+| `surfaceBlockedFor`, both directions | 10/10 |
+| v1->v6 ... v5->v6 | 5/5, name / coins / care points / tricks / ledger intact |
+| console errors, external requests | 0, 0 |
+
+**The Cockapoo maths.** Gate 400 care points. A day is worth, through the real `awardCare`
+ledger: minimal (turn up, feed, water) **65**; attentive (turn up, all four care actions, a
+petting session, a walk, two toys, four training reps) **234** on paper and **214** actually paid,
+the difference being the daily cap biting; devoted **240** (the cap). So **day 2** for an
+attentive player, day 3 with a lighter second day, day 7 for someone barely looking after him. A
+contest pays **0**, so the ring cannot shorten it by a single day. Playing the same day twice pays
+**6** more, not 214 — the once-a-day set holds.
+
+**Frame times** (median / p95 of frame work, ms):
+
+| beat | DPR 2 | DPR 3 |
+|---|---|---|
+| room idle | 1.8 / 2.6 | 1.8 / 2.7 |
+| shop open | 1.8 / 2.8 | 2.1 / 2.8 |
+| kennel open | 1.9 / 3.0 | 2.3 / 3.0 |
+| feeding (the stoop) | 1.7 / 3.0 | 2.1 / 3.7 |
+
+rAF interval median **16.7 ms** and p95 **16.7–16.8 ms** in all eight, i.e. 60fps with the frame
+~85% idle. Reduced motion and light mode both re-run through the full per-frame bowl gate and the
+whole stage-6 screenshot pass: identical results, 0 errors.
+
+### 17.7 Not done, and known-imperfect
+
+- **The Cockapoo renders as the fallback breed.** `dog/breeds.js` contains only `shiba`; the
+  Schnoodle and Cockapoo art is being built in parallel. State is correct — she is stored as
+  `breedId: 'cockapoo'`, `sex: 'f'`, with her own needs, bond and pronouns — and `getBreed` falls
+  back to the Shiba silhouette until the data entry lands, at which point she renders correctly
+  with **no code change**. That is the §11.3 breed seam working, but it does mean that today the
+  two dogs look alike and her kennel portrait uses the Shiba palette.
+- **The eating pose was verified against one real breed.** The nine-way sweep is arithmetic on
+  synthetic proportions, not nine rendered dogs; only the Shiba was rendered and looked at. When
+  the breed branch merges, re-run `bowl2.py` per breed and *look*.
+- **The adoption beat has not been seen by a human**, and it is a one-shot moment.
+- Nav pills are 40.5 units wide; that wants a thumb on the real device.
+- `treatsGood` at 1100 care points is roughly a five-day goal and nobody has played that far.
+- Blocker 1.7 (the real-phone pass) is untouched and still gates 1.4 and 2.2.
