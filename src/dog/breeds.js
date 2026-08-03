@@ -795,100 +795,33 @@ export const BREEDS = {
          pale wedge up the side of each eye would just reintroduce, in a new
          place, the exact "patches stuck on his face" read that all of this is
          meant to remove. Deleted rather than retuned. */
-      /* EYEBROWS — REBUILT, AND THE SINGLE BIGGEST CHANGE ON THE FACE.
-         ------------------------------------------------------------------
-         The pair that was here carried FOUR of the six documented anger cues at
-         once, and the comment history shows each one being argued into place on
-         anatomical grounds without anyone checking what the assembled face
-         actually said:
+      /* NO EYEBROWS. Removed on direct instruction from the recipient's partner
+         after reviewing the warm-brown puppy: "delete the eyebrows from the
+         schnoodle".
 
-           1. It slanted DOWN TOWARD THE CENTRE. The path had the inner end
-              "heavy and low" and the outer third climbing, which is by
-              definition inward-down — the strongest anger signal there is in any
-              species. It was authored deliberately, reasoned as "a dog that is
-              pleased to see you lifts the OUTER brow". That is true of a dog
-              lifting a brow, and it is also exactly the geometry of a scowl when
-              it is the brow's resting shape.
-           2. It OVERHUNG and shaded the eye: `contact` threw a shadow down onto
-              the lid and `shadeUnder: 0.46` darkened its own underside, both
-              added to "attach the mass to the face".
-           3. It was INKED. `shade: 'coatSh'` at rim 0.40 put a hard dark line
-              directly above a pale mass directly above the eye — high-contrast
-              dark-over-light around the eye, which reads as a scowl.
-           4. It was `cream` on grey: an 84-point value step, i.e. the pale
-              patch stuck on the face that the feedback is about.
+         Kept here because it cost four passes to learn: the ORIGINAL brow pair
+         carried four separate anger cues at once, and each had been argued into
+         place on anatomical grounds without anyone checking what the assembled
+         face actually said —
+           1. it slanted DOWN TOWARD THE CENTRE (the strongest anger signal in any
+              species), reasoned as "a pleased dog lifts the OUTER brow" — true of
+              the movement, but that same geometry AS A RESTING SHAPE is a scowl;
+           2. it overhung and shaded the eye (contact shadow + shadeUnder);
+           3. it was inked — a hard dark line directly above a pale mass directly
+              above the eye, i.e. dark-over-light around the eye, which is a scowl;
+           4. it was an 84-point pale step on grey — the "patch stuck on his face".
 
-         What replaces it is a soft ROUNDED tuft of the dog's own hair:
+         A soft level rounded tuft in the coat's own tone fixed all four and was
+         the version reviewed. The call went the other way: brow-less is the
+         cleanest dome and the closest to the reference photo. The trade accepted
+         is that he reads as a plain doodle rather than carrying a schnauzer note;
+         the beard and moustache still break his jaw silhouette.
 
-         LEVEL, AND ARCHED. The apex is at the middle and both ends fall away
-         equally — the inner tip's mean height is 0.018 and the outer tip's is
-         0.014, a 0.2-unit difference across a 28-unit span, which is level to
-         within a pixel. That is deliberate: inward-DOWN is angry and inward-UP is
-         pleading (an earlier pass drew that one by accident and it was noted),
-         so the safe shape is neither. A rounded arch is the only brow on the
-         cute list that is not simply absent.
-
-         NO INK, NO CONTACT SHADOW, NO shadeUnder. `shade` is `creamSh` — the
-         beard's own shade, one step down the same warm ramp — and `rim` drops
-         from 0.40 to 0.08, so the edge is the shaded underside of a tuft of fur
-         instead of a drawn line. `contact` is gone outright: it existed to prove
-         the brow was in front of the skull, and a same-colour tuft does not need
-         proving because it cannot detach. A whisper of `shadeIn` is all the form
-         it needs.
-
-         RAISED CLEAR OF THE EYE. The drawn bottom edge (path + ~1.6 of tuft +
-         0.16 of rim) lands about 2 units above the top of the lens rather than on
-         its lash line. Hooding an eye is what "peering out from under" needs, and
-         "peering out from under" is not on the cute list. The eye is still drawn
-         last (face.eyesOver), so nothing can bite into it regardless.
-
-         It is still legible, and it is still the schnauzer note that stops him
-         being a cockapoo — but now as fur volume and silhouette, which is what
-         the brief asks for, rather than as two pale objects. */
-      {
-        /* centred on the eye (eyeSpacing is 0.425) and brought a little closer to
-           it: at -0.265 the drawn bottom edge sat a clear 2.4 units above the top
-           of the lens, and a brow with a visible gap under it reads as a separate
-           object hovering on the forehead — which is the old "floating pale slab"
-           complaint arriving by a different route. 1.4 units still leaves the eye
-           completely uncovered (nothing about hooding is wanted here) while
-           putting brow and eye in the same feature group. */
-        kind: 'fluff', tag: 'brow', layer: 'over', at: [0.425, -0.255], mirror: true,
-        /* `browTone` — the SMALLEST tone step on the dog, and the reason is in
-           the palette note for that key: the beard and the moustache are big
-           enough to carry `furn`, but a brow tuft only ~9 units deep needs to be
-           much closer to the coat or it reads as an applied patch rather than as
-           a raised part of it. `shade` stays on `furnSh` so the underside still
-           has enough form to read as raised. */
-        color: 'browTone', shade: 'furnSh', rim: 0.05, shadeUnder: 0.15,
-        /* low amplitude, many cycles, pow well below 1: small ROUND scallops.
-           The old 1.95/11/0.86 was tuned to look like bristle on a harsh-coated
-           adult; this is a soft puppy coat. */
-        tuftAmp: 1.05, tuftCycles: 17, tuftPow: 0.70,
-        /* A ROUNDED ARCH. Apex just inboard of centre, both tips level, no
-           straight run anywhere. In this frame +x is OUTWARD (away from the
-           midline), so the pair mirrors about the nose.
-           NARROWED from +-0.268 to +-0.205. At 28 units across on an 18.6-unit
-           eye the tuft was half again as wide as the thing it sits over, and a
-           shape that much wider than its feature reads as a horizontal BAR — at
-           face-crop size the pair were the second-loudest thing in the picture
-           after the eyes. Just wider than the eye reads as a brow. */
-        path: [
-          [-0.268, -0.012], [-0.180, -0.070], [-0.030, -0.100], [0.130, -0.088],
-          [0.262, -0.024], [0.262, 0.052], [0.130, 0.086], [-0.020, 0.094],
-          [-0.175, 0.070], [-0.268, 0.048],
-        ],
-        /* NO WISPS. The pair carried 11 of them at alpha 0.62, described as the
-           harsh bristle a schnauzer's furnishings are made of. Rendered at any
-           alpha they came out as thin dark lines radiating up and out of the tuft
-           — legible at face-crop zoom as SCRATCHES on the forehead, not as hair,
-           because a hair drawn in the shade colour on top of a mass in the fill
-           colour is a stroke, and strokes on fur read as scribble. The beard and
-           the moustache keep theirs (they are big enough that a wisp reads as a
-           strand leaving a mass); a brow only ~9 units deep is not.
-           And bristle is the wrong material anyway now: this is a soft puppy
-           coat, and the brief's cute brow is rounded, not harsh. */
-      },
+         If it is ever wanted back, git history has the tuft: the entry sat here
+         and used color 'browTone', shade 'furnSh', rim 0.05, shadeUnder 0.15,
+         tuftAmp 1.05 / tuftCycles 17 / tuftPow 0.70, at [0.425, -0.255], mirrored,
+         with a level rounded-arch path and no wisps. `browTone` remains in the
+         palette and `face.browY` is still honoured, so restoring it is additive. */
     ],
 
     temperament: { energy: 0.78, focus: 0.58, friendliness: 0.80 },
