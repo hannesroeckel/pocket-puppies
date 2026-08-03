@@ -34,6 +34,7 @@ import {
   drawBowl, drawSack, drawJug, drawBrush, drawSoap, drawDropRing, PC,
   BOWL_BASE, BOWL_WELL,
 } from '../scenes/props.js';
+import { resolveDims, stance, plantedSoleLocal } from './rig.js';
 
 const C = BALANCE.care;
 const ST = C.stage;
@@ -61,6 +62,128 @@ const N = BALANCE.needs;
 
 /* particle kinds */
 const K_KIBBLE = 0, K_WATER = 1, K_FOAM = 2, K_DROP = 3, K_TUFT = 4, K_SPARK = 5;
+
+/** every mutator in this file goes through here (§11.2: no NaN, ever) */
+function num(v, d) { const n = +v; return Number.isFinite(n) ? n : d; }
+
+/* ==========================================================================
+   SOLVE THE EATING GEOMETRY FOR ONE DOG — pure, and now the ONLY copy.
+
+   `main.js`'s `solveFor()` (the breed-independence proof) used to hold a second
+   hand-copy of this arithmetic so it could run against proportions no rig has.
+   Two copies of a solve is two answers, and the whole defect below was two
+   definitions of one floor, so it calls this instead.
+
+   THE ORDER MATTERS, and the correction to it is the fix:
+
+     1. THE FLOOR IS THE ROOM'S. `rig.floorV` — one line, derived from where the
+        room stands this dog and from his own standing paw.
+     2. Decide how far the HEAD may drop: a share of this dog's own
+        head-to-belly room, measured in the crouch it is spent in.
+     3. Ask where HIS PAWS WILL BE — the PLANTED sole, through the same
+        `plantedSoleLocal()` that `rig.update()` resolves. With `pawPlant: 1`
+        that is the floor from (1), exactly.
+     4. Put the bowl's BASE on that, its FOOD SURFACE at the muzzle, and let
+        the SCALE span the two — and say so out loud if the scale had to clamp,
+        because a clamped scale means the base is NOT on the floor.
+
+   WHAT WAS WRONG, AND WHY EVERY ASSERTION PASSED ANYWAY. Step 3 did not exist.
+   The floor came from the STANDING stance and the bowl's base was then checked
+   against that same standing number — self-consistent, and the wrong reference.
+   In the eating pose the drawn sole is 23-26 virtual units lower (the sphinx's
+   forward splay plus the stoop's lean), so the bowl stood on a floor line
+   roughly a paw's height above the paws, and read as held up to his muzzle.
+   Measured on all three breeds, `C:\tmp\pp8\floor1.py`:
+
+       breed      bowl base   drawn sole   gap
+       shiba        719.78      743.12    +23.34
+       cockapoo     720.69      746.89    +26.20
+       schnoodle    720.01      745.34    +25.33
+
+   `A_bowlBaseOnFloor` reported PASS at 805/805 frames with a gap of 0.001 the
+   whole time. An invariant that compares a number against itself is worse than
+   no check at all, because it produces confident numbers (ARCHITECTURE §18.2).
+   ========================================================================== */
+export function solveEatGeometry(proportions, place, floorVIn) {
+  const C2 = BALANCE.care, S = C2.stoop, ST2 = C2.stage;
+  const dims = resolveDims({ proportions });
+  const homeY = num(place && place.y, BALANCE.rig.place.y);
+  const homeS = num(place && place.s, BALANCE.rig.place.scale);
+  const posture = { sit: S.sit, down: S.down, squash: S.squash, pitch: C2.headPitch };
+
+  /* 1. the floor, from the room */
+  const stand = stance(dims, {});
+  const floorV = Number.isFinite(+floorVIn) ? +floorVIn
+    : homeY + stand.pawSole * homeS;
+
+  /* 2. the head budget, measured in the pose it is spent in. `rig.headRoom` is
+        the standing figure and it flatters: folding into the stoop moves the
+        belly and the chin by different amounts and costs ~7 rig units of
+        clearance before the head has dropped at all. */
+  const crouched = stance(dims, { ...posture, headLift: 0 });
+  const room = crouched.bodyBottom - crouched.headBottom;
+  const maxDrop = room * num(C2.headMaxShare, 0.82);
+  const drop = Math.max(0, Math.min(room * num(C2.headDownShare, 0.77), maxDrop));
+
+  /* where that puts him, before any bite dips him deeper. The forward
+     commitment moves the whole animal, so it moves the ruler. */
+  const eat = stance(dims, { ...posture, headLift: -drop });
+  const eatY = homeY + num(S.fwd, 0);
+  const eatS = homeS * (1 + num(S.near, 0));
+  const muzHY = num(proportions && proportions.muzzleH, 0) / 2;
+  const muzBottomV = eatY + (eat.muzY + muzHY) * eatS;
+
+  /* 3. WHERE HIS PAWS WILL ACTUALLY BE. The planted sole, same expression the
+        renderer resolves — so the bowl is placed against the dog that gets
+        drawn rather than against a standing one who is not there. */
+  const plant = clamp(num(S.pawPlant, 1), 0, 1);
+  const soleAuthoredV = eatY + eat.pawSole * eatS;
+  const soleEatV = lerp(soleAuthoredV, floorV, plant);
+  const soleStandV = homeY + stand.pawSole * homeS;
+
+  /* 4. the bowl stands where his paws stand */
+  const wellV = muzBottomV - num(ST2.dipInto, 2);
+  const span = BOWL_BASE - BOWL_WELL;
+  const range = Array.isArray(ST2.scaleRange) ? ST2.scaleRange : [1.1, 1.95];
+  const raw = (soleEatV - wellV) / span;
+  const scale = clamp(Number.isFinite(raw) ? raw : range[0], range[0], range[1]);
+  /* A CLAMPED SCALE IS A FAILURE, NOT A SAFETY NET — but be exact about WHICH
+     failure, because being vague here is how the last one hid.
+
+     The base stays on the floor either way: `targetY` is written as
+     `soleEatV - BOWL_BASE * scale`, so `targetY + BOWL_BASE * scale` is
+     `soleEatV` whatever `scale` turns out to be. What a clamp breaks is the
+     OTHER end — the food surface stops meeting his muzzle. Too small a clamp
+     leaves the surface below his nose and he reads as sniffing at a bowl he
+     never touches; too large buries his face past `dipInto`.
+
+     Seen, not deduced: rendering with `pawPlant: 0` forces `raw` to 2.30-2.56
+     against a 1.95 ceiling, and the crop shows a trough swallowing his paws
+     with his nose resting above the rim (`C:\tmp\pp8\shots\cmp-*-p00-*`). So
+     this is reported and the gate fails on it rather than clamping in silence
+     the way stage 7 did. */
+  const scaleClamped = !Number.isFinite(raw) || Math.abs(raw - scale) > 1e-9;
+
+  return {
+    room, drop, maxDrop, scale, scaleClamped, rawScale: raw,
+    /* the ONE floor, and the sole that has to agree with it */
+    floorV: soleEatV,
+    roomFloorV: floorV,
+    soleStandV, soleEatV, soleAuthoredV, plant,
+    /* the base sits ON that floor by construction: this is the only place the
+       bowl's y is ever computed, and it cannot be written without the floor
+       being in the expression */
+    targetY: soleEatV - BOWL_BASE * scale,
+    wellV: soleEatV - span * scale,
+    muzBottomV,
+    predict: {
+      bodyBottomV: eatY + eat.bodyBottom * eatS,
+      headBottomV: eatY + eat.headBottom * eatS,
+      muzBottomV,
+      soleV: soleEatV,
+    },
+  };
+}
 
 export function createCare(rig, opts = {}) {
   const game = opts.game;
@@ -138,60 +261,16 @@ export function createCare(rig, opts = {}) {
   let geo = null;
 
   function solveBowl() {
-    const S = C.stoop;
-    const posture = { sit: S.sit, down: S.down, squash: S.squash, pitch: C.headPitch };
-    const stand = rig.stance({});
-    /* 1. THE BUDGET, MEASURED IN THE POSE IT IS SPENT IN. `rig.headRoom` is
-          the standing figure and it flatters: folding into the stoop moves the
-          belly and the chin by different amounts and costs ~7 rig units of
-          clearance before the head has dropped at all. Budgeting against the
-          standing number is how the Shiba passed while a shallower chest was
-          left with 3 virtual units at the bottom of a bite. */
-    const crouched = rig.stance({ ...posture, headLift: 0 });
-    const room = crouched.bodyBottom - crouched.headBottom;
-    /* the resting eating depth; the per-bite bob rides on top and is clamped
-       separately at apply time against `maxDrop` */
-    const maxDrop = room * num(C.headMaxShare, 0.82);
-    const drop = Math.max(0, Math.min(room * num(C.headDownShare, 0.77), maxDrop));
-
-    /* 2. where that actually puts him, before any bite dips him deeper. */
-    const eat = rig.stance({ ...posture, headLift: -drop });
-    /* the forward commitment moves the whole animal, so it moves the ruler */
-    const eatY = rig.home.y + S.fwd;
-    const eatS = rig.home.s * (1 + S.near);
-    const muzHY = rig.breed.proportions.muzzleH / 2;
-    const muzBottomV = eatY + (eat.muzY + muzHY) * eatS;
-
-    /* 3+4. the floor is where his paws STAND — she puts the bowl down in
-       front of a standing dog, and he then folds forward over it, his paws
-       arriving either side and a little nearer the camera than its base. */
-    const floorV = rig.home.y + stand.pawSole * rig.home.s;
-    const wellV = muzBottomV - num(ST.dipInto, 2);
-    const span = BOWL_BASE - BOWL_WELL;
-    const range = ST.scaleRange || [1.1, 1.95];
-    const raw = (floorV - wellV) / span;
-    const scale = clamp(Number.isFinite(raw) ? raw : range[0], range[0], range[1]);
-
-    geo = {
-      room, drop, maxDrop, floorV, scale,
-      /* the base sits ON the floor by construction: this is the only place
-         the bowl's y is ever computed, and it cannot be written without the
-         floor being in the expression */
-      targetY: floorV - BOWL_BASE * scale,
-      wellV: floorV - span * scale,
-      muzBottomV,
-      soleStandV: floorV,
-      soleEatV: eatY + eat.pawSole * eatS,
-      predict: {
-        bodyBottomV: eatY + eat.bodyBottom * eatS,
-        headBottomV: eatY + eat.headBottom * eatS,
-        muzBottomV,
-      },
-    };
+    /* THE ARITHMETIC LIVES ABOVE, AND NOWHERE ELSE. All this does is hand it
+       this dog and this room: his proportions, where the room stands him, and
+       the room's own floor line — which is `rig.floorV`, the same number
+       `rig.update()` plants his paws on. */
+    geo = solveEatGeometry(rig.breed.proportions, rig.home, rig.floorV);
     /* write the answers back so BALANCE still tells the truth to anything
-       reading it — the drop ring, the snap test and the harness all do */
-    ST.placedScale = scale;
-    ST.bowlFloorY = floorV;
+       reading it — the drop ring, the snap test and the harness all do
+       (documented deviation, ARCHITECTURE §17.5 item 1 / §18.1) */
+    ST.placedScale = geo.scale;
+    ST.bowlFloorY = geo.floorV;
     ST.bowlTarget[1] = geo.targetY;
     return geo;
   }
@@ -982,6 +1061,21 @@ export function createCare(rig, opts = {}) {
   function apply(dt, mood) {
     const w = sp.care.x;
     rig.drive.neck = 0;
+    /* A DRIVE, WRITTEN EVERY FRAME, exactly like `drive.neck` above it: only
+       the two bowl actions have a prop standing on the floor, so only they
+       claim his paws. Everything else in the game keeps stage 7's paws
+       untouched, byte for byte.
+
+       THE CONDITION IS drawFront's CONDITION, deliberately and exactly: the
+       claim on his paws lasts precisely as long as there is a bowl drawn on the
+       floor for them to agree with (`w > 0.004 && feed|water`, see drawFront).
+       Holding it any longer would pin his paws for ~0.9s after the bowl has
+       gone, which is a pose change with nothing on screen to justify it; ending
+       it any sooner puts the bowl back in the air. The new assertion A checks
+       the same window, so the gate and the renderer cannot disagree about which
+       frames are being claimed (§18.2). */
+    rig.plantShare = (mode === 'feed' || mode === 'water')
+      ? clamp(num(C.stoop.pawPlant, 1), 0, 1) * clamp(w, 0, 1) : 0;
     if (w < 0.002) {
       /* HAND THE PLACEMENT BACK. `toy.apply` is skipped for the whole of
          `care.active` now, so once the care weight is spent nobody else is
@@ -1009,7 +1103,7 @@ export function createCare(rig, opts = {}) {
     const m = +mul;
     return Number.isFinite(m) && m > 0 ? m : 1;
   }
-  function num(v, d) { const n = +v; return Number.isFinite(n) ? n : d; }
+  /* `num` is now a module-level helper, shared with `solveEatGeometry` above */
 
   /** blend a spring target toward `v` by weight `k`, targets only */
   function bias(spring, v, k) { spring.to(spring.t * (1 - k) + v * k); }
@@ -1532,6 +1626,21 @@ export function createCare(rig, opts = {}) {
         bowlWellY: +(bowlDrawY + BOWL_WELL * bowlScaleNow).toFixed(2),
         bowlFloorY: ST.bowlFloorY,
         stoop: +sp.stoop.x.toFixed(3),
+        /* ---- WHAT THE EYE ACTUALLY COMPARES (stage 8) -------------------
+           `soleLiveY` is the bottom edge of the paw dog/draw.js is drawing
+           THIS FRAME, from the same `pose.pawSole` the renderer uses and now
+           including the breed's pawScale. THIS is the floor the bowl has to
+           agree with, and asserting against it is the check that would have
+           caught the defect the old `bowlFloorY` comparison certified as
+           passing 805 frames out of 805 (ARCHITECTURE §18.2). */
+        soleLiveY: +(rig.y + rig.pose.pawSole * rig.s
+          * (rig.sy === undefined ? 1 : rig.sy)).toFixed(2),
+        roomFloorY: +rig.floorV.toFixed(2),
+        plantShare: +(+rig.plantShare || 0).toFixed(3),
+        /* a clamped scale means no allowed bowl size can both stand on the
+           floor and reach his muzzle — i.e. the base is OFF the floor. Loud. */
+        scaleClamped: geo ? !!geo.scaleClamped : false,
+        rawScale: geo ? +geo.rawScale.toFixed(4) : null,
         /* THE SOLVE, so a harness can check that what rig.stance() predicted
            is what rig.update() actually produced. If those two ever drift the
            bowl is being placed against a dog that does not exist. */
@@ -1545,6 +1654,13 @@ export function createCare(rig, opts = {}) {
           predictBodyBottomY: +geo.predict.bodyBottomV.toFixed(2),
           predictHeadBottomY: +geo.predict.headBottomV.toFixed(2),
           predictMuzBottomY: +geo.predict.muzBottomV.toFixed(2),
+          /* the sole the solve PREDICTED. `G` compares it against the sole
+             rig.update() produced, so the bowl can never again be placed
+             against a dog who is not the one being drawn. */
+          predictSoleY: +geo.predict.soleV.toFixed(2),
+          roomFloorV: +geo.roomFloorV.toFixed(2),
+          soleAuthoredV: +geo.soleAuthoredV.toFixed(2),
+          unplantedSink: +(geo.soleAuthoredV - geo.roomFloorV).toFixed(2),
         } : null,
       };
     },

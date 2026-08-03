@@ -332,6 +332,26 @@ export const BALANCE = {
       fwd: 7,            // rig.y, virtual units nearer the camera
       near: 0.030,       // rig.s gain to match — depth is scale
       rise: 0.55,        // how much of it survives the shake-the-drips beat
+      /* HOW FIRMLY HIS PAWS STAY ON THE FLOOR WHILE HE FOLDS, 0..1.
+         1 = the drawn sole stays exactly on `rig.floorY` — the line the bowl
+         is standing on — for every frame of the stoop, which is what a dog
+         reaching into a bowl actually does and what makes the bowl read as
+         resting on the rug. 0 = stage 7's behaviour, the paws splaying 23-26
+         virtual units below that floor while the bowl stayed on it.
+
+         This is not a nudge applied to the bowl: the bowl's y and scale are
+         still solved from the floor and the muzzle, and the solve now predicts
+         the PLANTED sole through the same `plantedSoleLocal()` that
+         `rig.update()` resolves. Turning this down does not float the bowl, it
+         grows it. The base stays on the floor at any value (it is written as
+         `sole - BOWL_BASE * scale`); what turning this down actually costs is
+         the MUZZLE REACH, because the bowl has to get taller to bring the food
+         up to a head that has not moved. Past ~0.45 the solved scale runs into
+         `scaleRange`, the food surface stops meeting his nose, and the new gate
+         fails loudly on the clamp instead of shipping a dog that mimes eating.
+         At 0 — stage 7's paws — the solve wants 2.30-2.56 against a 1.95
+         ceiling on the three shipping breeds. */
+      pawPlant: 1,
     },
     /* HOW FAR THE HEAD DROPS once the stoop has done its work, in rig units,
        and how far it pitches over. `headDown` came DOWN from stage 7's 74: the
@@ -1735,6 +1755,21 @@ export const BALANCE = {
               on stilts rather than a dog in the air. */
            downSpread: 13, downPawY: 5, downBow: 9, downHindTuck: 7,
            hopPawShare: 0.82,
+           /* ---- stage 8: PLANTED PAWS -----------------------------------
+              Master switch for `rig.update()`'s floor planting. When the layer
+              that owns the pose sets `rig.plantShare`, the planted front paw's
+              sole resolves against `rig.floorV` — the room's floor — instead
+              of the authored offsets above, and the legs take up the slack.
+
+              The offsets above are NOT wrong; they are what a lie-down looks
+              like when there is nothing on the floor to disagree with. They
+              became wrong the moment a bowl had to stand on the same floor:
+              `sitLift` + `downPawY` plus the stoop's forward lean put the
+              drawn sole 23-26 virtual units below the line the bowl was
+              standing on, on all three breeds (ARCHITECTURE §18.2).
+
+              Set false to get stage 7's paws back for a like-for-like look. */
+           plantOnFloor: true,
            /* WHERE A RAISED PAW GOES SIDEWAYS, driven by the `pawOut` channel
               and scaled by how far the paw is off the floor — so nothing that
               only lifts a paw a little (idle kicks, running strides, the
@@ -1988,6 +2023,32 @@ export const BALANCE = {
      here would make this file unreadable without making anything tunable. */
   audio: {
     master: 0.62,          // the one output gain. Nintendogs was QUIET.
+
+    /* ---- PLAYING THROUGH THE iPHONE SILENT SWITCH -------------------
+       Sound was reported working on the laptop and silent on the iPhone. That
+       was NOT a bug: it was the physical ringer switch, which mutes WebAudio in
+       Safari exactly as ARCHITECTURE §16.8 says it does. Nothing was broken.
+
+       Overriding it is a deliberate product decision, taken because the
+       recipient normally leaves her phone on silent — so the alternative is a
+       pet that never makes a sound for the person this game was built for, and
+       that reads as broken rather than as respectful. A dog you cannot hear is
+       most of the dog missing: the panting, the claw-clicks, his own voice.
+
+       engine/audio.js starts a fraction of a second of generated silence on a
+       looping `playsinline` <audio> element inside the same gesture that resumes
+       the AudioContext, which moves iOS's audio session from *ambient* (ringer
+       switch applies) to *playback* (it does not). WebAudio then rides along.
+
+       WHAT MAKES THIS SAFE TO DO. The in-game toggle is the authority: sound off
+       RELEASES the session rather than muting it, and that choice persists in
+       `state.settings.sound`. Going hidden releases it too. It starts only from
+       a real gesture and it plays silence, so there is no moment the game makes
+       a noise she did not ask for. Set false to hand the switch back. */
+    overrideSilentSwitch: true,
+    /* the silence itself, generated in code — no asset, no fetch, no precache
+       entry. A quarter second at 8kHz mono 8-bit is ~2KB of base64. */
+    silentSession: { seconds: 0.25, rate: 8000 },
     lead: 0.012,           // schedule this far ahead of `currentTime`; a sound
                            // scheduled at exactly `now` can start mid-buffer
                            // and click on the attack

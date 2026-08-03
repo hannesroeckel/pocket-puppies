@@ -17,8 +17,11 @@ import { load, createSaver, requestPersistence, isStandalone, exportSave, import
 import { applyElapsed, timeOfDay } from './state/time.js';
 import { createRoomScene } from './scenes/room.js';
 import { resolveDims, stance, headRoom } from './dog/rig.js';
+/* the eating solve itself, so the breed-independence proof measures the code
+   the game runs instead of a hand-copy of it (§18.2) */
+import { solveEatGeometry } from './dog/care.js';
 import { BOWL_BASE, BOWL_WELL } from './scenes/props.js';
-import { BREED_IDS } from './dog/breeds.js';
+import { BREED_IDS, getBreed } from './dog/breeds.js';
 
 const V = BALANCE.view;
 
@@ -329,6 +332,13 @@ async function boot() {
      deliberately bolted to the same moment, AFTER the flush. */
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      /* SILENCE FIRST, and completely. Now that the game deliberately overrides
+         the iPhone's ringer switch (BALANCE.audio.overrideSilentSwitch), a
+         backgrounded tab holding an audio session open is exactly the failure
+         that risks a puppy noise from her pocket in a meeting — so release the
+         session and suspend the graph rather than trusting iOS to suspend our JS
+         for us. Before `pwa.onHidden()`, which may hand over to a new worker. */
+      audio.silenceForHidden();
       pwa.onHidden();
     } else {
       /* iOS also suspends the AudioContext when the app is backgrounded, and a
@@ -1154,51 +1164,64 @@ async function boot() {
        that is really so for proportions nobody has seen yet. */
     solveFor(proportions) {
       const C = BALANCE.care, S = C.stoop, ST = C.stage;
+      /* THE SAME ARITHMETIC, AND NOW ACTUALLY SO. The comment above claimed
+         this ran care.js's solve; it ran a hand-copy of it, which is how the
+         two came to disagree about where the floor was. It calls the real one.
+         (ARCHITECTURE §18.2) */
+      const g = solveEatGeometry(proportions, BALANCE.rig.place);
       const dims = resolveDims({ proportions });
       const posture = { sit: S.sit, down: S.down, squash: S.squash, pitch: C.headPitch };
       const bob = Math.max(C.feed.bobDepth, C.water.bobDepth) * C.bobPeak;
-      /* the budget, measured in the crouch it is spent in — see care.js */
-      const crouched = stance(dims, { ...posture, headLift: 0 });
-      const room = crouched.bodyBottom - crouched.headBottom;
-      const standingRoom = headRoom(dims);
-      const maxDrop = room * C.headMaxShare;
-      const drop = Math.max(0, Math.min(room * C.headDownShare, maxDrop));
       /* what the deepest bite ACTUALLY reaches, after applyBowl's clamp */
-      const deepest = Math.min(drop + bob, maxDrop);
-      const stand = stance(dims, {});
-      const eat = stance(dims, { ...posture, headLift: -drop });
-      const eatY = BALANCE.rig.place.y + S.fwd;
+      const deepest = Math.min(g.drop + bob, g.maxDrop);
+      const eat = stance(dims, { ...posture, headLift: -g.drop });
       const eatS = BALANCE.rig.place.scale * (1 + S.near);
-      const muzBottomV = eatY + (eat.muzY + proportions.muzzleH / 2) * eatS;
-      const floorV = BALANCE.rig.place.y + stand.pawSole * BALANCE.rig.place.scale;
-      const wellV = muzBottomV - ST.dipInto;
       const span = BOWL_BASE - BOWL_WELL;
-      const range = ST.scaleRange;
-      const raw = (floorV - wellV) / span;
-      const scale = Math.min(range[1], Math.max(range[0], raw));
-      const targetY = floorV - BOWL_BASE * scale;
-      /* the two invariants, restated as measurements */
-      const baseV = targetY + BOWL_BASE * scale;
       const chestBelowChinAtRest = (eat.bodyBottom - eat.headBottom) * eatS;
       const chestBelowChinAtBob =
-        (eat.bodyBottom - (eat.headBottom + (deepest - drop))) * eatS;
+        (eat.bodyBottom - (eat.headBottom + (deepest - g.drop))) * eatS;
+      const baseV = g.targetY + BOWL_BASE * g.scale;
       return {
-        room: +room.toFixed(2), drop: +drop.toFixed(2),
-        maxDrop: +maxDrop.toFixed(2), deepest: +deepest.toFixed(2),
-        share: +(drop / room).toFixed(3),
-        floorV: +floorV.toFixed(2), targetY: +targetY.toFixed(2),
-        baseV: +baseV.toFixed(2), gap: +(baseV - floorV).toFixed(4),
-        scale: +scale.toFixed(4), scaleClamped: raw !== scale,
-        rawScale: +raw.toFixed(4),
-        muzBottomV: +muzBottomV.toFixed(2), wellV: +(floorV - span * scale).toFixed(2),
+        room: +g.room.toFixed(2), drop: +g.drop.toFixed(2),
+        maxDrop: +g.maxDrop.toFixed(2), deepest: +deepest.toFixed(2),
+        share: +(g.drop / g.room).toFixed(3),
+        standingRoom: +headRoom(dims).toFixed(2),
+        /* THE ROOM'S FLOOR, AND WHERE HIS PAWS LAND ON IT. These being equal
+           is the invariant that matters and it is what `pawPlant` buys; the
+           old `gap` compared the base against the number the base was
+           computed from, so it was 0 whatever the render looked like. */
+        roomFloorV: +g.roomFloorV.toFixed(2),
+        soleEatV: +g.soleEatV.toFixed(2),
+        soleAuthoredV: +g.soleAuthoredV.toFixed(2),
+        soleStandV: +g.soleStandV.toFixed(2),
+        plant: g.plant,
+        /* how far the pose WOULD have sunk his paws below the floor unplanted:
+           the defect, per breed, as one number */
+        unplantedSink: +(g.soleAuthoredV - g.roomFloorV).toFixed(2),
+        floorV: +g.floorV.toFixed(2), targetY: +g.targetY.toFixed(2),
+        baseV: +baseV.toFixed(2),
+        gapBaseVsSole: +(baseV - g.soleEatV).toFixed(4),
+        /* THE REAL FAILURE MODE: a clamped scale means no bowl inside
+           `scaleRange` can both stand on the floor and reach his muzzle. */
+        scale: +g.scale.toFixed(4), scaleClamped: g.scaleClamped,
+        rawScale: +g.rawScale.toFixed(4),
+        scaleRange: ST.scaleRange,
+        muzBottomV: +g.muzBottomV.toFixed(2), wellV: +g.wellV.toFixed(2),
         chestBelowChinAtRest: +chestBelowChinAtRest.toFixed(2),
         chestBelowChinAtBob: +chestBelowChinAtBob.toFixed(2),
-        muzIntoBowl: +(muzBottomV - (floorV - span * scale)).toFixed(2),
+        muzIntoBowl: +(g.muzBottomV - g.wellV).toFixed(2),
       };
     },
+    /* READS THE BREED TABLE, not a global nobody ever set. This asked
+       `window.__ppBreeds`, which is assigned nowhere in the tree, so it has
+       always returned null and the breed-independence sweep silently skipped
+       the three breeds that actually ship — testing only distortions of
+       whichever dog happened to be loaded. Found while re-deriving the bowl
+       assertions (§18.2); the live gate `C:\tmp\pp8\bowl3.py` covers all three
+       breeds in the running game regardless. */
     breedProportions: (id) => {
-      const b = window.__ppBreeds && window.__ppBreeds[id];
-      return b ? b.proportions : null;
+      const b = getBreed(id);
+      return b && b.proportions ? b.proportions : null;
     },
     adoptCheck: () => game.adoptCheck(),
     adopt: (now) => game.adoptDog(now === undefined ? Date.now() : now),

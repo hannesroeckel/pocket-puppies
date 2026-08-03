@@ -55,8 +55,15 @@
    browser see a byte-different `sw.js`, which starts a new install into a new
    cache; leaving it alone while changing a module would serve the module from
    the old cache forever. */
-/* stage 6 added two modules to PRECACHE, so the cache generation moves */
-const VERSION = '8.0.0';
+/* stage 8 changed rig.js, care.js, main.js, room.js, audio.js and balance.js —
+   the floating-bowl floor fix and the iOS silent-switch override. NO new file:
+   the silent-session audio is generated as a data URI in engine/audio.js
+   precisely so it needs no asset, no fetch and no entry below. The PRECACHE list
+   is therefore unchanged (`py tools/check-precache.py`: 49 entries, matches the
+   tree) but the generation MUST still move, or every one of those six modules is
+   served from the old cache for ever and the fix ships to nobody. A previous
+   stage nearly shipped a 404-offline regression by forgetting exactly this. */
+const VERSION = '8.1.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

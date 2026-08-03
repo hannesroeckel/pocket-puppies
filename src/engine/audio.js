@@ -39,6 +39,63 @@ import { resolve, voiceFor, NEUTRAL } from './sfx.js';
 
 const AU = BALANCE.audio;
 
+/* ==========================================================================
+   PLAYING THROUGH THE iPHONE SILENT SWITCH.
+
+   NOT A BUG FIX — A DELIBERATE OVERRIDE. Sound was reported missing on iPhone
+   and audible on the laptop; the cause was the physical ringer switch, exactly
+   as ARCHITECTURE §16.8 documents. Nothing in this file was broken. The
+   decision to override it is a product one: the recipient normally keeps her
+   phone on silent, and a pet game that is permanently mute reads as broken
+   rather than as respectful.
+
+   HOW IT WORKS. iOS gives a page's audio one of two session categories.
+   WebAudio alone lands in *ambient*, which the ringer switch mutes. An
+   `<audio>` ELEMENT that is actually playing moves the session to *playback*,
+   which ignores the switch — and WebAudio output then rides along with it. So
+   we start a fraction of a second of TRUE SILENCE on a looping `playsinline`
+   element inside the same gesture that resumes the AudioContext.
+
+   The silence is generated here as a data URI, so this costs no asset file, no
+   fetch and no service-worker precache entry (§14.2: zero external requests).
+
+   WHAT KEEPS THIS FROM BECOMING A PUPPY BARKING IN HER POCKET:
+     - the in-game toggle is the authority. `setEnabled(false)` stops this
+       element, so the session is RELEASED and not merely muted.
+     - `visibilitychange -> hidden` stops it too (main.js), so a backgrounded
+       game holds no audio session and leaks no battery.
+     - it starts only from a real gesture, and it plays silence, so there is no
+       moment where the game makes a sound she did not ask for.
+   ========================================================================== */
+/**
+ * A RIFF/WAVE data URI of pure silence. 8-bit unsigned PCM, so a silent sample
+ * is 128; a quarter second at 8kHz is ~2KB of base64 and costs nothing.
+ *
+ * It must be genuinely silent AUDIO rather than a `muted` element: a muted
+ * element does not move the session category, which is the entire point.
+ */
+function silentWavUri(seconds, rate) {
+  const sr = Math.max(8000, Math.round(+rate || 8000));
+  const n = Math.max(1, Math.round(Math.max(0.02, +seconds || 0.25) * sr));
+  const total = 44 + n;
+  const b = new Uint8Array(total);
+  const dv = new DataView(b.buffer);
+  const wr = (o, s) => { for (let i = 0; i < s.length; i++) b[o + i] = s.charCodeAt(i); };
+  wr(0, 'RIFF'); dv.setUint32(4, total - 8, true); wr(8, 'WAVE');
+  wr(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true);        // PCM
+  dv.setUint16(22, 1, true);        // mono
+  dv.setUint32(24, sr, true);
+  dv.setUint32(28, sr, true);       // byte rate: mono, one byte per sample
+  dv.setUint16(32, 1, true);        // block align
+  dv.setUint16(34, 8, true);        // bits per sample
+  wr(36, 'data'); dv.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) b[44 + i] = 128;
+  let s = '';
+  for (let i = 0; i < total; i++) s += String.fromCharCode(b[i]);
+  return 'data:audio/wav;base64,' + btoa(s);
+}
+
 /**
  * @param settings  `state.settings` — read live, so a toggle takes effect at once
  * @param opts.getDogId  () => the ACTIVE dog's persisted id. His voice is
@@ -59,6 +116,90 @@ export function createAudio(settings = { sound: true }, opts = {}) {
   const counts = { played: 0, dropped: 0, throttled: 0, muted: 0, failed: 0 };
 
   const getDogId = typeof opts.getDogId === 'function' ? opts.getDogId : null;
+
+  /* ---- the silent element that owns the iOS audio session ------------- */
+  let sessionEl = null;
+  let sessionOn = false;
+  let sessionFail = '';
+
+  /** the override is on AND she has sound on. Both, or we hold no session. */
+  function sessionWanted() {
+    return !!AU.overrideSilentSwitch && !!(settings && settings.sound);
+  }
+
+  /**
+   * Start (or restart) the silent looping element. The first call MUST come from
+   * inside a real user gesture — it is called from `unlock()`, which is
+   * gesture-only, so that holds by construction.
+   *
+   * Every failure is swallowed. This is an enhancement: a device that refuses it
+   * must still get the ordinary WebAudio path, with the ringer switch behaving
+   * exactly as it always did.
+   */
+  function ensureSession() {
+    if (!sessionWanted()) return false;
+    try {
+      if (!sessionEl) {
+        const S = AU.silentSession || {};
+        const el = document.createElement('audio');
+        /* playsinline in both spellings: without it older WebKit can treat an
+           element that starts playing as a reason to go fullscreen. */
+        el.setAttribute('playsinline', '');
+        el.setAttribute('webkit-playsinline', '');
+        el.loop = true;
+        el.preload = 'auto';
+        /* NOT `muted`, and NOT volume 0 — either leaves the session in *ambient*
+           and makes the whole exercise pointless. The DATA is silent, so there
+           is nothing to hear either way. */
+        el.muted = false;
+        el.volume = 1;
+        el.src = silentWavUri(S.seconds, S.rate);
+        /* IN THE DOCUMENT, on purpose. An <audio> element can play detached, but
+           some WebKit builds will not start one that is not in the document, and
+           a detached element is also invisible to any check that it exists — the
+           first run of the audio gate reported "no element" while the session was
+           in fact held, which is the wrong kind of surprise in this file.
+           An <audio> with no `controls` renders no box, so this costs no layout;
+           it is hidden from assistive tech because it is not content. */
+        el.setAttribute('aria-hidden', 'true');
+        el.tabIndex = -1;
+        try { document.body.appendChild(el); } catch (e) { /* detached is still OK */ }
+        sessionEl = el;
+      }
+      const p = sessionEl.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => { sessionOn = true; sessionFail = ''; },
+          (e) => { sessionOn = false; sessionFail = (e && e.name) || 'refused'; });
+      } else {
+        sessionOn = true;
+      }
+      return true;
+    } catch (e) {
+      sessionFail = (e && e.name) || 'threw';
+      return false;
+    }
+  }
+
+  /**
+   * RELEASE the session — stop it, and drop the source so nothing stays
+   * decoded. Called by the toggle and by going hidden, because "silenced" has to
+   * mean the phone is not holding an audio session open on our behalf. Muting a
+   * still-playing element would keep the category flipped and keep the game in
+   * the Now Playing state with nothing to show for it.
+   */
+  function stopSession() {
+    sessionOn = false;
+    if (!sessionEl) return;
+    try {
+      sessionEl.pause();
+      sessionEl.removeAttribute('src');
+      sessionEl.load();
+      /* and out of the document, so "sound off" leaves no trace of the override
+         behind for anything to find or restart */
+      if (sessionEl.parentNode) sessionEl.parentNode.removeChild(sessionEl);
+    } catch (e) { /* a setting may never throw */ }
+    sessionEl = null;
+  }
 
   function voice() {
     if (!getDogId) return NEUTRAL;
@@ -114,6 +255,12 @@ export function createAudio(settings = { sound: true }, opts = {}) {
   function unlock() {
     tried++;
     if (!ctx && !build()) { lastState = 'unavailable'; return false; }
+    /* THE SAME GESTURE DOES BOTH. The session flip only takes inside a real
+       gesture, and this function is the one place the game guarantees it is in
+       one — so start the silent element here, BEFORE the early return below.
+       Putting it after would mean an already-running context (the common case
+       after returning from the background) never re-armed the session. */
+    ensureSession();
     lastState = ctx.state;
     if (ctx.state === 'running') return true;
     try {
@@ -139,6 +286,11 @@ export function createAudio(settings = { sound: true }, opts = {}) {
    * refuses, the next touch picks it up.
    */
   function resumeIfNeeded() {
+    /* re-arm the silent element too, or sound comes back from the background
+       obeying the ringer switch again — the same defect, one background away.
+       Silence needs no permission, and if the platform refuses it here the next
+       touch runs `unlock()`, which tries again. */
+    ensureSession();
     if (!ctx || ctx.state === 'running') return;
     try { ctx.resume(); } catch (e) { /* the next gesture will retry */ }
   }
@@ -146,6 +298,17 @@ export function createAudio(settings = { sound: true }, opts = {}) {
   function setEnabled(on) {
     const want = !!on;
     if (settings) settings.sound = want;
+    /* ---- THE TOGGLE IS THE AUTHORITY ---------------------------------
+       We are deliberately overriding a device setting, so the one control she
+       has inside the game must be absolute. Turning sound off RELEASES the iOS
+       audio session rather than muting it: no held session, no Now Playing
+       entry, nothing for the override to keep alive. Turning it back on re-arms
+       from the tap itself, which is a real gesture and therefore allowed.
+
+       Ordered so that the OFF path stops the session before anything else can
+       fail, and so `settings.sound` — the persisted field (state/save.js) — is
+       already written; that is what makes the choice survive a reload. */
+    if (want) ensureSession(); else stopSession();
     if (!master) return want;
     try {
       master.gain.value = want ? AU.master : 0;
@@ -155,6 +318,19 @@ export function createAudio(settings = { sound: true }, opts = {}) {
       else if (!want && connected) { master.disconnect(); connected = false; }
     } catch (e) { /* never let a setting throw */ }
     return want;
+  }
+
+  /**
+   * GOING AWAY. Called from `visibilitychange -> hidden`. Releases the session
+   * and suspends the graph, so a backgrounded game holds no audio session, keeps
+   * no timers warm and cannot make a sound from her pocket. iOS suspends JS here
+   * anyway, but relying on that is relying on a platform detail rather than
+   * saying what we want.
+   */
+  function silenceForHidden() {
+    stopSession();
+    if (!ctx) return;
+    try { ctx.suspend(); } catch (e) { /* the next gesture repairs it */ }
   }
 
   /** the retrigger floor for a name: petting can tap faster than ears like */
@@ -180,6 +356,9 @@ export function createAudio(settings = { sound: true }, opts = {}) {
     unlock,
     resumeIfNeeded,
     setEnabled,
+    silenceForHidden,
+    /** is iOS's audio session ours right now? (verification + the debug row) */
+    get sessionHeld() { return sessionOn; },
 
     /**
      * Per-name overrides, kept from stage 1's stub so a scene can install a
@@ -248,6 +427,18 @@ export function createAudio(settings = { sound: true }, opts = {}) {
         connected, enabled: !!(settings && settings.sound),
         tried, lastState, sampleRate: ctx ? ctx.sampleRate : 0,
         masterGain: master ? +master.gain.value.toFixed(3) : null,
+        /* the silent-switch override, as numbers a harness can assert on */
+        overrideSilentSwitch: !!AU.overrideSilentSwitch,
+        sessionWanted: sessionWanted(),
+        sessionHeld: sessionOn,
+        sessionEl: !!sessionEl,
+        sessionPaused: sessionEl ? !!sessionEl.paused : null,
+        sessionLoop: sessionEl ? !!sessionEl.loop : null,
+        sessionInline: sessionEl ? sessionEl.hasAttribute('playsinline') : null,
+        sessionMuted: sessionEl ? !!sessionEl.muted : null,
+        sessionSrcKind: sessionEl && sessionEl.getAttribute('src')
+          ? sessionEl.getAttribute('src').slice(0, 22) : '',
+        sessionFail,
         counts: { ...counts },
         voice: voice(),
         pending: [...missing],

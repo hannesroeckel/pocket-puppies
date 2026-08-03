@@ -896,17 +896,26 @@ export function createRoomScene() {
   }
 
   /**
-   * The sound row. Its note names the iPhone silent switch, because iOS applies
-   * it to WebAudio too: a muted phone gives a silent, seemingly-broken pet, and
-   * the research recommends telling her once rather than letting her conclude
-   * the game is broken (docs/nintendogs-design-reference.md §3, audio autoplay).
+   * The sound row. Its note used to tell her the phone's silent switch would mute
+   * the game as well, which was true and is now deliberately false: the game
+   * overrides the ringer switch on purpose, because the recipient keeps her phone
+   * on silent and would otherwise never hear the puppy at all
+   * (BALANCE.audio.overrideSilentSwitch, ARCHITECTURE §18.3).
+   *
+   * SO THE NOTE HAS TO SAY SO. Overriding a device setting without telling her
+   * is the rude version; telling her, and making THIS ROW the way to stop it, is
+   * not. The off note promises completeness because the toggle really does
+   * release the audio session rather than muting it.
    */
   function soundRow() {
     const on = !!app.game.state.settings.sound;
+    const over = !!BALANCE.audio.overrideSilentSwitch;
     return {
       id: 'sound',
       label: on ? 'Sound: on' : 'Sound: off',
-      note: on ? 'Yips, paws and water. Your phone’s silent switch mutes it too'
+      note: on
+        ? (over ? 'Yips, paws and water — plays even on silent. Turn off here'
+          : 'Yips, paws and water. Your phone’s silent switch mutes it too')
         : 'Everything is silent',
     };
   }

@@ -105,6 +105,47 @@ export function resolveDims(breed) {
 const SIT_DROP = 17;
 const SIT_HEAD = 2;
 
+/* ==========================================================================
+   THE DRAWN PAW, AND THE FLOOR — ONE EXPRESSION EACH.
+
+   `dog/draw.js`'s drawLeg sizes the paw ellipse as
+
+       pr = legW * 1.06 * (1 + lift*0.06 + down*0.10) * dims.pawScale
+
+   and strokes its outline at `ell(px, py - 1.2, pr + 1.8, pr*0.80 + 1.8)`, so
+   the LOWEST DRAWN PIXEL of a planted paw is `py + 0.6 + pr*0.80`.
+
+   That expression used to exist in three places, and one of them — the
+   published `pose.pawSole`, the number everything outside the renderer treats
+   as "where the floor is" — omitted `dims.pawScale`. The two doodle crosses
+   have deliberately oversized paws (cockapoo 1.16, schnoodle 1.12), so on the
+   two breeds that ship alongside the Shiba the rig published a floor 2.0 and
+   2.7 virtual units ABOVE the paw a player can see. Measured, both breeds, on
+   the eating frame: `C:\tmp\pp8\floor1.py`. Now there is one copy of it and
+   `stance()`, `rig.update()` and the bowl solve all read it.
+   ========================================================================== */
+/** the radius drawLeg will actually use for this paw */
+export function pawRadius(dims, down = 0, lift = 0) {
+  const ps = dims.pawScale === undefined ? 1 : dims.pawScale;
+  return dims.legW * 1.06 * (1 + lift * 0.06 + down * 0.10) * ps;
+}
+/** the bottom edge of that paw — the contact point — from its anchor */
+export function soleFor(pawY, pawR) { return pawY + 0.6 + pawR * 0.80; }
+/**
+ * WHERE HIS PAWS HAVE TO BE, in rig-local units, for a dog whose rig sits at
+ * (`y`, `s`) in a room whose floor line is `floorV`.
+ *
+ * This is the ONE definition of "his paws are on the floor". `rig.update()`
+ * resolves the live pose through it and `dog/care.js` predicts the eating pose
+ * through it, so a prop placed on the floor and the paws standing on that same
+ * floor cannot be answering to two different numbers — which is exactly the
+ * defect this replaces (ARCHITECTURE §18.2).
+ */
+export function plantedSoleLocal(floorV, y, s) {
+  const d = s || 1;
+  return (floorV - y) / d;
+}
+
 export function stance(dims, ch = {}) {
   const R2 = BALANCE.rig;
   const TR = R2.trick;
@@ -122,7 +163,7 @@ export function stance(dims, ch = {}) {
   const headY = neckY - dims.headOffset - headLift + sit * SIT_HEAD - pitch * 3;
   const muzY = headY + dims.muzY - pitch * R2.parallax.vMuz;
   const pawY = -1 + sit * LG.sitLift + dn * LG.downPawY;
-  const pawR = dims.legW * 1.06 * (1 + dn * 0.10);
+  const pawR = pawRadius(dims, dn, 0);
   return {
     bodyY, bodyHH,
     bodyTop: bodyY - bodyHH,
@@ -132,7 +173,7 @@ export function stance(dims, ch = {}) {
     headBottom: headY + dims.headHH,
     muzY,
     pawY,
-    pawSole: pawY + 0.6 + pawR * 0.80,
+    pawSole: soleFor(pawY, pawR),
   };
 }
 
@@ -156,6 +197,23 @@ export function createRig(opts = {}) {
 
   const dims = resolveDims(breed);
   const pal = derivePalette(breed.palette);
+
+  /* ==================================================================
+     THE ROOM'S FLOOR LINE, in virtual units.
+
+     A FLOOR IS A PROPERTY OF THE ROOM, NOT OF THE DOG'S TRANSFORM. This is
+     the line a planted paw rests on and the line a bowl standing on the floor
+     rests on, and there is exactly one of it. It is DERIVED — from where the
+     room stands this dog (`rig.place`) and from his own standing paw, so it
+     moves with legs and paw size and cannot be typed wrong — but once derived
+     it is a room constant that no pose may move.
+
+     Writable, because a scene that carries the dog somewhere else in the room
+     (walk.js's departure, toy.js's fetch, reunion.js's charge) is moving him
+     to a different floor and owns saying so. Nothing does yet; they all switch
+     planting off instead, which is the honest thing for a dog in mid-air.
+     ================================================================== */
+  const FLOOR_V = R.place.y + stance(dims, {}).pawSole * R.place.scale;
 
   /* ---- silhouettes in rig-local units ------------------------------- */
   const F = breed.silhouette.front;
@@ -279,6 +337,14 @@ export function createRig(opts = {}) {
     sx: 1,
     /* the resting placement, so a sequence can always spring back to it */
     home: { x: R.place.x, y: R.place.y, s: R.place.scale },
+    /** the room's floor line — see FLOOR_V above. One number, read by all. */
+    floorV: FLOOR_V,
+    /* HOW MUCH HIS PLANTED PAWS ARE HELD ON THAT FLOOR, 0..1, written per
+       frame by whoever owns the pose — a drive, exactly like `drive.neck` and
+       `wear`: the rig is told, it does not go and ask. 0 is the pose's own
+       authored paw offsets, which is how every scene except the two bowl
+       actions still behaves, byte for byte. */
+    plantShare: 0,
     t: 0,
     /* Per-frame drive written by pet.js / care.js before update().
          mood       the FAST channel — what visibly drives her body
@@ -449,8 +515,37 @@ export function createRig(opts = {}) {
              sole offset mirrors dog/draw.js's paw ellipse exactly. */
       const LGf = R.leg;
       pose.pawY = -1 + sit * LGf.sitLift + dn * LGf.downPawY - hp * TR.hopHeight * LGf.hopPawShare;
-      const pawR = dims.legW * 1.06 * (1 + dn * 0.10);
-      pose.pawSole = pose.pawY + 0.6 + pawR * 0.80;
+      const pawR = pawRadius(dims, dn, 0);
+      pose.pawSole = soleFor(pose.pawY, pawR);
+
+      /* --- PLANTED PAWS ------------------------------------------------
+         A DOG FOLDING DOWN OVER A BOWL DOES NOT SINK THROUGH THE FLOOR. The
+         authored offsets above (`sitLift`, `downPawY`, and the forward lean
+         care.js writes into rig.y/rig.s) between them carried the drawn sole
+         23-26 virtual units BELOW `floorV` in the eating pose on all three
+         breeds — measured, not argued. The bowl was standing on `floorV`, so
+         the bowl read as held up to his face (ARCHITECTURE §18.2).
+
+         So when the layer that owns the pose says his paws are planted, they
+         resolve against the ROOM's floor and the legs take up the difference.
+         Contact is the invariant; the paw offset is what gives.
+
+         `hop` overrides it to zero: a paw that has left the ground is not
+         planted, and this must never pin an airborne dog's feet to the floor.
+         NaN-hardened both ways — a bad `floorV` leaves the authored pose
+         untouched rather than teleporting the legs. */
+      const plantOn = LGf.plantOnFloor === undefined ? true : !!LGf.plantOnFloor;
+      const share = +rig.plantShare;
+      const plant = plantOn && Number.isFinite(share)
+        ? clamp(share, 0, 1) * clamp(1 - hp, 0, 1) : 0;
+      if (plant > 0.0001 && Number.isFinite(rig.floorV)) {
+        const syNow = rig.sy === undefined ? 1 : rig.sy;
+        const want = plantedSoleLocal(rig.floorV, rig.y, rig.s * syNow);
+        if (Number.isFinite(want)) {
+          pose.pawSole = lerp(pose.pawSole, want, plant);
+          pose.pawY = pose.pawSole - 0.6 - pawR * 0.80;
+        }
+      }
 
       /* --- head placement (follows the body, with lag) --- */
       pose.yaw = clamp(s.yaw.x, -R.yawClamp, R.yawClamp);

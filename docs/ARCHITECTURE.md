@@ -1968,3 +1968,177 @@ whole stage-6 screenshot pass: identical results, 0 errors.
 - Nav pills are 40.5 units wide; that wants a thumb on the real device.
 - `treatsGood` at 1100 care points is roughly a five-day goal and nobody has played that far.
 - Blocker 1.7 (the real-phone pass) is untouched and still gates 1.4 and 2.2.
+
+---
+
+## 18. Stage 8 (the floating bowl, again — and the silent switch) — as built
+
+Two defects reported from the real device by the person the game is for. One was a real geometry
+bug that a previous stage had "verified"; the other was not a bug at all.
+
+### 18.1 What §17 actually shipped
+
+§17.7 ended with an instruction to whoever merged the breed branch: *only the Shiba was rendered
+and looked at; when the breed branch merges, re-run `bowl2.py` per breed and look.* The breed
+branch merged. Nobody looked. The bowl shipped hovering at the dog's muzzle on all three breeds,
+and `bowl2.py` reported **`A_bowlBaseOnFloor`: PASS, 805/805 frames, gap 0.001, tolerance 1.0**
+the whole time.
+
+### 18.2 The floating bowl — root cause
+
+**The assertion was true and useless.** `A` compared `bowlBaseY` against `bowlFloorY`. But
+`solveBowl()` computed the bowl's y *as* `bowlFloorY - BOWL_BASE * placedScale` and then wrote
+`bowlFloorY` back into `BALANCE` (deviation 17.5.1). So `A` compared the bowl's base against the
+number the base had been computed from. It was 0 by construction, on every frame, for any pose,
+for any breed, and for any value of the bug. **An invariant that closes over its own reference
+frame is worse than no check at all, because it produces confident per-frame numbers** — which
+were relayed to the human as verification.
+
+**The floor was defined from the wrong pose.** `bowlFloorY` came from `rig.stance({})` — the
+**standing** dog. The eating pose is `sit: 1.0, down: 0.92` plus a forward lean into `rig.y` /
+`rig.s`, and those move where the paws are *drawn*: `sitLift` (6) + `downPawY` (5) + the
+paw-radius growth + `fwd` (7) put the drawn sole **23.3–26.2 virtual units below the line the bowl
+was standing on.** Measured on the running game, all three breeds (`C:\tmp\pp8\floor1.py`):
+
+| breed | bowl base | drawn sole | gap | published sole | published vs drawn |
+|---|---|---|---|---|---|
+| shiba | 719.78 | 743.12 | **+23.34** | 743.12 | 0.00 |
+| cockapoo | 720.69 | 746.89 | **+26.20** | 744.15 | **+2.74** |
+| schnoodle | 720.01 | 745.34 | **+25.33** | 743.38 | **+1.96** |
+
+**A second, breed-specific divergence.** The right-hand column is its own bug. `pose.pawSole` —
+the number everything outside the renderer treats as "where the floor is" — was computed as
+`legW * 1.06 * (1 + down*0.10)`, while `dog/draw.js`'s `drawLeg` sizes the paw as
+`legW * 1.06 * (...) * dims.pawScale`. The two doodle crosses have deliberately oversized paws
+(cockapoo 1.16, schnoodle 1.12), so on the two breeds shipping *alongside* the Shiba the rig
+published a floor 2.0 and 2.7 units above the paw a player can see. The Shiba, `pawScale`
+undefined, was the one breed where the two agreed — so tuning against it hid this completely.
+
+**The fix: contact is the invariant.** A floor is a property of the room, not of the dog's
+transform. `dog/rig.js` now owns one room floor line, `rig.floorV`, derived from `rig.place` and
+the dog's own standing paw, and `rig.update()` resolves the **planted** sole against it when the
+layer owning the pose says the paws are planted (`rig.plantShare`, a per-frame drive like
+`drive.neck`). The legs take up the difference. `pawRadius()` / `soleFor()` /
+`plantedSoleLocal()` are the single copy of the three expressions that had drifted.
+
+**Why the paws move and not the bowl.** Lowering the bowl to the paws instead was tried and
+rendered (`pawPlant: 0`, `cmp-*-p00-*`). It needs scale **2.30–2.56** against a `scaleRange`
+ceiling of 1.95, so it clamps on all three breeds: the base does stay on the floor, but the food
+surface stops meeting his nose and the crop shows a trough swallowing his paws with his muzzle
+resting *above* the rim. Planting the paws needs **1.40 / 1.52 / 1.65** — comfortably in range, and
+essentially the scale that was already there, because the bowl was never the wrong size. It was
+standing on a floor 25 units too high.
+
+### 18.3 The silent switch — not a defect
+
+Sound was audible on the laptop and silent on the iPhone. The cause was the physical ringer
+switch, exactly as §16.8 documents. **Nothing in `engine/audio.js` or `engine/sfx.js` was broken.**
+
+Overriding it is a deliberate product decision, taken because the recipient normally keeps her
+phone on silent, so the alternative is a pet that is permanently mute for the one person this was
+built for. `engine/audio.js` starts a quarter-second of **generated silence** on a looping
+`playsinline` `<audio>` element inside the same gesture that resumes the `AudioContext`, which
+moves iOS's audio session from *ambient* to *playback*. Behind
+`BALANCE.audio.overrideSilentSwitch`, default `true`. The silence is a data URI, so it costs no
+asset, no fetch and no precache entry.
+
+Guardrails, because this deliberately overrides a device setting:
+
+- **the in-game toggle is the authority.** `setEnabled(false)` *releases* the session (stops the
+  element, drops its source, removes it from the document) rather than muting it, on top of the
+  existing gain-0 + disconnect + `play()` early-return. It persists in `state.settings.sound`.
+- **nothing sounds unprompted.** No element and no context before the first gesture.
+- **`visibilitychange` to hidden** releases the session *and* suspends the graph, so a
+  backgrounded game holds no audio session. A puppy barking from her pocket in a meeting is the
+  failure this risks, so it is not left to iOS suspending our JS for us.
+- the Settings row no longer tells her the ringer switch mutes the game, and points at itself.
+
+### 18.4 Contract deviations
+
+1. **17.5.1 stands and is unchanged** — `solveBowl()` still writes `placedScale`, `bowlFloorY` and
+   `bowlTarget[1]` back into `BALANCE`. `bowlFloorY` is now the *planted eating sole*, which with
+   `pawPlant: 1` is `rig.floorV` exactly.
+2. **17.5.3 is partly repaid.** `stance()` is still a second resolver, but the paw/floor
+   arithmetic it duplicated is now one shared expression, and the solve's *prediction* of the sole
+   is asserted against the live pose per frame (`G`, error 0.000 on all six runs).
+3. **The eating solve moved out of the closure.** `solveEatGeometry()` is exported from
+   `dog/care.js` and `main.js`'s `solveFor()` calls it. It previously held a hand-copy of the same
+   arithmetic while its comment claimed it ran "the same arithmetic, not a copy" — the two had
+   diverged, which is the deviation this removes.
+4. **`main.js` imports `dog/care.js`.** Needed for (3). `main.js` is the top of the tree.
+5. **`rig.plantShare` is a drive, not a pose channel.** It is written every frame by the layer that
+   owns the pose and read by `rig.update()`, like `drive.neck` and `wear`. It is **0 everywhere
+   except the two bowl actions**, so every other scene's paws are byte-identical to stage 7; that
+   is asserted (`framesClaimingPaws: 0` for wash and brush on all three breeds). Planting is
+   therefore *not* yet the global truth the room deserves — see 18.6.
+6. **`engine/audio.js` creates a DOM element.** The only DOM node any engine module makes. It has
+   to be an `<audio>` element in the document for the session category to flip, and it is removed
+   again when sound is switched off.
+7. **`breedProportions()` was dead.** It read `window.__ppBreeds`, which is assigned nowhere in the
+   tree, so it always returned null and the breed-independence sweep had silently been testing only
+   distortions of whichever dog was loaded — never the three breeds that ship. It now reads
+   `getBreed()`.
+
+### 18.5 Measured, and looked at
+
+The distinction matters more than the numbers, because the numbers are what lied last time.
+
+**Looked at** (rendered, cropped, viewed): the eating phase for shiba, cockapoo and schnoodle; the
+drinking phase for all three; the rejected `pawPlant: 0` alternative on the schnoodle; a
+labelled-rules overlay of every candidate floor line; and a tight crosshair crop proving
+`BOWL_BASE` marks the bowl's real underside and `pose.pawSole` marks the real paw bottom. In all
+six shipping renders the base is down on the rug between the planted paws and the nose is *in* the
+food (`muzIntoBowl` 18.0–19.0).
+
+**Only measured** (never rendered): the six clamped distortion cases in `breedproof.py`; frame
+timings; the audio structure.
+
+**The corrected gate** (`C:\tmp\pp8\bowl3.py`, 3 breeds x feed+water, ~975–1026 frames each,
+stepped one frame at a time, not sampled) — all PASS:
+
+- `A_baseOnLiveDrawnSole` — the base against the **live drawn sole on the same frame**, on exactly
+  the frames `drawFront` puts a bowl on screen. Gap **-0.588 … +0.007** against a 1.5 tolerance.
+- `B_plantedSoleOnRoomFloor` — the planted sole stays on `rig.floorV` in every pose.
+  `soleStandingRange == soleEatingRange` exactly, **`standToEatShift: 0.0`** on all three breeds.
+- `C_publishedSoleIsTheDrawnPaw` — `pose.pawSole` vs `drawLeg`'s own expression: worst error
+  **0.0000** (was 2.74 on the cockapoo).
+- `D_scaleNeverClamped` — 1.399 / 1.521 / 1.647, `raw == scale`.
+- `E_headClearOfTorso` — chest visible >= 17.7 (required 12).
+- `F_placementHandedBack` — `rig.y/s` and `plantShare` all back to rest.
+- `G_stancePredictsReality` — sole error **0.000**, body/head/muzzle <= 0.19.
+- wash + brush unregressed on all three breeds; `framesClaimingPaws: 0`.
+
+**Audio** (`C:\tmp\pp8\audio8.py`, 33 checks, all PASS): nothing exists before a gesture; one
+gesture arms context *and* a looping, playsinline, un-muted, data-URI element; the toggle releases
+it completely and refuses `play()`; the choice survives a reload; hidden releases the session and
+suspends the context; returning re-arms both; `overrideSilentSwitch: false` starts no element and
+leaves sound working. **126 requests, all local; zero audio asset requests.**
+
+**Frames** (`stage6b.py`, 390x844, `--enable-gpu`): worst work p95 **3.3 ms** across eight beats
+including *feeding (the stoop)* at DPR 2 and 3; rAF median **16.7 ms** throughout — 60fps.
+v1 to v6 migrations all pass. `stage6.py`: currencies, nav, `surfaceBlockedFor` all PASS.
+Zero console errors and zero external requests in every run above.
+`sw.js` `VERSION` **8.0.0 to 8.1.0**; `PRECACHE` unchanged and verified
+(`py tools/check-precache.py` — 49 entries, matches the tree).
+
+### 18.6 Not done, and known-imperfect
+
+- **Planting is scoped to the two bowl actions, not to the room.** The floor *should* be the floor
+  in every pose, and `rig.floorV` now exists to make that possible — but switching it on globally
+  changes every sit and lie-down in the game (tricks, idle, contest, reunion), and the scenes that
+  carry the dog elsewhere (`walk.js`, `toy.js`, `reunion.js`) would each need to say so or have
+  their paws pinned to a floor they have left. That is a bigger visual audit than this defect
+  warranted. Consequence today: a dog sitting next to a placed bowl *after* the action has ended
+  has his paws ~7.5 units below its base — invisible, because `drawFront` stops drawing the bowl
+  the moment `mode` clears, which is why `A` is asserted on exactly that window.
+- **`scaleRange` cannot absorb extreme proportions.** Six of nine synthetic distortions clamp. All
+  three shipping breeds sit mid-range, and the clamp is now a loud failure rather than a silent
+  fallback, so a future breed that cannot be fed will say so instead of floating.
+- **The silent-switch override is unproven.** Headless Chromium cannot flip an iOS audio session
+  and cannot hear anything. Every precondition and every guardrail is verified; that the session
+  category actually changes, and that the game is actually audible on a silenced iPhone, needs the
+  real device. This is the one item here that a human ear must close.
+- **Nobody has looked at the landing spring.** The bowl dips up to ~0.6 units past the sole over
+  ~7 frames as it settles; it is reported separately by the gate rather than tolerated, but it was
+  measured, not viewed.
+- Blocker 1.7 (the real-phone pass) is still untouched and still gates this.
