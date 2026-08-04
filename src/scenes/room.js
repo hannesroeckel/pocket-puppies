@@ -593,14 +593,43 @@ export function createRoomScene() {
     });
   }
 
+  /* ---- the More sheet (stage 9) ---------------------------------------
+     The four destinations the nav shed when it went from eight pills to five.
+     A sheet rather than a grid or a second bar because all four of these were
+     ALREADY sheet-shaped surfaces, so nothing changes register on the way in —
+     and because the sheet's rows have room for a line of copy, which is more
+     than the 40-unit pills they replace ever had.
+
+     Every row here routes to the same function the old pill called. There is no
+     second path to any of these surfaces and no logic lives in this sheet. */
+  function openMore() {
+    sheetKind = 'more';
+    sheet.open({
+      title: 'More',
+      rows: [
+        { id: 'shop', label: 'Shop', note: 'Food, toys and something to wear' },
+        { id: 'dogs', label: 'Dogs', note: 'Who is home, and who is waiting' },
+        { id: 'ring', label: 'The ring', note: 'Disc, agility and obedience' },
+        { id: 'settings', label: 'Settings', note: 'Sound, name and saving' },
+        { id: 'close', label: 'Done' },
+      ],
+    });
+  }
+
   function navAction(a, n) {
     /* HE IS OUT. Everything in-room is unavailable, said once and warmly —
-       never as an error, and the walk button is how you get him back. */
-    if (walk && walk.away && n.id !== 'settings' && n.id !== 'walk') {
+       never as an error, and the walk button is how you get him back.
+       `more` passes because Settings lives behind it now, and renaming lives
+       behind Settings: the away state used to let 'settings' through for
+       exactly this reason and the exemption moved with the surface. The rows
+       INSIDE More still go through the arbiter, so Shop/Dogs/Ring each refuse
+       with the away line rather than opening over an absent dog. */
+    if (walk && walk.away && n.id !== 'more' && n.id !== 'walk') {
       toasts.show(walk.COPY.awayBusy(a.game.pron));
       return;
     }
     if (n.id === 'care') { openCare(); return; }
+    if (n.id === 'more') { openMore(); return; }
     if (n.id === 'settings') { openSettings(); return; }
     if (n.id === 'train') { startTrain(); return; }
     if (n.id === 'walk') { startWalk(); return; }
@@ -966,6 +995,20 @@ export function createRoomScene() {
 
   function sheetAction(id) {
     if (id === 'close' || id === '__backdrop') { sheet.close(); return; }
+    /* ---- the More sheet's four destinations ----------------------------
+       Each goes through the SAME function the nav pill used to call, so the
+       arbiter still arbitrates and there is exactly one path to each surface.
+       That is what keeps the away state correct without a line being added
+       here: while he is out, Shop/Dogs/Ring each get refused with the away
+       toast by `surfaceOwner()` returning 'away', and Settings — which is the
+       one you actually want out there, because renaming is behind it — opens. */
+    if (id === 'shop') { sheet.close(); openShop(); return; }
+    if (id === 'dogs') { sheet.close(); openKennel(); return; }
+    if (id === 'ring') { sheet.close(); startContest(); return; }
+    /* not `sheet.close()` first: `openSettings()` swaps the open sheet's rows,
+       so More -> Settings is one panel changing its mind rather than a panel
+       sliding out and a second sliding in behind it */
+    if (id === 'settings') { openSettings(); return; }
     if (id === 'feed' || id === 'water' || id === 'wash' || id === 'brush') {
       sheet.close();
       startCare(id);
@@ -1269,32 +1312,33 @@ export function createRoomScene() {
         toast: (msg) => toasts.show(msg),
       });
 
+      /* ---- FIVE PILLS (stage 9) ------------------------------------------
+         Was eight, at 40.5 virtual units each — under the 44 tap-target
+         guideline, which stage 6 noted and shipped anyway. Five give 68.4.
+
+         The four that stay on the bar are the four you press DURING something:
+         feeding, playing, training, going out. The four that moved behind
+         `More` — shop, kennel, ring, settings — are all destinations you
+         choose deliberately, and all four were already sheet-shaped surfaces,
+         so the extra tap lands on a surface of the same kind rather than
+         changing what they feel like.
+
+         NOTHING BECAME UNREACHABLE (gift-ready item 2.3): every id below and
+         every id in `openMore()` is handled in `navAction`/`sheetAction`, and
+         `More` is reachable while he is out on a walk so Settings — and
+         therefore renaming — stays available in the one state where the rest of
+         the room is not. */
       nav = createNav([
         /* care, play, training and WALKS are in-room features, not scenes */
         { id: 'care', label: 'Care', available: true },
-        { id: 'walk', label: 'Walk', available: true },
-        { id: 'train', label: 'Train', available: true },
         { id: 'play', label: 'Play', available: true },
-        /* the ring. A short label on purpose: seven pills across 390 virtual
-           units leaves 47 each, and ui/nav.js draws its labels at a fixed
-           size rather than shrinking them. */
-        { id: 'ring', label: 'Ring', available: true },
-        /* STAGE 6. `available` is now literally `true` rather than
-           `app.nav.has('shop')`: the shop is not a registered SCENE, it is an
-           in-room surface like the ring and the walk, so asking the scene
-           registry about it always answered false and drew it dimmed with a
-           "coming soon" toast behind it. That was quality item 2.3, and this
-           line was half of it. */
-        { id: 'shop', label: 'Shop', available: true },
-        /* the kennel. EIGHT PILLS across 390 virtual units leaves 40.5 each,
-           which is under the 44 tap-target guideline — but ui/nav.js makes the
-           whole band a hit target and gives the gap to the NEAREST pill, so a
-           thumb between two buttons still presses one of them rather than
-           poking the dog. Labelled 'Dogs' because at this width the label has
-           to be short, and because that is what is behind it. */
-        { id: 'dogs', label: 'Dogs', icon: 'dogs', available: true },
-        { id: 'settings', label: 'More', icon: 'settings', available: true },
-      ], { safeBottom: app.view.safe.bottom / app.view.vs });
+        { id: 'train', label: 'Train', available: true },
+        { id: 'walk', label: 'Walk', available: true },
+        { id: 'more', label: 'More', icon: 'more', available: true },
+      ], {
+        safeBottom: app.view.safe.bottom / app.view.vs,
+        reduced: app.reduced,
+      });
 
       scene.resize(app);
 
@@ -1527,6 +1571,20 @@ export function createRoomScene() {
       if (walk.away && hud.hint) { hintBeforeWalk = hud.hint; hud.setHint(''); }
       else if (!walk.away && hintBeforeWalk && !hud.hint) { hud.setHint(hintBeforeWalk); hintBeforeWalk = ''; }
       hud.update(dt);
+      /* the tactile press is a 100ms tween, so the nav needs a clock */
+      nav.update(dt);
+      /* WHICH PILL IS LIT. The mock's selected-nav-pill state, and with five
+         pills there is finally room for it to be worth having: it answers "what
+         am I in the middle of" without a word of copy. Derived from what is
+         actually open rather than from the last thing tapped, so closing a
+         surface any other way (backdrop, Done, he came home) unlights it. */
+      nav.active = care.mode ? 'care'
+        : (train.modal ? 'train'
+          : (walk.away || walk.modal ? 'walk'
+            : (toy.busy ? 'play'
+              : ((sheet.isOpen && (sheetKind === 'more' || sheetKind === 'settings'))
+                || shop.modal || kennel.modal || contest.modal ? 'more'
+                : (sheet.isOpen && sheetKind === 'care' ? 'care' : '')))));
       /* chrome gets out of the way for the beats that need the whole screen */
       hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active
         && !walk.modal && !contest.modal && !install.modal;
@@ -1672,6 +1730,10 @@ export function createRoomScene() {
         if (sheet.isOpen) {
           capture = 'sheet';
           const row = sheet.hit(ev.x, ev.y);
+          /* acknowledge the touch BEFORE acting on it: `sheetAction` may close
+             or re-open the sheet in the same frame, and a press that lands after
+             that is a press on a row that no longer exists */
+          if (row) sheet.press(row.id);
           if (row) sheetAction(row.id);
           return;
         }
@@ -1711,7 +1773,7 @@ export function createRoomScene() {
           pet.down(l0.x, l0.y, ev.x, ev.y);
           return;
         }
-        if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.showNeeds(); return; }
+        if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.pressed = true; hud.showNeeds(); return; }
         const n = nav.hit(ev.x, ev.y);
         if (n) { capture = 'nav'; pressedNav = n; nav.pressed = n.id; return; }
         /* HE IS OUT. The chrome above still works — she can change a setting or
@@ -1746,6 +1808,9 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'up') {
+        /* the name pill's press releases wherever the thumb goes: the panel is
+           already open by then, so there is nothing to confirm on release */
+        hud.pressed = false;
         if (capture === 'contest') { contest.pointer(ev, local()); capture = ''; return; }
       if (capture === 'walk') { walk.pointer(ev, local()); capture = ''; return; }
         if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
@@ -1768,7 +1833,7 @@ export function createRoomScene() {
       }
 
       if (ev.type === 'cancel') {
-        nav.pressed = ''; pressedNav = null;
+        nav.pressed = ''; pressedNav = null; hud.pressed = false;
         if (capture === 'contest') contest.pointer(ev, local());
         else if (capture === 'walk') walk.pointer(ev, local());
         else if (capture === 'toy') toy.pointer(ev, local());
@@ -1895,6 +1960,13 @@ export function createRoomScene() {
     },
     openCare() { openCare(); },
     openSettings() { openSettings(); },
+    /* stage 9: the More sheet, and the nav itself — so the verification harness
+       presses the pill the player presses rather than a guessed coordinate, and
+       so "nothing is unreachable" can be checked by walking the real rows. */
+    openMore() { openMore(); },
+    get nav() { return nav; },
+    get sheet() { return sheet; },
+    get sheetKind() { return sheetKind; },
     toast(msg) { if (toasts) toasts.show(msg); },
   };
 

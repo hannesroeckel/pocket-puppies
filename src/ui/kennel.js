@@ -32,7 +32,9 @@
 import BALANCE from '../state/balance.js';
 import { clamp, roundRect, TAU, smooth, lerp } from '../engine/draw.js';
 import { Spring } from '../engine/spring.js';
-import { drawText } from './text.js';
+import { drawText, measure } from './text.js';
+import { INK, SURF, C, R, PRESS, type, alpha } from './tokens.js';
+import { tactile, createPresses } from './surface.js';
 import { getBreed, BREEDS } from '../dog/breeds.js';
 import { collarGlyph, WEAR_COLOUR } from './shop.js';
 
@@ -41,13 +43,37 @@ const H = BALANCE.view.H;
 const K = BALANCE.ui.kennel;
 const EK = BALANCE.economy.kennel;
 
-const SCRIM = 0.52;
-const PANEL = '#fdf3df';
-const CARD = '#f7e7cd';
-const CARD_ON = '#f6dfb4';
-const CARD_OFF = '#efe3d2';
-const CHIP = '#e9954f';
-const CHIP_OFF = '#d8c8b2';
+/* THE SAME SIX CHROME ROLES ui/shop.js HAS, and until now the same six hexes
+   typed out a second time — see the note at the top of that file. The two
+   surfaces are meant to be siblings, so the one place they must agree is the
+   place they were each guessing. */
+const SCRIM = 0.44;
+const PANEL = SURF.card;
+const CARD = SURF.row;
+/* the card of the dog who is IN THE ROOM. `#f6dfb4` is surface-highest typed
+   from memory — and typed twice in this file, once here and once as the
+   not-yet-adopted puppy's medallion, for two unrelated reasons. */
+const CARD_ON = C.surfaceHighest;
+const CARD_OFF = SURF.rowOff;
+/* THE ACTIONABLE CHIP IS THE FILLED DARK BUTTON, NOT THE PALE ONE.
+   It was `#e9954f`, a saturated orange, and the straight token swap to
+   `secondary-container` (#fed6a7) made it a pale peach sitting on a
+   `surface-container` (#ffebcf) row — a nine-step difference in one channel.
+   RENDERED AND LOOKED AT: the chip had vanished. It read as a floating label,
+   which is the worst possible outcome for the one control on the row that
+   does something.
+   `chipStrong` is Material's own answer (the `primary` role, filled, with
+   light ink on it) and it is what ui/install.js's primary button uses, so the
+   two most important buttons in the game now agree. The hierarchy is carried
+   by LIGHTNESS rather than saturation, which is what survives a warm cream
+   surface — and a dark chip on cream is unambiguous about being pressable. */
+const CHIP = SURF.chipStrong;
+const CHIP_OFF = SURF.chipOff;
+/* the standing pill and the Done chip were `#eee2c8` and `#f0dfc2`; the shop
+   spelled the same two pills `#f3e3c6` and `#f0dfc2`. One role, one token. */
+const PILL = SURF.chip;
+/* the press highlight over a tapped portrait. Was `#fff6df`, warm near-white. */
+const FLASH = SURF.chrome;
 
 const cap = (w) => (w ? w[0].toUpperCase() + w.slice(1) : w);
 
@@ -115,6 +141,13 @@ export function createKennel(opts = {}) {
   let t = 0;
   let flashId = '';
   let flashT = 0;
+  /* THE TACTILE PRESS RIDES ON THE FLASH. The cards, the earned rows and the
+     chips are pressable objects now (ui/surface.js) and a press needs a clock —
+     but this file already had one, and `flashId` already records what she
+     touched. Driving the compression off it in update() adds no second input
+     path and no second answer to that question; the flash goes on doing exactly
+     what it did. */
+  const presses = createPresses(reduced);
 
   /* the adoption beat */
   let beat = '';          // '' | 'knock' | 'reveal' | 'settle'
@@ -223,7 +256,16 @@ export function createKennel(opts = {}) {
       t += dt;
       slide.step(dt);
       glow.step(dt);
-      if (flashT > 0) flashT = Math.max(0, flashT - dt);
+      if (flashT > 0) {
+        /* down for the first `PRESS.dur * 1.1`, then released, so the card
+           compresses and springs back while the highlight is still fading —
+           rather than staying squashed for the whole 0.28s (the same shape
+           ui/sheet.js uses for a row that acts on the down event) */
+        presses.set(flashId, flashT > K.flash - PRESS.dur * 1.1);
+        flashT = Math.max(0, flashT - dt);
+        if (flashT === 0) presses.clear();
+      }
+      presses.update(dt);
       if (open && !beat) refresh();
 
       /* ---- the switch hold ---- */
@@ -337,19 +379,19 @@ export function createKennel(opts = {}) {
       if (beat) { drawBeat(g); return; }
 
       c.save();
-      c.fillStyle = `rgba(44,22,10,${(SCRIM * a).toFixed(3)})`;
+      c.fillStyle = SURF.scrim(SCRIM * a);
       c.fillRect(0, 0, W, H);
       c.fillStyle = PANEL;
       roundRect(c, 0, top, W, H - top + 24, 24); c.fill();
-      c.strokeStyle = 'rgba(124,74,47,0.18)'; c.lineWidth = 1.2;
+      c.strokeStyle = SURF.border(); c.lineWidth = 1.2;
       roundRect(c, 0, top, W, H - top + 24, 24); c.stroke();
-      c.fillStyle = 'rgba(124,74,47,0.26)';
+      c.fillStyle = SURF.border(0.26);
       roundRect(c, W / 2 - 20, top + 9, 40, 4, 2); c.fill();
 
       /* HER STANDING — care points, and nothing else, is the only figure on
          this surface. The shop draws a purse; this draws what her care says. */
-      const sr = standingRect();
-      c.fillStyle = '#eee2c8';
+      const sr = standingRect(g);
+      c.fillStyle = PILL;
       roundRect(c, sr.x, sr.y, sr.w, sr.h, sr.h / 2); c.fill();
       /* a small paw mark rather than a coin, so the two currencies never share
          an icon */
@@ -359,21 +401,44 @@ export function createKennel(opts = {}) {
         c.beginPath(); c.ellipse(sr.x + 15 + i * 4.0, sr.y + sr.h / 2 - 3.4, 1.7, 2.1, i * 0.3, 0, TAU); c.fill();
       }
 
-      /* ---- the dog cards ---- */
+      /* ---- the dog cards ----
+         EVERY CARD, ROW AND CHIP ON THIS SURFACE IS A TACTILE OBJECT NOW: a
+         4-unit bottom edge that compresses under the thumb. It matters more here
+         than anywhere: this is the surface where she picks up a dog and puts
+         another one down, and a card with weight is the same claim the game
+         makes about the creature on it. The edge hangs in the gaps the layout
+         already left (8 between cards, 6 between earned rows), so nothing moves.
+
+         `*Dy` is kept per index because the type is a SECOND pass below: content
+         has to sink WITH its face or the label floats while the card goes down,
+         which is the one mistake ui/surface.js returns `dy` to prevent. */
+      const cardDy = [];
+      let newDy = 0;
       for (let i = 0; i < roster.length; i++) {
         const d = roster[i];
         const r = cardRect(i);
-        c.fillStyle = d.active ? CARD_ON : CARD;
-        roundRect(c, r.x, r.y, r.w, r.h, 15); c.fill();
+        /* one press per CARD, shared with its chip: the whole card is the hit
+           target (chip included), so they compress as one object */
+        const p = presses.at(d.id);
+        const f = tactile(c, {
+          x: r.x, y: r.y, w: r.w, h: r.h, r: R.md, p,
+          face: d.active ? CARD_ON : CARD,
+        });
+        cardDy[i] = f.dy;
         if (d.active) {
-          c.strokeStyle = 'rgba(201,86,63,0.42)'; c.lineWidth = 1.6;
-          roundRect(c, r.x, r.y, r.w, r.h, 15); c.stroke();
+          /* THE RING THAT SAYS "THIS ONE IS IN THE ROOM". It was
+             `rgba(201,86,63,0.42)` — the collar red, re-typed as an rgba. It is
+             not a collar, and ui/tokens.js's rule about the named accents is
+             that a colour which only ever means one thing is information: so
+             this takes the systematised warm-red accent, `tertiary`, and the
+             collar red goes back to meaning a collar. */
+          c.strokeStyle = alpha(C.tertiary, 0.42); c.lineWidth = 1.6;
+          roundRect(c, r.x, r.y + f.dy, r.w, r.h, R.md); c.stroke();
         }
-        portrait(c, r.x + 20 + K.portraitR, r.y + r.h / 2, d.breedId, d.worn, flashId === d.id ? flashT / K.flash : 0);
+        portrait(c, r.x + 20 + K.portraitR, r.y + f.dy + r.h / 2, d.breedId, d.worn, flashId === d.id ? flashT / K.flash : 0);
         if (!d.active) {
           const q = cardChipRect(i);
-          c.fillStyle = CHIP;
-          roundRect(c, q.x, q.y, q.w, q.h, q.h / 2); c.fill();
+          tactile(c, { x: q.x, y: q.y, w: q.w, h: q.h, r: R.full, p, face: CHIP });
         }
       }
 
@@ -381,59 +446,75 @@ export function createKennel(opts = {}) {
       if (showNewCard()) {
         const r = newCardRect();
         const ready = adopt.ok;
-        c.fillStyle = ready ? CARD : CARD_OFF;
-        roundRect(c, r.x, r.y, r.w, r.h, 15); c.fill();
+        const p = presses.at('new');
+        const f = tactile(c, {
+          x: r.x, y: r.y, w: r.w, h: r.h, r: R.md, p,
+          face: ready ? CARD : CARD_OFF,
+        });
+        newDy = f.dy;
         if (ready) {
           /* a warm ring on the one card that is a milestone, so it does not
-             read as another row */
-          c.strokeStyle = 'rgba(233,149,79,0.75)'; c.lineWidth = 1.8;
-          roundRect(c, r.x, r.y, r.w, r.h, 15); c.stroke();
+             read as another row. It was `rgba(233,149,79,0.75)` — the old chip
+             orange — and the chip token is a pale peach now, which as a 1.8-unit
+             STROKE over a cream card would be a ring nobody can see. A ring
+             needs a warm with weight in it, so this is `primaryContainer`. */
+          c.strokeStyle = alpha(C.primaryContainer, 0.75); c.lineWidth = 1.8;
+          roundRect(c, r.x, r.y + f.dy, r.w, r.h, R.md); c.stroke();
         }
-        newPortrait(c, r.x + 20 + K.portraitR, r.y + r.h / 2, ready, a);
+        newPortrait(c, r.x + 20 + K.portraitR, r.y + f.dy + r.h / 2, ready, a);
         const q = adoptChipRect();
-        c.fillStyle = ready ? CHIP : CHIP_OFF;
-        roundRect(c, q.x, q.y, q.w, q.h, q.h / 2); c.fill();
+        tactile(c, { x: q.x, y: q.y, w: q.w, h: q.h, r: R.full, p, face: ready ? CHIP : CHIP_OFF });
       }
 
       /* ---- the earned list ---- */
+      const earnedDy = [];
       for (let i = 0; i < earned.length; i++) {
         const e = earned[i];
         const r = earnedRect(i);
-        c.fillStyle = e.got ? CARD : CARD_OFF;
-        roundRect(c, r.x, r.y, r.w, r.h, 11); c.fill();
+        const p = presses.at(e.id);
+        const f = tactile(c, {
+          x: r.x, y: r.y, w: r.w, h: r.h, r: R.md, p,
+          face: e.got ? CARD : CARD_OFF,
+        });
+        earnedDy[i] = f.dy;
         if (e.kind === 'wear') {
           c.save();
           c.globalAlpha = e.got ? 1 : 0.34;
-          collarGlyph(c, r.x + 22, r.y + r.h / 2, e.id);
+          collarGlyph(c, r.x + 22, r.y + f.dy + r.h / 2, e.id);
           c.restore();
         } else {
           c.save();
           c.globalAlpha = e.got ? 0.9 : 0.30;
           c.fillStyle = e.kind === 'breed' ? '#c9563f' : (e.kind === 'stock' ? '#8a5a2c' : '#7ba36a');
-          c.beginPath(); c.arc(r.x + 22, r.y + r.h / 2, 6.2, 0, TAU); c.fill();
+          c.beginPath(); c.arc(r.x + 22, r.y + f.dy + r.h / 2, 6.2, 0, TAU); c.fill();
           c.restore();
         }
         if (e.wearable && e.got) {
           const q = earnedChipRect(i);
-          c.fillStyle = e.worn ? CHIP_OFF : CHIP;
-          roundRect(c, q.x, q.y, q.w, q.h, q.h / 2); c.fill();
+          tactile(c, { x: q.x, y: q.y, w: q.w, h: q.h, r: R.full, p, face: e.worn ? CHIP_OFF : CHIP });
         }
       }
 
       const cl = closeRect();
-      c.fillStyle = '#f0dfc2';
-      roundRect(c, cl.x, cl.y, cl.w, cl.h, cl.h / 2); c.fill();
+      /* Done is tactile too. Nothing can be SEEN pressing it — the panel closes
+         on the same down event — but the bottom edge is what makes it a button
+         rather than a cream band, which is ui/sheet.js's argument for its rows. */
+      tactile(c, { x: cl.x, y: cl.y, w: cl.w, h: cl.h, r: R.full, p: 0, face: PILL });
       c.restore();
 
       /* ================= type ================= */
       drawText(g, COPY.title, {
+        ...type('titleMd', { weight: 800 }),
         x: pad + 2, y: top + 36, anchor: 'free', align: 'left',
-        size: 17, weight: 800, ink: '#5d3018', over: PANEL, fade: a,
-        maxWidth: W - pad * 2 - 150,
+        ink: INK.heading, over: PANEL, fade: a,
+        /* derived from the pill rather than a hardcoded 150, so the two can
+           never both think they own the same strip of header */
+        maxWidth: standingRect(g).x - pad - 10,
       });
       drawText(g, COPY.standing(game.describeCare(), game.carePoints), {
+        ...type('labelSm', { weight: 800 }),
         x: sr.x + sr.w - 12, y: sr.y + sr.h / 2, anchor: 'free', align: 'right',
-        size: 11.5, weight: 800, ink: '#5d3018', over: '#eee2c8', fade: a,
+        ink: INK.body, over: PILL, fade: a,
         maxWidth: sr.w - 32,
       });
 
@@ -443,28 +524,36 @@ export function createKennel(opts = {}) {
         const bg = d.active ? CARD_ON : CARD;
         const lx = r.x + 20 + K.portraitR * 2 + 16;
         const lw = r.w - (lx - r.x) - (d.active ? 78 : 104);
+        /* the sink of the face this type sits on — the card and its chip share
+           one press, so one offset serves the whole card */
+        const dy = cardDy[i] || 0;
         drawText(g, d.name || COPY.unnamed, {
-          x: lx, y: r.y + 30, anchor: 'free', align: 'left',
-          size: 15, weight: 800, ink: '#5d3018', over: bg, fade: a, maxWidth: lw,
+          ...type('labelMd', { weight: 800 }),
+          x: lx, y: r.y + dy + 30, anchor: 'free', align: 'left',
+          ink: INK.body, over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, breedName(d.breedId), {
-          x: lx, y: r.y + 50, anchor: 'free', align: 'left',
-          size: 11, weight: 600, ink: 'rgba(93,48,24,0.76)', over: bg, fade: a, maxWidth: lw,
+          ...type('labelSm', { weight: 600, track: 0 }),
+          x: lx, y: r.y + dy + 50, anchor: 'free', align: 'left',
+          ink: INK.soft(0.76), over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, d.worn ? COPY.wearing(wornName(d.worn)) : COPY.wearNothing, {
-          x: lx, y: r.y + 68, anchor: 'free', align: 'left',
-          size: 10.5, weight: 500, ink: 'rgba(93,48,24,0.66)', over: bg, fade: a, maxWidth: lw,
+          ...type('labelSm', { weight: 500, track: 0 }),
+          x: lx, y: r.y + dy + 68, anchor: 'free', align: 'left',
+          ink: INK.soft(0.66), over: bg, fade: a, maxWidth: lw,
         });
         if (d.active) {
           drawText(g, COPY.here, {
-            x: r.x + r.w - 14, y: r.y + r.h / 2, anchor: 'free', align: 'right',
-            size: 10.5, weight: 800, ink: 'rgba(93,48,24,0.62)', over: bg, fade: a, maxWidth: 70,
+            ...type('labelSm', { weight: 800 }),
+            x: r.x + r.w - 14, y: r.y + dy + r.h / 2, anchor: 'free', align: 'right',
+            ink: INK.soft(0.62), over: bg, fade: a, maxWidth: 70,
           });
         } else {
           const q = cardChipRect(i);
           drawText(g, COPY.bring, {
-            x: q.x + q.w / 2, y: q.y + q.h / 2, anchor: 'free', align: 'center',
-            size: 11.5, weight: 800, ink: '#3a1c0c', over: CHIP, fade: a, maxWidth: q.w - 8,
+            ...type('labelSm', { weight: 800 }),
+            x: q.x + q.w / 2, y: q.y + dy + q.h / 2, anchor: 'free', align: 'center',
+            ink: INK.onStrong, over: CHIP, fade: a, maxWidth: q.w - 8,
           });
         }
       }
@@ -475,34 +564,39 @@ export function createKennel(opts = {}) {
         const bg = ready ? CARD : CARD_OFF;
         const lx = r.x + 20 + K.portraitR * 2 + 16;
         const lw = r.w - (lx - r.x) - 20;
+        const dy = newDy;
         drawText(g, COPY.newTitle, {
-          x: lx, y: r.y + 26, anchor: 'free', align: 'left',
-          size: 15, weight: 800, ink: '#5d3018', over: bg, fade: a, maxWidth: lw,
+          ...type('labelMd', { weight: 800 }),
+          x: lx, y: r.y + dy + 26, anchor: 'free', align: 'left',
+          ink: INK.body, over: bg, fade: a, maxWidth: lw,
         });
         /* the GOAL, stated as a number she is saving toward — care points are a
-           currency she can see; what they say about her is the word above */
+           currency she can see; what they say about her is the word above.
+           `#8a4b22` for the ready state was `primary` typed from memory. */
         drawText(g, ready ? COPY.newReady : `${game.carePoints} / ${adopt.at} care points`, {
-          x: lx, y: r.y + 46, anchor: 'free', align: 'left',
-          size: 12, weight: 700,
-          ink: ready ? '#8a4b22' : '#5d3018', over: bg, fade: a, maxWidth: lw,
+          ...type('labelSm', { weight: 700, track: 0 }),
+          x: lx, y: r.y + dy + 46, anchor: 'free', align: 'left',
+          ink: ready ? INK.heading : INK.body, over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, ready ? COPY.newReadyNote : COPY.newLockedNote, {
-          x: lx, y: r.y + 64, anchor: 'free', align: 'left',
-          size: 10.5, weight: 500, ink: 'rgba(93,48,24,0.72)', over: bg, fade: a,
+          ...type('labelSm', { weight: 500, track: 0 }),
+          x: lx, y: r.y + dy + 64, anchor: 'free', align: 'left',
+          ink: INK.soft(0.72), over: bg, fade: a,
           maxWidth: lw - 130,
         });
         const q = adoptChipRect();
         drawText(g, ready ? COPY.adopt : COPY.newLocked(adopt.short), {
-          x: q.x + q.w / 2, y: q.y + q.h / 2, anchor: 'free', align: 'center',
-          size: 11, weight: 800,
-          ink: ready ? '#3a1c0c' : '#5d3018', over: ready ? CHIP : CHIP_OFF,
+          ...type('labelSm', { weight: 800 }),
+          x: q.x + q.w / 2, y: q.y + dy + q.h / 2, anchor: 'free', align: 'center',
+          ink: ready ? INK.onStrong : INK.body, over: ready ? CHIP : CHIP_OFF,
           fade: a, maxWidth: q.w - 8,
         });
       }
 
       drawText(g, COPY.earned, {
+        ...type('labelSm', { weight: 800, track: 0 }),
         x: pad + 4, y: earnedTop() + 4, anchor: 'free', align: 'left',
-        size: 11.5, weight: 800, ink: 'rgba(93,48,24,0.80)', over: PANEL, fade: a,
+        ink: INK.soft(0.80), over: PANEL, fade: a,
         maxWidth: W - pad * 2 - 8,
       });
       for (let i = 0; i < earned.length; i++) {
@@ -510,36 +604,46 @@ export function createKennel(opts = {}) {
         const r = earnedRect(i);
         const bg = e.got ? CARD : CARD_OFF;
         const rightW = (e.wearable && e.got) ? 76 : 62;
+        const dy = earnedDy[i] || 0;
+        /* a milestone she has not reached is the SAME greyed-out state the shop
+           draws on a row coins cannot reach: 0.62 and 0.58 of one brown were
+           never meant to be two colours. */
         drawText(g, e.name, {
-          x: r.x + 40, y: r.y + r.h / 2 - 7, anchor: 'free', align: 'left',
-          size: 12, weight: 700,
-          ink: e.got ? '#5d3018' : 'rgba(93,48,24,0.62)', over: bg, fade: a,
+          ...type('labelSm', { weight: 700 }),
+          x: r.x + 40, y: r.y + dy + r.h / 2 - 7, anchor: 'free', align: 'left',
+          ink: e.got ? INK.body : INK.faint(), over: bg, fade: a,
           maxWidth: r.w - 40 - rightW,
         });
         drawText(g, e.note || '', {
-          x: r.x + 40, y: r.y + r.h / 2 + 8, anchor: 'free', align: 'left',
-          size: 9.5, weight: 500, ink: 'rgba(93,48,24,0.60)', over: bg, fade: a,
+          ...type('labelSm', { weight: 500, track: 0 }),
+          x: r.x + 40, y: r.y + dy + r.h / 2 + 8, anchor: 'free', align: 'left',
+          ink: INK.soft(0.60), over: bg, fade: a,
           maxWidth: r.w - 40 - rightW,
         });
         if (e.wearable && e.got) {
           const q = earnedChipRect(i);
           drawText(g, e.worn ? COPY.take : COPY.wear, {
-            x: q.x + q.w / 2, y: q.y + q.h / 2, anchor: 'free', align: 'center',
-            size: 10.5, weight: 800, ink: e.worn ? '#5d3018' : '#3a1c0c',
+            ...type('labelSm', { weight: 800 }),
+            x: q.x + q.w / 2, y: q.y + dy + q.h / 2, anchor: 'free', align: 'center',
+            ink: e.worn ? INK.body : INK.onStrong,
             over: e.worn ? CHIP_OFF : CHIP, fade: a, maxWidth: q.w - 6,
           });
         } else if (!e.got) {
           drawText(g, COPY.locked(e.short), {
-            x: r.x + r.w - 12, y: r.y + r.h / 2, anchor: 'free', align: 'right',
-            size: 10, weight: 700, ink: 'rgba(93,48,24,0.58)', over: bg, fade: a,
+            ...type('labelSm', { weight: 700 }),
+            x: r.x + r.w - 12, y: r.y + dy + r.h / 2, anchor: 'free', align: 'right',
+            ink: INK.faint(), over: bg, fade: a,
             maxWidth: 58,
           });
         }
       }
 
+      /* the same button as the shop's Done, which was 13/800 there and 12.5/800
+         here — one control, two spellings, which is what the ramp is for */
       drawText(g, COPY.close, {
+        ...type('labelMd', { weight: 800 }),
         x: cl.x + cl.w / 2, y: cl.y + cl.h / 2, anchor: 'free', align: 'center',
-        size: 12.5, weight: 800, ink: '#5d3018', over: '#f0dfc2', fade: a,
+        ink: INK.body, over: PILL, fade: a,
         maxWidth: cl.w - 10,
       });
     },
@@ -561,7 +665,29 @@ export function createKennel(opts = {}) {
     },
   };
 
-  function standingRect() { return { x: W - pad - 148, y: topY() + 22, w: 148, h: 28 }; }
+  /**
+   * THE STANDING PILL SIZES TO ITS CONTENT.
+   *
+   * It was a fixed 148 wide. On the type ramp the label went 10.5 -> 12, and
+   * `Getting to know each other · 20` stopped fitting — ui/text.js did exactly
+   * what it promises and ellipsised rather than overflowing, but what it had to
+   * drop was the END of the string, which is THE CARE-POINTS NUMBER. That is
+   * the only number this surface is allowed to show (§15.6: no prices in the
+   * kennel), so truncating it is the one thing the pill must not do.
+   *
+   * Widening is the honest fix rather than shrinking the type back: the longest
+   * standing word is "Getting to know each other", and a pill sized for it is
+   * a pill that fits every shorter one too. Clamped so it can never crowd the
+   * title, which now takes its own maxWidth from this rect.
+   */
+  function standingRect(g) {
+    const w0 = 148;
+    if (!g) return { x: W - pad - w0, y: topY() + 22, w: w0, h: 28 };
+    const m = measure(g, COPY.standing(game.describeCare(), game.carePoints),
+      { ...type('labelSm', { weight: 800 }), x: 0, y: 0 });
+    const w = clamp(m.w + 34, w0, W - pad * 2 - 104);
+    return { x: W - pad - w, y: topY() + 22, w, h: 28 };
+  }
 
   function breedName(id) {
     const b = BREEDS[id];
@@ -589,7 +715,11 @@ export function createKennel(opts = {}) {
     const r = K.portraitR;
     c.save();
     c.translate(x, y);
-    c.fillStyle = 'rgba(124,74,47,0.10)';
+    /* the soft ring the portrait sits in is CHROME — a hairline, not a coat.
+       Everything below it, from the cream down, is the breed's own palette with
+       a fallback, and deliberately stays a literal: tokenising a coat would make
+       every dog beige. */
+    c.fillStyle = SURF.border(0.10);
     c.beginPath(); c.arc(0, 2, r + 2, 0, TAU); c.fill();
     c.fillStyle = p.cream || '#f6e7cf';
     c.beginPath(); c.arc(0, 0, r, 0, TAU); c.fill();
@@ -612,13 +742,16 @@ export function createKennel(opts = {}) {
       c.beginPath(); c.ellipse(sd * r * 0.26, -r * 0.06, r * 0.075, r * 0.095, 0, 0, TAU); c.fill();
     }
     if (worn) {
-      c.strokeStyle = WEAR_COLOUR[worn] || '#c9563f';
+      /* the fallback was `#c9563f`, which is `BALANCE.ui.wear.collarRed` typed
+         out again — and a collar in the portrait that did not match the collar on
+         the dog is exactly the small lie balance.js's note warns about */
+      c.strokeStyle = WEAR_COLOUR[worn] || WEAR_COLOUR.collarRed;
       c.lineWidth = r * 0.15; c.lineCap = 'round';
       c.beginPath(); c.arc(0, r * 0.30, r * 0.56, Math.PI * 0.22, Math.PI * 0.78); c.stroke();
     }
     if (flash > 0) {
       c.globalAlpha = flash * 0.5;
-      c.fillStyle = '#fff6df';
+      c.fillStyle = FLASH;
       c.beginPath(); c.arc(0, 0, r, 0, TAU); c.fill();
     }
     c.restore();
@@ -629,9 +762,12 @@ export function createKennel(opts = {}) {
     const r = K.portraitR * (scale || 1);
     c.save();
     c.translate(x, y);
-    c.fillStyle = ready ? 'rgba(233,149,79,0.22)' : 'rgba(124,74,47,0.10)';
+    /* the MEDALLION is chrome — the same ring and disc the dog portraits sit in,
+       warmed when she is ready and dimmed when she is not, so it matches the card
+       around it in both states. Only the silhouette below is art. */
+    c.fillStyle = ready ? alpha(SURF.chipWarm, 0.22) : SURF.border(0.10);
     c.beginPath(); c.arc(0, 2, r + 2, 0, TAU); c.fill();
-    c.fillStyle = ready ? '#f6dfb4' : '#e5d8c4';
+    c.fillStyle = ready ? C.surfaceHighest : SURF.rowOff;
     c.beginPath(); c.arc(0, 0, r, 0, TAU); c.fill();
     /* a puppy shape, no breed detail: the art is not hers yet and a portrait
        that guessed would be a promise this file cannot keep.
@@ -651,7 +787,7 @@ export function createKennel(opts = {}) {
     if (!ready) {
       /* a small keyhole rather than a padlock: a padlock says "pay"; a door
          says "not yet" */
-      c.fillStyle = 'rgba(93,48,24,0.42)';
+      c.fillStyle = INK.soft(0.42);
       c.beginPath(); c.arc(0, r * 0.02, r * 0.15, 0, TAU); c.fill();
       c.beginPath(); c.moveTo(-r * 0.07, r * 0.06); c.lineTo(r * 0.07, r * 0.06);
       c.lineTo(r * 0.04, r * 0.34); c.lineTo(-r * 0.04, r * 0.34); c.closePath(); c.fill();
@@ -674,8 +810,10 @@ export function createKennel(opts = {}) {
       : clamp(Math.min(u / 0.16, 1), 0, 1);
 
     c.save();
-    /* near-opaque: the panel is not drawn behind this, but the ROOM is */
-    c.fillStyle = `rgba(38,20,10,${(0.93 * clamp(beat === 'knock' ? u * 2.2 : 1, 0, 1)).toFixed(3)})`;
+    /* near-opaque: the panel is not drawn behind this, but the ROOM is. Same
+       scrim token as the panel's backdrop, at a much higher alpha — it was a
+       third brown (`rgba(38,20,10,…)`) for the same job. */
+    c.fillStyle = SURF.scrim(0.93 * clamp(beat === 'knock' ? u * 2.2 : 1, 0, 1));
     c.fillRect(0, 0, W, H);
     /* the glow she comes out of. On this rig warmth and scale do the work that
        a drawn door would need art for. */
@@ -697,8 +835,9 @@ export function createKennel(opts = {}) {
     c.restore();
 
     drawText(g, line, {
+      ...type('bodyMd', { weight: 700 }),
       x: W / 2, y: H * 0.66, anchor: 'free', align: 'center',
-      size: 15.5, weight: 700, ink: '#ffeccd', plate: 'auto',
+      ink: INK.onDark, plate: 'auto',
       fade, maxWidth: W - 56,
     });
   }

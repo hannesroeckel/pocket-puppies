@@ -28,6 +28,8 @@ import BALANCE from '../state/balance.js';
 import { clamp, roundRect, TAU, rgba } from '../engine/draw.js';
 import { Spring } from '../engine/spring.js';
 import { drawText } from './text.js';
+import { INK, SURF, R, PRESS, type } from './tokens.js';
+import { tactile, createPresses } from './surface.js';
 import { drawBone, drawBall, drawBrush, drawSoap } from '../scenes/props.js';
 
 const W = BALANCE.view.W;
@@ -35,13 +37,40 @@ const H = BALANCE.view.H;
 const S6 = BALANCE.ui.shop;
 
 /* the panel is opaque, so `over` gives ui/text.js an exact contrast answer
-   rather than a bound — the same reason ui/sheet.js publishes its colours */
-const SCRIM = 'rgba(44,22,10,0.52)';
-const PANEL = '#fdf3df';
-const ROW = '#f7e7cd';
-const ROW_OFF = '#efe3d2';
-const CHIP = '#e9954f';
-const CHIP_OFF = '#d8c8b2';
+   rather than a bound — the same reason ui/sheet.js publishes its colours.
+
+   THESE ARE TOKENS NOW, and this file is one of the reasons the audit exists:
+   every one of them was a hex typed out here AND, slightly differently, in
+   ui/kennel.js and ui/sheet.js. `#fdf3df` / `#f7e7cd` / `#efe3d2` / `#e9954f` /
+   `#d8c8b2` are surface-low, surface-container, surface-dim, the
+   secondary-container chip and the disabled chip — six roles, three spellings.
+   `SCRIM` keeps its name but is now only the base ALPHA: ui/tokens.js owns the
+   colour under it, which also retires a `String.replace()` on a colour literal
+   as the way this file animated its backdrop. */
+const SCRIM = 0.44;
+const PANEL = SURF.card;
+const ROW = SURF.row;
+const ROW_OFF = SURF.rowOff;
+/* THE ACTIONABLE CHIP IS THE FILLED DARK BUTTON, NOT THE PALE ONE.
+   It was `#e9954f`, a saturated orange, and the straight token swap to
+   `secondary-container` (#fed6a7) made it a pale peach sitting on a
+   `surface-container` (#ffebcf) row — a nine-step difference in one channel.
+   RENDERED AND LOOKED AT: the chip had vanished. It read as a floating label,
+   which is the worst possible outcome for the one control on the row that
+   does something.
+   `chipStrong` is Material's own answer (the `primary` role, filled, with
+   light ink on it) and it is what ui/install.js's primary button uses, so the
+   two most important buttons in the game now agree. The hierarchy is carried
+   by LIGHTNESS rather than saturation, which is what survives a warm cream
+   surface — and a dark chip on cream is unambiguous about being pressable. */
+const CHIP = SURF.chipStrong;
+const CHIP_OFF = SURF.chipOff;
+/* the purse pill and the Done chip were `#f3e3c6` and `#f0dfc2`: two
+   near-misses of one cream pill, which is the whole complaint in miniature */
+const PILL = SURF.chip;
+/* the press highlight on a tapped row. Was `#fff6df`, a warm near-white — the
+   token for warm near-white chrome is `surface`. */
+const FLASH = SURF.chrome;
 
 export const COPY = {
   title: 'Shop',
@@ -135,6 +164,13 @@ export function createShop(opts = {}) {
   let flashId = '';
   let flashT = 0;
   let rows = [];
+  /* THE TACTILE PRESS RIDES ON THE FLASH. The rows and chips are pressable
+     objects now (ui/surface.js), and a press needs a clock — but this file
+     already had one, and it already knows what was tapped. Deriving the
+     compression from `flashId`/`flashT` in update() means no second input path
+     and no second answer to "which row did she touch"; the flash highlight goes
+     on doing exactly what it did. */
+  const presses = createPresses(reduced);
 
   const pad = S6.pad;
   const rowH = S6.rowH;
@@ -191,7 +227,16 @@ export function createShop(opts = {}) {
     update(dt) {
       t += dt;
       slide.step(dt);
-      if (flashT > 0) flashT = Math.max(0, flashT - dt);
+      if (flashT > 0) {
+        /* down for the first `PRESS.dur * 1.1`, then released — so the row
+           compresses and springs back while the highlight is still fading,
+           rather than staying squashed for the whole 0.28s or snapping open the
+           instant it is touched (the same shape ui/sheet.js uses) */
+        presses.set(flashId, flashT > S6.flash - PRESS.dur * 1.1);
+        flashT = Math.max(0, flashT - dt);
+        if (flashT === 0) presses.clear();
+      }
+      presses.update(dt);
       /* the purse and the care gate can both move while she is looking at it
          (a walk can finish, a trial can pay out), so the shelf is re-resolved
          rather than snapshotted at open */
@@ -223,66 +268,87 @@ export function createShop(opts = {}) {
       const a = clamp(slide.x, 0, 1);
       const top = topY();
       c.save();
-      c.fillStyle = SCRIM.replace('0.52', (0.52 * a).toFixed(3));
+      c.fillStyle = SURF.scrim(SCRIM * a);
       c.fillRect(0, 0, W, H);
       c.fillStyle = PANEL;
       roundRect(c, 0, top, W, H - top + 24, 24); c.fill();
-      c.strokeStyle = 'rgba(124,74,47,0.18)'; c.lineWidth = 1.2;
+      c.strokeStyle = SURF.border(); c.lineWidth = 1.2;
       roundRect(c, 0, top, W, H - top + 24, 24); c.stroke();
       /* the grabber, so it reads as a sheet she can push away */
-      c.fillStyle = 'rgba(124,74,47,0.26)';
+      c.fillStyle = SURF.border(0.26);
       roundRect(c, W / 2 - 20, top + 9, 40, 4, 2); c.fill();
 
       /* THE PURSE, and it is the only currency on this surface */
       const pr = purseRect();
-      c.fillStyle = '#f3e3c6';
+      c.fillStyle = PILL;
       roundRect(c, pr.x, pr.y, pr.w, pr.h, pr.h / 2); c.fill();
       c.fillStyle = '#e0b23f';
       c.beginPath(); c.arc(pr.x + 15, pr.y + pr.h / 2, 7.5, 0, TAU); c.fill();
       c.fillStyle = 'rgba(255,255,255,0.45)';
       c.beginPath(); c.arc(pr.x + 13, pr.y + pr.h / 2 - 2, 3, 0, TAU); c.fill();
 
-      /* the row backings, before any type, so `over` is true of what is behind */
+      /* the row backings, before any type, so `over` is true of what is behind.
+         EVERY ROW AND CHIP IS A TACTILE OBJECT NOW: a 4-unit bottom edge that
+         compresses under the thumb, which is what makes a shelf read as things
+         she can pick up rather than as coloured bands. The edge hangs in the
+         6-unit `rowGap` the layout already left, so nothing moves. */
+      const rowDy = [];
       for (let i = 0; i < rows.length; i++) {
         const r = rowRect(i);
         const row = rows[i];
         const flash = flashId === row.id ? flashT / S6.flash : 0;
-        c.fillStyle = row.locked ? ROW_OFF : ROW;
-        roundRect(c, r.x, r.y, r.w, r.h, 13); c.fill();
+        /* one press per ROW, shared with its chip: the flash is keyed by row id
+           and cannot tell a chip tap from a row tap, so both compress together —
+           which is also how the highlight has always behaved. */
+        const p = presses.at(row.id);
+        const f = tactile(c, {
+          x: r.x, y: r.y, w: r.w, h: r.h, r: R.md, p,
+          face: row.locked ? ROW_OFF : ROW,
+        });
+        /* kept for the type pass below, which is a separate loop: content has to
+           sink WITH the face or the label floats while the row goes down, and
+           ui/surface.js returns `dy` for exactly that reason */
+        rowDy[i] = f.dy;
         if (flash > 0) {
           c.globalAlpha = flash * 0.5;
-          c.fillStyle = '#fff6df';
-          roundRect(c, r.x, r.y, r.w, r.h, 13); c.fill();
+          c.fillStyle = FLASH;
+          roundRect(c, r.x, r.y + f.dy, r.w, r.h, R.md); c.fill();
           c.globalAlpha = 1;
         }
         /* the product glyph */
         c.save();
         c.globalAlpha = row.locked ? 0.42 : 1;
         c.fillStyle = '#8a5a2c'; c.strokeStyle = '#8a5a2c';
-        row.glyph(c, r.x + 26, r.y + r.h / 2);
+        row.glyph(c, r.x + 26, r.y + f.dy + r.h / 2);
         c.restore();
         /* the action chip */
         const act = actionFor(row);
         if (act) {
           const q = chipRect(i);
-          c.fillStyle = act === 'worn' ? CHIP_OFF : CHIP;
-          roundRect(c, q.x, q.y, q.w, q.h, q.h / 2); c.fill();
+          tactile(c, {
+            x: q.x, y: q.y, w: q.w, h: q.h, r: R.full, p,
+            face: act === 'worn' ? CHIP_OFF : CHIP,
+          });
         }
       }
       const cl = closeRect();
-      c.fillStyle = '#f0dfc2';
-      roundRect(c, cl.x, cl.y, cl.w, cl.h, cl.h / 2); c.fill();
+      /* Done is tactile too. Nothing can be SEEN pressing it — the sheet closes
+         on the same down event — but the bottom edge is what makes it a button
+         rather than a cream band, which is ui/sheet.js's argument for its rows. */
+      tactile(c, { x: cl.x, y: cl.y, w: cl.w, h: cl.h, r: R.full, p: 0, face: PILL });
       c.restore();
 
       /* ---- type, all of it through ui/text.js ---- */
       drawText(g, COPY.title, {
+        ...type('titleMd', { weight: 800 }),
         x: pad + 2, y: top + 36, anchor: 'free', align: 'left',
-        size: 17, weight: 800, ink: '#5d3018', over: PANEL, fade: a,
+        ink: INK.heading, over: PANEL, fade: a,
         maxWidth: W - pad * 2 - 110,
       });
       drawText(g, COPY.purse(game.coins), {
+        ...type('labelMd', { weight: 800 }),
         x: pr.x + pr.w - 12, y: pr.y + pr.h / 2, anchor: 'free', align: 'right',
-        size: 14, weight: 800, ink: '#5d3018', over: '#f3e3c6', fade: a,
+        ink: INK.body, over: PILL, fade: a,
         maxWidth: pr.w - 34,
       });
 
@@ -294,24 +360,30 @@ export function createShop(opts = {}) {
         const rightW = act ? S6.chipW + 16 : 74;
         const leftX = r.x + 48;
         const leftW = r.w - 48 - rightW - 8;
+        /* the sink of the face this type sits on. The row and its chip share one
+           press, so one offset serves both columns. */
+        const dy = rowDy[i] || 0;
         drawText(g, row.name, {
-          x: leftX, y: r.y + r.h / 2 - 8, anchor: 'free', align: 'left',
-          size: 13.5, weight: 700, ink: '#5d3018', over: bg, fade: a,
+          ...type('labelMd', { weight: 700 }),
+          x: leftX, y: r.y + dy + r.h / 2 - 8, anchor: 'free', align: 'left',
+          ink: INK.body, over: bg, fade: a,
           maxWidth: leftW,
         });
         /* the note, or — for the care-gated row — what it is waiting for. Never
            both, and never a price as an alternative to the care points. */
         const note = row.locked ? COPY.lockNote(row.needsShort) : row.note;
         drawText(g, note, {
-          x: leftX, y: r.y + r.h / 2 + 10, anchor: 'free', align: 'left',
-          size: 10.5, weight: 500, ink: 'rgba(93,48,24,0.74)', over: bg, fade: a,
+          ...type('labelSm', { weight: 500, track: 0 }),
+          x: leftX, y: r.y + dy + r.h / 2 + 10, anchor: 'free', align: 'left',
+          ink: INK.soft(0.74), over: bg, fade: a,
           maxWidth: leftW,
         });
         if (act) {
           drawText(g, act === 'give' ? `${COPY.give} (${row.owned})` : (act === 'worn' ? COPY.worn : COPY.wear), {
-            x: chipRect(i).x + S6.chipW / 2, y: chipRect(i).y + S6.chipH / 2,
-            anchor: 'free', align: 'center', size: 11, weight: 800,
-            ink: act === 'worn' ? '#5d3018' : '#3a1c0c',
+            ...type('labelSm', { weight: 800 }),
+            x: chipRect(i).x + S6.chipW / 2, y: chipRect(i).y + dy + S6.chipH / 2,
+            anchor: 'free', align: 'center',
+            ink: act === 'worn' ? INK.body : INK.onStrong,
             over: act === 'worn' ? CHIP_OFF : CHIP, fade: a, maxWidth: S6.chipW - 6,
           });
         } else {
@@ -325,19 +397,23 @@ export function createShop(opts = {}) {
              price. */
           const label = row.locked ? ''
             : (row.full ? (row.kind === 'treat' ? COPY.full : COPY.owned) : `${row.cost}`);
+          /* a WORD takes the small step, a PRICE takes the label step — the same
+             split the old 10.5/14 pair was making by hand. The locked and
+             unaffordable inks were 0.62 and 0.48 of one brown: they are the same
+             state ("coins cannot reach this"), so they are one token. */
           if (label) drawText(g, label, {
-            x: r.x + r.w - 14, y: r.y + r.h / 2, anchor: 'free', align: 'right',
-            size: row.locked || row.full ? 10.5 : 14,
-            weight: 800,
-            ink: row.locked ? 'rgba(93,48,24,0.62)' : (row.afford ? '#5d3018' : 'rgba(93,48,24,0.48)'),
+            ...type(row.locked || row.full ? 'labelSm' : 'labelMd', { weight: 800 }),
+            x: r.x + r.w - 14, y: r.y + dy + r.h / 2, anchor: 'free', align: 'right',
+            ink: row.locked ? INK.faint() : (row.afford ? INK.body : INK.faint()),
             over: bg, fade: a, maxWidth: 84,
           });
         }
       }
 
       drawText(g, COPY.close, {
+        ...type('labelMd', { weight: 800 }),
         x: cl.x + cl.w / 2, y: cl.y + cl.h / 2, anchor: 'free', align: 'center',
-        size: 13, weight: 800, ink: '#5d3018', over: '#f0dfc2', fade: a,
+        ink: INK.body, over: PILL, fade: a,
         maxWidth: cl.w - 10,
       });
     },

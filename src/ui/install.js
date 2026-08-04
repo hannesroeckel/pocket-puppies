@@ -52,18 +52,25 @@ import BALANCE from '../state/balance.js';
 import { clamp, roundRect } from '../engine/draw.js';
 import { Spring } from '../engine/spring.js';
 import { drawText } from './text.js';
+/* `INK` is already a local const in this file (the card's strong ink), so the
+   token group comes in as TOK rather than renaming a name that appears a dozen
+   times below for no gain. */
+import { INK as TOK, SURF, R, type } from './tokens.js';
+import { tactile, softShadow } from './surface.js';
 
 const I = BALANCE.install;
 const VW = BALANCE.view.W;
 
 /* the card is opaque, so `over` gives ui/text.js an exact contrast answer
-   rather than a worst-case bound, and no plate is drawn on top of the paper */
-const CARD = '#fdf3df';
-const CARD_EDGE = 'rgba(120,72,34,0.20)';
-const BTN = '#e8d3ac';
-const BTN_WARM = '#d9a45e';
-const INK = '#5d3018';
-const INK_SOFT = 'rgba(93,48,24,0.78)';
+   rather than a worst-case bound, and no plate is drawn on top of the paper.
+   TOKENS (stage 9): every one of these was a hex typed out here that also
+   existed, slightly differently, in ui/sheet.js, ui/shop.js and ui/kennel.js. */
+const CARD = SURF.card;
+const CARD_EDGE = SURF.border(0.20);
+const BTN = SURF.chip;
+const BTN_WARM = SURF.chipStrong;
+const INK = TOK.body;
+const INK_SOFT = TOK.soft();
 
 /* ==========================================================================
    COPY — every player-facing string in this file, and nowhere else.
@@ -250,7 +257,7 @@ export function createInstall(o = {}) {
       c.save();
       /* a scrim, so the card reads as in front of the room without hiding him */
       c.globalAlpha = 0.34 * k;
-      c.fillStyle = '#3a2416';
+      c.fillStyle = SURF.scrim(1);
       c.fillRect(-40, -40, VW + 80, BALANCE.view.H + 80);
       c.globalAlpha = 1;
 
@@ -260,9 +267,11 @@ export function createInstall(o = {}) {
       c.globalAlpha = k;
       c.translate(0, rise);
 
-      c.fillStyle = 'rgba(84,46,20,0.20)';
-      roundRect(c, L.x + 2, L.y + 5, L.w, L.h, I.card.r);
-      c.fill();
+      /* THE WARM SOFT SHADOW, replacing a hand-offset copy of the card in
+         `rgba(84,46,20,0.20)` two units right and five down. That trick reads as
+         a second card peeking out rather than as a shadow, because a hard-edged
+         duplicate has no falloff. `0 12px 32px -4px rgba(131,83,43,.12)` does. */
+      softShadow(c, L.x, L.y, L.w, L.h, I.card.r);
       c.fillStyle = CARD;
       roundRect(c, L.x, L.y, L.w, L.h, I.card.r);
       c.fill();
@@ -274,47 +283,68 @@ export function createInstall(o = {}) {
       /* a tiny home-screen glyph: a rounded tile with a puppy-ish face, which is
          a small echo of the real icon. Drawn, like everything else in this game. */
       const gx = L.glyph.x, gy = L.glyph.y, gr = L.glyph.r;
-      c.fillStyle = BTN_WARM;
+      /* THE TILE IS THE PALE CHIP, NOT THE BUTTON'S FACE. It used to share
+         `BTN_WARM` with the primary button, which was fine while that was a
+         mid-orange; now the primary is the dark filled `chipStrong`, and a face
+         drawn in `deep-bark` on a `primary`-brown tile would be invisible. The
+         two were only ever the same colour by coincidence. */
+      c.fillStyle = SURF.chipWarm;
       roundRect(c, gx - gr, gy - gr, gr * 2, gr * 2, gr * 0.55);
       c.fill();
-      c.fillStyle = 'rgba(60,32,14,0.74)';
+      const faceInk = TOK.soft(0.80);
+      c.fillStyle = faceInk;
       c.beginPath(); c.arc(gx - 5, gy - 3, 2.5, 0, Math.PI * 2); c.fill();
       c.beginPath(); c.arc(gx + 5, gy - 3, 2.5, 0, Math.PI * 2); c.fill();
       c.beginPath();
       c.moveTo(gx - 5, gy + 5); c.quadraticCurveTo(gx, gy + 9.5, gx + 5, gy + 5);
-      c.strokeStyle = 'rgba(60,32,14,0.74)';
+      c.strokeStyle = faceInk;
       c.lineWidth = 1.8; c.lineCap = 'round';
       c.stroke();
 
       const cx = L.x + L.w / 2;
       drawText(g, COPY.title(P, name), {
-        x: cx, y: L.title, anchor: 'free', size: 17, weight: 700,
-        ink: INK, over: CARD, maxWidth: L.w - 40,
+        ...type('titleMd', { weight: 700 }),
+        x: cx, y: L.title, anchor: 'free',
+        ink: TOK.heading, over: CARD, maxWidth: L.w - 40,
       });
       drawText(g, COPY.why(P, name), {
-        x: cx, y: L.why, anchor: 'free', size: 12.5, weight: 600,
+        ...type('labelMd'),
+        x: cx, y: L.why, anchor: 'free',
         ink: INK_SOFT, over: CARD, maxWidth: L.w - 34,
       });
       drawText(g, COPY.risk(), {
-        x: cx, y: L.risk, anchor: 'free', size: 12.5, weight: 600,
+        ...type('labelMd'),
+        x: cx, y: L.risk, anchor: 'free',
         ink: INK_SOFT, over: CARD, maxWidth: L.w - 34,
       });
       /* THE ONLY ACTIONABLE LINE ON THE CARD, on its own, in the strong ink, and
          clamped above the button row so it can never hide under it */
       drawText(g, deferred ? COPY.howGeneric() : COPY.howIOS(), {
-        x: cx, y: Math.min(L.how, L.copyBottom), anchor: 'free', size: 12.5,
-        weight: 700, ink: INK, over: CARD, maxWidth: L.w - 30,
+        ...type('labelMd', { weight: 700 }),
+        x: cx, y: Math.min(L.how, L.copyBottom), anchor: 'free',
+        ink: INK, over: CARD, maxWidth: L.w - 30,
       });
 
       /* the two ways out. Neither is styled as a refusal — "Not now" is not a
-         smaller, greyer, harder-to-hit target than the other one. */
+         smaller, greyer, harder-to-hit target than the other one.
+         BOTH ARE TACTILE NOW. The primary is the FILLED one (`chipStrong`, dark,
+         with cream on it) rather than the most saturated one, because the
+         supplied palette has no saturated orange and its two nearest chips were
+         the same lightness — see the note on SURF.chipStrong. The hierarchy is
+         now lightness, which survives being looked at in the dark. */
       const btn = (b, label, warm) => {
-        c.fillStyle = warm ? BTN_WARM : BTN;
-        roundRect(c, b.x, b.y, b.w, b.h, b.h / 2);
-        c.fill();
+        const face = warm ? BTN_WARM : BTN;
+        /* the buttons act on `down` and the card closes in the same frame, so a
+           held press cannot be shown here — the EDGE is the half of the
+           treatment that pays, and it is what makes these read as buttons
+           rather than as two coloured lozenges. */
+        const f = tactile(c, {
+          x: b.x, y: b.y, w: b.w, h: b.h - 4, r: R.full, p: 0, face, border: 0,
+        });
         drawText(g, label, {
-          x: b.x + b.w / 2, y: b.y + b.h / 2, anchor: 'free',
-          size: 12.5, weight: 700, ink: INK, over: warm ? BTN_WARM : BTN,
+          ...type('labelMd', { weight: 700 }),
+          x: b.x + b.w / 2, y: b.y + f.dy + (b.h - 4) / 2, anchor: 'free',
+          ink: warm ? TOK.onStrong : INK, over: face,
           maxWidth: b.w - 14,
         });
       };
@@ -322,10 +352,11 @@ export function createInstall(o = {}) {
       btn(L.secondary, COPY.later(), false);
 
       /* the third door, and it is a real one: below the card, quiet, and it
-         means what it says */
+         means what it says. It sits on the SCRIM, not on the card, so it is the
+         one line here that gets ui/text.js's own plate rather than an `over`. */
       drawText(g, COPY.never(), {
-        x: L.x + L.w / 2, y: L.never.y + 16, anchor: 'free',
-        size: 11.5, weight: 600, ink: 'rgba(255,240,214,0.90)',
+        ...type('labelSm', { weight: 600, track: 0 }),
+        x: L.x + L.w / 2, y: L.never.y + 16, anchor: 'free', ink: TOK.onDark,
       });
 
       c.restore();

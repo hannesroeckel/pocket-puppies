@@ -1871,6 +1871,179 @@ export const BALANCE = {
 
   /* ---- ui ------------------------------------------------------------ */
   ui: {
+    /* ====================================================================
+       DESIGN TOKENS (stage 9) — THE ONE PLACE THE LOOK IS DEFINED.
+
+       Before this block, nine modules improvised their own cream, their own
+       brown and their own border alpha: `#fff8ea`, `#fff8f3`, `#fdf3df`,
+       `#f6e8d2`, `#f4e6d0`, `#f7e7cd` were all "the card colour", and
+       `#7c4a2f`, `#6b3a24`, `#5d3018`, `#4a2a14` were all "the ink". They
+       are close enough that nothing looked broken and far enough apart that
+       nothing looked like one product. `docs/DESIGN-REF.md` supplied a
+       systematised Material-3 warm set that is very near what was already
+       there, so this is consolidation rather than a repaint.
+
+       Read through `src/ui/tokens.js`, which gives these ergonomic names and
+       the derived values (dark-mode ink, alpha helpers). Nothing outside that
+       module should name a colour.
+
+       WHY THE DATA IS HERE AND THE DRAWING IS NOT. §11.1(G) already settled
+       this for the dog's colour ramps: numbers a person might tune live in
+       balance.js, and the code that applies them lives with the thing it
+       draws. So the hexes, sizes and durations are here; `ui/surface.js` owns
+       the tactile press, the warm shadow, the inset well and the stitched
+       divider that consume them.
+       ==================================================================== */
+    tokens: {
+      /* ---- palette (docs/DESIGN-REF.md §TAKE) --------------------------
+         Material-3 role names kept verbatim, because the point of taking a
+         systematised set is to stop inventing private names for the same
+         colour. `on*` is ink, `surface*` is ground, `*Container` is a filled
+         chip or a raised card. */
+      color: {
+        primary: '#815129',
+        primaryContainer: '#9d693e',
+        secondary: '#765933',
+        secondaryContainer: '#fed6a7',
+        tertiary: '#914635',
+
+        surface: '#fff8f3',
+        surfaceLowest: '#ffffff',
+        surfaceLow: '#fff2e1',
+        surfaceContainer: '#ffebcf',
+        surfaceHigh: '#fde5bf',
+        surfaceHighest: '#f8dfba',
+        surfaceDim: '#efd7b2',
+
+        onSurface: '#251a03',
+        onSurfaceVariant: '#51443b',
+        outline: '#84746a',
+        outlineVariant: '#d6c3b7',
+
+        inverseSurface: '#3c2e15',
+        inverseOnSurface: '#ffeed8',
+        error: '#ba1a1a',
+        errorContainer: '#ffdad6',
+
+        /* the four NAMED ACCENTS. Each one means exactly one thing, and the
+           discipline is the value: a coral that only ever means affection is
+           information, a coral used for decoration is noise. */
+        coralToy: '#F2A291',    // hearts, affection — NEVER as a meter (see §2)
+        mintGrass: '#A8D5BA',   // outdoors, walks
+        skyBlue: '#B9E0FF',     // water, energy
+        deepBark: '#2A1C14',    // deepest shadow; already the boot colour
+      },
+
+      /* ---- type ramp ---------------------------------------------------
+         DECISION 2 in docs/DESIGN-REF.md: the mock's ramp, the SYSTEM font
+         stack. No Plus Jakarta Sans, self-hosted or otherwise — zero extra
+         bytes, nothing to precache, no flash of unstyled text, and one fewer
+         thing that can fail offline.
+
+         `line` is the mock's line-height in px; ui/text.js divides it by
+         `size` to get its box height, so a step carries its own leading
+         instead of inheriting one global 1.32. `track` is letter-spacing in
+         em (see ui/text.js for the Safari feature-detect).
+
+         Virtual design space is 390 wide and the target device is 390 CSS px,
+         so these px sizes land at the mock's intended size on her phone. */
+      type: {
+        displayLg:  { size: 48, line: 56, weight: 800, track: -0.02 },
+        headlineLg: { size: 32, line: 40, weight: 700, track: 0 },
+        headlineMd: { size: 28, line: 36, weight: 700, track: 0 },
+        titleMd:    { size: 20, line: 28, weight: 600, track: 0 },
+        bodyLg:     { size: 18, line: 26, weight: 400, track: 0 },
+        bodyMd:     { size: 16, line: 24, weight: 400, track: 0 },
+        labelMd:    { size: 14, line: 20, weight: 600, track: 0.01 },
+        labelSm:    { size: 12, line: 16, weight: 700, track: 0.05 },
+      },
+
+      /* ---- radii & spacing --------------------------------------------
+         The mock gives 1rem / 2rem / 3rem / full. `sm` is an ADDITION and
+         documented as one: a 6px-tall progress track cannot have a 16px
+         radius, and `full` on something that thin is the same as sm anyway. */
+      radius: { sm: 8, md: 16, lg: 32, xl: 48, full: 9999 },
+      space:  { base: 8, gutter: 16, card: 24, margin: 20 },
+
+      /* ---- the tactile press (ui/surface.js) ---------------------------
+         The best idea in the supplied design, and the reason it is worth
+         reproducing in Canvas2D: a control with a visible bottom edge that
+         compresses under a thumb reads as an OBJECT rather than a rectangle
+         that changed colour. `.tactile-button` is border-bottom 4px -> 1px
+         with translateY(2px) over 100ms.
+
+         Net geometry, reproduced exactly: at rest the face sits at y with a
+         4-unit edge below it (bottom at y+h+4); pressed, the face sits at
+         y+2 with a 1-unit edge (bottom at y+h+3). So the top sinks 2 and the
+         bottom lifts 1, which is what makes it feel like compression rather
+         than a slide.
+
+         `dur` is the ease-out ramp. `reducedDur` is 0 rather than "slower":
+         prefers-reduced-motion is a request for less MOTION, not less
+         FEEDBACK, so the press snaps to its final state and stays every bit
+         as informative. */
+      press: { edge: 4, edgeDown: 1, sink: 2, dur: 0.10, reducedDur: 0 },
+
+      /* ---- the warm soft shadow ----------------------------------------
+         `0 12px 32px -4px rgba(131,83,43,.12)`. WARM, never grey: a neutral
+         grey shadow in a room this warm reads as a UI element pasted over the
+         art, which is the exact complaint that produced ui/text.js's warm
+         plates. Canvas2D has no shadow SPREAD, so `inset` reproduces the
+         `-4px` by casting from a path shrunk by 4 — see ui/surface.js. */
+      shadow: { dy: 12, blur: 32, inset: 4, color: 'rgba(131,83,43,0.12)' },
+
+      /* ---- inset wells --------------------------------------------------
+         `inset 0 2px 4px rgba(0,0,0,.05-.1)` for anything recessed: meter
+         tracks, the search field, a pressed-in chip. */
+      well: { dy: 2, blur: 4, alpha: 0.10, alphaSoft: 0.05 },
+
+      /* ---- the stitched divider ----------------------------------------
+         2px dashed. It suits this game specifically: the rug in the room is
+         already stitched, so a dashed rule reads as the same hand rather than
+         as a border. */
+      stitch: { w: 2, dash: [5, 5], color: '#d6c3b7' },
+
+      /* ---- BUBBLE METERS — CARE NEEDS ONLY ----------------------------
+         DECISION 1 in docs/DESIGN-REF.md, and the one hard line in this whole
+         pass: hunger, thirst and coat get a bar. THE BOND NEVER DOES.
+
+         Three, not four. ENERGY IS DELIBERATELY ABSENT and it is not an
+         oversight: nothing she can do restores it. It recovers by itself with
+         rest (BALANCE.time decay is NEGATIVE for energy) and is spent by
+         play and walks, so a bar for it would be a number she can watch and
+         cannot act on — which is the "meter to optimise" failure the whole
+         rejection in DESIGN-REF §1 is about, just wearing a different label.
+         It stays a WORD (`Bouncy`/`Normal`/`Tired`/`Sleepy`), which describes
+         him instead of scoring her. The other three each have a button.
+
+         The words stay next to the bars for all four, because the words are
+         the original's own scale and they say things a fill fraction cannot
+         ("Famished" is not 12%).
+
+         `accent` is one named colour per need, held to the accent discipline
+         above: thirst is sky-blue because it is water; hunger is the caramel
+         `primaryContainer` because it is food; coat is `tertiary`, the warm
+         rust of a brush. coral-toy is absent ON PURPOSE — it means affection,
+         and affection has no meter. */
+      needs: {
+        rows: [
+          { key: 'hunger',      label: 'Hunger', accent: '#9d693e', icon: 'bowl',  bar: true },
+          { key: 'thirst',      label: 'Thirst', accent: '#B9E0FF', icon: 'drop',  bar: true },
+          { key: 'cleanliness', label: 'Coat',   accent: '#914635', icon: 'brush', bar: true },
+          { key: 'energy',      label: 'Energy', accent: '#84746a', icon: 'moon',  bar: false },
+        ],
+        /* the track width is DERIVED from the panel, not stored: a stored width
+           and a stored panel width are two numbers that have to agree, and the
+           one that loses the argument is always the one that leaves a 3-unit
+           sliver of track hanging past the label. */
+        panelW: 206, rowH: 32, padX: 12, padY: 9,
+        bubbleR: 10, bubbleGap: 8, trackH: 6,
+        /* below this the fill warms toward `low` — a nudge, never a red alert.
+           No badge, no count, no dot: research §3, a "1" on a pet is guilt. */
+        lowAt: 0.28, low: '#c9563f',
+      },
+    },
+
     meter: { w: 82, h: 30, pad: 14, pulseDecay: 2.6, pulsePerUnit: 0.004 },
     /* ROUTED THROUGH ui/text.js IN STAGE 5 — it was the lowest-contrast text
        left in the game, which stage 4's notes had already flagged. `size`,
@@ -1878,10 +2051,22 @@ export const BALANCE = {
        not here any more because it is no longer a number anyone chooses — the
        helper solves it against the worst possible background. */
     toast: { dur: 1.9, fade: 0.32, y: 118, maxStack: 3, size: 13.5, padX: 15, padY: 7, step: 34 },
-    /* STAGE 5 added a SEVENTH pill (the ring), which cuts each one to about
-       47 virtual units. `label` is here rather than hardcoded because
-       ui/text.js shrinks to fit from it, so it is now a real tunable. */
-    nav: { h: 58, gap: 6, pad: 12, r: 15, iconR: 11, label: 9.5 },
+    /* STAGE 9 CUT THE NAV FROM EIGHT PILLS TO FIVE (Care/Play/Train/Walk/More).
+       Eight across 390 left 40.5 units each — under the 44 tap-target
+       guideline, and stage 6 shipped it knowing that. Five give 68.4:
+
+         (390 - pad*2 - gap*4) / 5 = (390 - 24 - 24) / 5 = 68.4
+
+       `h` went 58 -> 60 because there is now room for it, and because the
+       tactile edge (tokens.press.edge) hangs below the face: `layout()`
+       subtracts it so the pill's bottom edge lands at 798 with the target
+       device's 40px bottom inset, i.e. inside the safe band with 6 to spare.
+
+       `label` is GONE as a tunable: the label is now the type ramp's `label-sm`
+       step (12/16/700, +0.05em) via ui/tokens.js `type('labelSm')`. The old hard
+       9.5 existed to survive seven pills. `r` is superseded by tokens.radius.md
+       and kept only so an old save's layout maths cannot shift. */
+    nav: { h: 60, gap: 6, pad: 12, r: 15, iconR: 12 },
 
     /* WHAT A COLLAR LOOKS LIKE. Here rather than in either place that draws
        one, because BOTH draw one: `dog/draw.js` puts it on his neck and

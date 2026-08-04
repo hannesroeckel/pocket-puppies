@@ -63,7 +63,14 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
-const VERSION = '8.1.0';
+/* STAGE 9 (the design-system pass) ADDS TWO MODULES — `src/ui/tokens.js` and
+   `src/ui/surface.js` — so this generation MUST move and both MUST appear in
+   PRECACHE below. Every UI module now imports tokens.js; if it were missing from
+   the list the game would boot fine online and, offline, fail to resolve an
+   import in `ui/nav.js`, `ui/hud.js`, `ui/meter.js`, `ui/sheet.js`, `ui/shop.js`,
+   `ui/kennel.js` and `ui/install.js` at once — i.e. a blank screen on the plane,
+   from one forgotten line. `py tools/check-precache.py` now expects 51 entries. */
+const VERSION = '9.0.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -123,6 +130,11 @@ const PRECACHE = [
      would boot online and 404 the shop and the kennel on a plane. */
   './src/ui/shop.js',
   './src/ui/kennel.js',
+  /* stage 9, the design-system pass. `tokens.js` is imported by every module in
+     this directory, so of the 51 entries it is the single most expensive one to
+     forget. */
+  './src/ui/surface.js',
+  './src/ui/tokens.js',
   './src/ui/text.js',
   './src/ui/toast.js',
   /* the real-device capability probe. Cheap, and it is the thing that will
