@@ -140,3 +140,48 @@ but it cannot lose her anything.
 1.4 and 2.2 depend on), **2.1**, **2.2**, **2.4**. And one honest gap inside 2.6: the Cockapoo is
 reachable, adoptable and correct in the save, but until the breed data lands she renders with the
 Shiba's silhouette, so the two dogs currently look alike.
+
+---
+
+## 8. Status as of 2026-08-04 — seven of eight blockers cleared
+
+The table in §1 above is now out of date in several rows; **this section is authoritative.**
+
+| # | Blocker | Status |
+|---|---|---|
+| 1.1 | Gift puppy is a Schnoodle | ✅ **Merged.** `feature/curly-breeds` landed at `25d9ae4`; `BALANCE.gift.breedId` is `schnoodle`. A fresh save opens on a warm auburn Schnoodle in the naming beat. |
+| 1.2 | Progress cannot be silently deleted | ✅ |
+| 1.3 | Installable, with an honest reason | ✅ |
+| 1.4 | Sound exists | ✅ built. iPhone silence turned out to be **the ringer switch, not a bug**. Now overridden behind `audio.overrideSilentSwitch` (default `true`) because she usually keeps her phone silent; the in-game toggle is an absolute kill switch. **Audibility still needs a human ear.** |
+| 1.5 | Works fully offline | ✅ |
+| 1.6 | Save export/import in the UI | ✅ |
+| 1.7 | **Verified on the real iPhone, installed, by a human** | ⬜ **The last blocker, and it is Hannes's to close.** |
+| 1.8 | No unreadable text | ✅ verified independently — zero `fillText` outside `ui/text.js`; the only two remaining matches are comments describing the old code. |
+
+**Quality bar:** 2.1 ✅ (warm auburn, eyebrows removed on request, reads cute), 2.3 ✅,
+2.5 ✅, 2.6 ✅ **fully** — the Cockapoo now renders as herself (pale apricot, long fringed
+ears), verified post-merge and clearly distinct from the Schnoodle. 2.2 and 2.4 still need
+a real device and a real first-time player.
+
+### The floating bowl — reopened and properly fixed
+Hannes saw the bowl still hovering and sent a screenshot. **He was right and the previous
+"verified" claim was wrong**, in a way worth recording:
+
+> The assertion `A_bowlBaseOnFloor` passed 805/805 frames at gap 0.001 — because it compared
+> the bowl's base against **the very number the bowl's position was computed from**. Zero by
+> construction, for any pose, any breed, any size of bug. Meanwhile the eating pose put the
+> dog's drawn paws 23–26 units lower.
+
+A second bug hid underneath it: `pose.pawSole` omitted `dims.pawScale`, which the renderer
+applies. The two doodles have oversized paws — but the **Shiba doesn't**, so the one breed
+everything had been tuned against was the only one where the two agreed.
+
+Fixed at the reference frame: `rig.floorV` is now a single room-space floor line that both the
+bowl and the dog's planted paw resolve against, with the legs absorbing the difference.
+`standToEatShift` is now exactly **0.0**. Eating and drinking were **rendered and looked at on
+all three breeds** — which is the check that actually works.
+
+### Standing lesson
+Twice now a confident numeric gate has passed while the screen was visibly wrong. Numbers
+verify what you pointed them at; only looking verifies what she'll see. Every visual claim in
+this project needs a render someone actually viewed.

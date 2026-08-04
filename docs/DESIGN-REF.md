@@ -106,10 +106,19 @@ Confirmed **absent** on the target iPhone (`docs/PLATFORM-RISKS.md`). Dead code.
 
 ---
 
-## Open questions for Hannes
-1. **Status display** — words (research-backed) vs the mock's bars? Or a middle path: bars for
-   the *care* needs only (hunger/thirst/coat, which the original did surface), and **never** for
-   the bond?
-2. **Fonts** — self-host Plus Jakarta Sans (~2 woff2 files, real polish, a little weight), or
-   keep the system font stack (zero bytes)?
-3. **Nav** — reduce 8 pills toward the mock's 4 labelled tabs?
+## ✅ DECIDED with Hannes, 2026-08-03
+
+1. **Status display — bars for NEEDS only, never for the bond.**
+   Adopt the mock's bubble meters for the care needs the original itself surfaced —
+   **hunger, thirst, coat** (and energy if it earns its place). **No happiness or affection
+   meter, ever.** The bond stays legible only off his body and his behaviour. So we get the
+   glanceability of a bar for "is he fed" without turning the relationship into a number to
+   optimise, and without quantifying neglect.
+
+2. **Fonts — keep the system stack.** No Plus Jakarta Sans, no self-hosted woff2. Use the
+   mock's type *ramp* (the sizes, weights, line-heights and letter-spacing above) with
+   `-apple-system` etc. Zero extra bytes, nothing to precache, no flash of unstyled text.
+
+3. **Nav — reduce from 8 pills to ~5.** Care, Play, Train, Walk, More — with shop, kennel,
+   the ring and settings behind More. Bigger thumb targets; 8 pills at ~40px was already
+   flagged as too narrow for one-handed use.
