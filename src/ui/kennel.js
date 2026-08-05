@@ -92,7 +92,29 @@ export const COPY = {
 
   newTitle: 'A Cockapoo puppy',
   newLocked: (short) => `${short} more care points`,
-  newLockedNote: 'She goes to someone who is already looking after a dog well.',
+  /* SHORT ON PURPOSE, for the same reason `newReadyNote` below is — and this
+     one was MISSED when that decision was made, which is why it shipped broken.
+     It shares its line with the `320 more care points` chip, so its slot is
+     `lw - 130` = 116 units. Measured with ui/text.js's own `measure()`:
+
+       'She goes to someone who is already looking after a dog well.'  334  ✗
+       'Earned by looking after him.'                                  154  ✗
+       'Earned, not bought.'                                           108  ✓
+       'By caring for him.'                                             96  ✓
+
+     At 334 in a 116 slot the helper shrank it to `minSize` and then ellipsised,
+     and it rendered as **"She goes to someone wh…"** — a sentence that says
+     nothing, on the card a new player sees first. Caught by cropping in on the
+     render, not by any gate; nothing was clipped and no contrast check failed,
+     so nothing was there to fail.
+
+     The lost sentence's MEANING is what deserved to survive, so it is recorded
+     here: she goes to someone who is already looking after a dog well. The
+     replacement keeps the part the other two lines do not already carry —
+     line 2 gives the count and the chip gives the gap, so this gives the HOW.
+     Widening the slot would mean narrowing the chip or restacking a 92-unit
+     card, and neither is worth it for one row. */
+  newLockedNote: 'By caring for him.',
   newReady: 'She is ready to come home',
   /* SHORT ON PURPOSE: it shares the line with the 'Bring her home' chip, and
      the long version truncated to "You earn...". The four words that matter
