@@ -78,6 +78,9 @@ ERODE = 2          # device px shaved off the silhouette, so its own antialiased
                    # covered pixel) cannot be misread as fur inside the bowl
 MIN_MASK_FRAMES = 120    # frames that must actually have a bowl to look inside
 MIN_OVERLAP_FRAMES = 20  # frames where his body and the bowl must overlap at all
+MIN_ALPHA = 0.99         # below this the bowl is mid cross-fade and the floor
+                         # legitimately shows through it; those frames are
+                         # counted and named, not fudged and not failed
 
 
 # ---- server -------------------------------------------------------------
@@ -154,20 +157,57 @@ STEP_AND_READ = r"""(cfg) => {
   const A = cx.getImageData(x0, y0, W, H).data;
   const R = G.R, M0 = G.M0, M1 = G.M1;
 
-  /* INSIDE THE BOWL, from props.js's published silhouette -- not a colour
-     guess and not a re-derivation of the path. */
-  const mk = document.createElement('canvas');
-  mk.width = W; mk.height = H;
-  const m = mk.getContext('2d');
-  m.setTransform(view.dpr * view.vs, 0, 0, view.dpr * view.vs,
-                 view.dpr * view.offX - x0, view.dpr * view.offY - y0);
-  m.translate(bx, baseY - G.props.BOWL_BASE * bs);
-  m.scale(bs, bs);
-  m.fillStyle = '#fff';
-  G.props.bowlSilhouette(m);
-  const MK = m.getImageData(0, 0, W, H).data;
+  /* ---- INSIDE THE BOWL ------------------------------------------------
+     Two conditions, ANDed, and each is asked of the thing that knows:
+
+       1. props.js's PUBLISHED SILHOUETTE says where the outline is. Not a
+          colour guess and not a re-derivation of the path.
+       2. THE GAME'S OWN drawBowl CALL, replayed on a scratch canvas from
+          `care.debug.bowlDraw` with the same arguments and the same care-fade
+          alpha, says whether the bowl is actually there and FULLY OPAQUE.
+
+     (2) is what stops the gate testing a phantom. Ask only (1) and the mask
+     survives after the action closes and the bowl has gone, so the dog stands
+     "inside the bowl's outline" and every pixel of him reads as a defect. It
+     also excludes a cross-dissolving bowl: at alpha 0.6 the floor and his
+     chest legitimately show through, and the honest thing is to say so and
+     count the frame as not-checked rather than to fail it or fudge it. */
+  const bd = d.bowlDraw || {};
+  const mkCanvas = () => {
+    const q = document.createElement('canvas');
+    q.width = W; q.height = H;
+    const k = q.getContext('2d');
+    k.setTransform(view.dpr * view.vs, 0, 0, view.dpr * view.vs,
+                   view.dpr * view.offX - x0, view.dpr * view.offY - y0);
+    return [q, k];
+  };
+  /* (1) the outline */
+  const [, ms] = mkCanvas();
+  ms.translate(bx, baseY - G.props.BOWL_BASE * bs);
+  ms.scale(bs, bs);
+  ms.fillStyle = '#fff';
+  G.props.bowlSilhouette(ms);
+  const SIL = ms.getImageData(0, 0, W, H).data;
+  /* (2) the bowl the game actually drew -- same position, scale, kind, fill,
+     time and ripple -- laid down at FULL opacity, so the mask is the bowl's
+     own footprint and does not get nibbled away by the care fade. The fade is
+     handled once, as a frame-level gate below, instead of per pixel: at alpha
+     0.993 the double-painted rim overlap still reaches 255 while the rest of
+     the vessel does not, which silently shrank the mask to a third of the
+     bowl on exactly the "placed, upright, not yet eating" beat. */
+  const opaqueEnough = !!bd.onScreen && bd.alpha >= cfg.minAlpha;
+  const [, mo] = mkCanvas();
+  let OPQ = null;
+  if (opaqueEnough) {
+    G.props.drawBowl(mo, bd.x, bd.y, bd.s, bd.kind, bd.fill, bd.t, bd.ripple, 'back');
+    OPQ = mo.getImageData(0, 0, W, H).data;
+  }
+  out.bowlOnScreen = !!bd.onScreen;
+  out.bowlAlpha = bd.alpha === undefined ? 0 : bd.alpha;
   let mask = new Uint8Array(W * H);
-  for (let i = 0, q = 3; i < W * H; i++, q += 4) mask[i] = MK[q] > 250 ? 1 : 0;
+  for (let i = 0, q = 3; i < W * H; i++, q += 4) {
+    mask[i] = (SIL[q] > 250 && OPQ && OPQ[q] > 254) ? 1 : 0;
+  }
   for (let e = 0; e < cfg.erode; e++) {
     const nx = new Uint8Array(W * H);
     for (let y = 1; y < H - 1; y++) {
@@ -180,8 +220,9 @@ STEP_AND_READ = r"""(cfg) => {
   }
 
   const same = (P, Q, i) => P[i] === Q[i] && P[i + 1] === Q[i + 1] && P[i + 2] === Q[i + 2];
-  let maskPx = 0, torsoPx = 0, defect = 0, back = 0;
+  let maskPx = 0, torsoPx = 0, defect = 0, back = 0, tie = 0;
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
+  const samples = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const j = y * W + x;
@@ -190,14 +231,31 @@ STEP_AND_READ = r"""(cfg) => {
       const i = j * 4;
       if (same(M0, R, i)) continue;      /* his body never painted this pixel */
       torsoPx++;
-      if (!same(M1, M0, i)) back++;      /* the vessel's far half took it back */
-      if (same(A, M0, i)) {              /* ...and nothing did. THE DEFECT. */
-        defect++;
-        if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
-        if (y < by0) by0 = y; if (y > by1) by1 = y;
+      const tookBack = !same(M1, M0, i); /* the vessel's far half repainted it */
+      if (tookBack) back++;
+      if (!same(A, M0, i)) continue;     /* something painted over his body */
+      /* His body painted this pixel and the final image is still exactly his
+         body's colour. That is the defect -- UNLESS the far half demonstrably
+         repainted the pixel already, in which case his body is behind the bowl
+         here whatever the final colour is, and what restored the colour was
+         the head, the near rim or a kibble happening to match his fur. A
+         colour tie is not a depth bug, so it is counted separately and named
+         rather than folded into either answer. */
+      if (tookBack) { tie++; continue; }
+      defect++;
+      if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+      if (y < by0) by0 = y; if (y > by1) by1 = y;
+      if (samples.length < 4) {
+        samples.push({ x: x0 + x, y: y0 + y,
+                       room: [R[i], R[i + 1], R[i + 2]],
+                       his: [M0[i], M0[i + 1], M0[i + 2]],
+                       afterFarHalf: [M1[i], M1[i + 1], M1[i + 2]],
+                       final: [A[i], A[i + 1], A[i + 2]] });
       }
     }
   }
+  out.colourTiesNotCounted = tie;
+  if (samples.length) out.defectSamples = samples;
   out.maskPx = maskPx;
   out.torsoInMask = torsoPx;
   out.backOverTorso = back;
@@ -225,7 +283,7 @@ class Run:
 
     def __init__(self, pg, erode):
         self.pg = pg
-        self.cfg = {"erode": erode}
+        self.cfg = {"erode": erode, "minAlpha": MIN_ALPHA}
         self.rows = []
 
     async def step(self, n=1):
@@ -325,43 +383,88 @@ async def action(pg, mode, erode, old):
     return r.rows, marks
 
 
+# the beats the mask MUST be non-empty on, or the gate never looked inside the
+# bowl in the state that matters. `f-finish-upright` is the one he photographed.
+MUST_COVER = ("a-placed-upright", "b-pouring", "c-approach", "d-eating",
+              "f-finish-upright")
+MIN_PER_PHASE = 15
+
+
 def judge(rows, marks, old):
-    live = [f for f in rows if f.get("maskPx")]
-    bad = [f for f in rows if f.get("defect")]
-    overlap = [f for f in rows if f.get("torsoInMask")]
+    checked = [f for f in rows if f.get("maskPx")]
+    bad = [f for f in checked if f.get("defect")]
+    overlap = [f for f in checked if f.get("torsoInMask")]
     took = [f for f in overlap if f.get("backOverTorso")]
+    noBowl = [f for f in rows if not f.get("maskPx") and not f.get("bowlOnScreen")]
+    fading = [f for f in rows if not f.get("maskPx") and f.get("bowlOnScreen")]
     worst = max(rows, key=lambda f: f.get("defect", 0))
     phases = sorted({f["phase"] for f in rows if f["phase"]})
+    # per-phase coverage: the whole action, not a sample of it
+    byPhase = {}
+    for f in checked:
+        p = f["phase"] or "(care closing)"
+        byPhase.setdefault(p, [0, 0])
+        byPhase[p][0] += 1
+        byPhase[p][1] += 1 if f.get("defect") else 0
+    # 'place' is the drag: the bowl is in her hand, floating over him, and is
+    # drawn WHOLE in the front pass, so no part of him can be behind it by
+    # construction. It is exempt from the per-phase floor for that reason,
+    # not because it is inconvenient.
+    thin = [p for p in phases if p != 'place'
+            and byPhase.get(p, [0])[0] < MIN_PER_PHASE]
+    cp = {k: {"phase": rows[i]["phase"], "w": rows[i]["w"],
+              "bowlOnScreen": rows[i].get("bowlOnScreen"),
+              "bowlAlpha": rows[i].get("bowlAlpha"),
+              "maskPx": rows[i].get("maskPx", 0),
+              "torsoInMask": rows[i].get("torsoInMask", 0),
+              "backOverTorso": rows[i].get("backOverTorso", 0),
+              "defect": rows[i].get("defect", 0)}
+          for k, i in marks.items()}
+    uncovered = [k for k in MUST_COVER if k in cp and not cp[k]["maskPx"]]
     res = {
         "frames": len(rows), "phases": phases,
-        "framesWithBowlToLookInside": len(live),
+        "framesChecked": len(checked),
+        "framesNotChecked_noBowlOnScreen": len(noBowl),
+        "framesNotChecked_bowlCrossFading": len(fading),
         "framesWhereHisBodyOverlapsTheBowl": len(overlap),
         "framesWhereTheFarHalfTookThosePixelsBack": len(took),
         "framesWithTorsoShowingInsideTheBowl": len(bad),
+        "colourTiePixelsIgnoredWorstFrame": max((f.get("colourTiesNotCounted", 0)
+                                                 for f in rows), default=0),
         "worstDefectPx": worst.get("defect", 0),
         "worstDefectFracOfBowl": worst.get("defectFrac", 0),
         "worstDefectPhase": worst.get("phase") if worst.get("defect") else None,
         "worstDefectBox": worst.get("defectBox"),
-        "perCheckpoint": {k: {"phase": rows[i]["phase"], "w": rows[i]["w"],
-                              "maskPx": rows[i].get("maskPx", 0),
-                              "torsoInMask": rows[i].get("torsoInMask", 0),
-                              "defect": rows[i].get("defect", 0)}
-                          for k, i in marks.items()},
+        "checkedPerPhase": {p: {"checked": v[0], "defectFrames": v[1]}
+                            for p, v in sorted(byPhase.items())},
+        "phasesWithTooFewCheckedFrames": thin,
+        "beatsWithNoBowlToLookInside": uncovered,
+        "perCheckpoint": cp,
     }
     if old:
         # the control: the gate must SEE §19.2's defect, not merely fail to
         # find it in the fix
         res["pass"] = len(bad) > 0 and worst.get("defect", 0) > 200
         res["meaning"] = ("PASS here means the gate CAN see the defect: the old "
-                          "order shows fur inside the bowl on %d frames" % len(bad))
+                          "order shows fur inside the bowl on %d of %d checked "
+                          "frames, worst %d px (%.1f%% of the bowl)"
+                          % (len(bad), len(checked), worst.get("defect", 0),
+                             100 * worst.get("defectFrac", 0)))
     else:
-        res["pass"] = (not bad and len(live) >= MIN_MASK_FRAMES
-                       and len(overlap) >= MIN_OVERLAP_FRAMES and len(took) >= MIN_OVERLAP_FRAMES)
-        res["meaning"] = ("PASS means no pixel of his torso survived inside the "
-                          "bowl's outline on ANY of %d frames, and the check was "
-                          "not vacuous: his body overlapped the bowl on %d frames "
-                          "and the far half took those pixels back on %d."
-                          % (len(rows), len(overlap), len(took)))
+        res["pass"] = (not bad and not uncovered and not thin
+                       and len(checked) >= MIN_MASK_FRAMES
+                       and len(overlap) >= MIN_OVERLAP_FRAMES
+                       and len(took) >= MIN_OVERLAP_FRAMES)
+        res["meaning"] = ("PASS means: on all %d frames where an opaque bowl was "
+                          "on screen -- every beat from placing it to sitting back "
+                          "up -- NO pixel of his torso survived inside the bowl's "
+                          "outline. Not vacuous: his body was behind the bowl on "
+                          "%d of those frames and the far half took those pixels "
+                          "back on %d. %d frames were not checked because there "
+                          "was no bowl on screen and %d because it was mid "
+                          "cross-fade."
+                          % (len(checked), len(overlap), len(took),
+                             len(noBowl), len(fading)))
     return res
 
 
@@ -399,17 +502,24 @@ async def main():
                 print("\n%-10s %-5s %s  %d frames, phases %s"
                       % (breed, mode, "PASS" if r["pass"] else "FAIL",
                          r["frames"], ",".join(r["phases"])))
-                for k in ("framesWithBowlToLookInside",
+                for k in ("framesChecked", "framesNotChecked_noBowlOnScreen",
+                          "framesNotChecked_bowlCrossFading",
                           "framesWhereHisBodyOverlapsTheBowl",
                           "framesWhereTheFarHalfTookThosePixelsBack",
                           "framesWithTorsoShowingInsideTheBowl",
-                          "worstDefectPx", "worstDefectFracOfBowl", "worstDefectPhase"):
+                          "worstDefectPx", "worstDefectFracOfBowl", "worstDefectPhase",
+                          "colourTiePixelsIgnoredWorstFrame",
+                          "phasesWithTooFewCheckedFrames", "beatsWithNoBowlToLookInside"):
                     print("    %-42s %s" % (k, r[k]))
+                print("    checked frames per phase: %s"
+                      % json.dumps({p: v["checked"]
+                                    for p, v in r["checkedPerPhase"].items()}))
                 print("    per checkpoint (defect px inside the bowl):")
                 for k in sorted(r["perCheckpoint"]):
                     c = r["perCheckpoint"][k]
-                    print("      %-18s phase=%-12s w=%-6s bowlPx=%-6s his=%-6s DEFECT=%s"
-                          % (k, c["phase"], c["w"], c["maskPx"], c["torsoInMask"], c["defect"]))
+                    print("      %-18s phase=%-12s a=%-6s bowlPx=%-6s his=%-6s took=%-6s DEFECT=%s"
+                          % (k, c["phase"], c["bowlAlpha"], c["maskPx"],
+                             c["torsoInMask"], c["backOverTorso"], c["defect"]))
             await ctx.close()
         await br.close()
     out["consoleErrors"] = errs
