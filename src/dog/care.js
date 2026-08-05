@@ -1384,30 +1384,12 @@ export function createCare(rig, opts = {}) {
   /* ================================================================== */
   /*  drawing                                                           */
   /* ================================================================== */
-  /* ---- THE BOWL IS SPLIT ACROSS THE DOG (§19.2) -----------------------
-     A placed bowl he is eating out of has his muzzle 18 units inside it, so it
-     cannot be one sprite on one side of him. `drawBehind` lays the vessel, its
-     interior and the food; the dog is drawn; `drawFront` lays the near rim and
-     the wall under it back over him. The nose then sits BETWEEN the two, which
-     is the only arrangement that reads as eating rather than as standing
-     behind a bowl (the defect the human found on his phone).
-
-     A bowl in her hand, or one still being dragged, has nothing of his in
-     front of it and is drawn whole in the front pass — splitting it would put
-     its interior behind a dog it is currently floating over. */
-  function bowlIsSplit() {
-    return (mode === 'feed' || mode === 'water') && sp.care.x > 0.004
-      && bowl.placed && !bowl.held;
-  }
-
-  /** the parts of a care action that belong BEHIND the dog */
-  function drawBehind(g) {
+  /** props + particles that belong IN FRONT of the dog (bowls, kibble) */
+  function drawFront(g) {
     const c = g.ctx;
     const w = sp.care.x;
 
-    /* the brushed-out fur pile lies ON THE RUG. Drawn after him it was fur
-       stuck to his back — the same compositing mistake as the bowl, one
-       action over. */
+    /* the brushed-out fur pile persists on the floor while brushing */
     if (pile.length) {
       c.save();
       for (const q of pile) {
@@ -1422,20 +1404,8 @@ export function createCare(rig, opts = {}) {
       c.restore();
     }
 
-    if (bowlIsSplit()) {
-      c.save();
-      c.globalAlpha = clamp(w, 0, 1);
-      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'back');
-      c.restore();
-    }
-  }
-
-  /** props + particles that belong IN FRONT of the dog (bowls, kibble) */
-  function drawFront(g) {
-    const c = g.ctx;
-    const w = sp.care.x;
-
     if (w > 0.004 && (mode === 'feed' || mode === 'water')) {
+      const cfg = mode === 'feed' ? C.feed : C.water;
       c.save();
       c.globalAlpha = clamp(w, 0, 1);
       /* the drop ring, while there is still something to place */
@@ -1444,24 +1414,14 @@ export function createCare(rig, opts = {}) {
         const hot = clamp(1 - d / (ST.snap * 2.4), 0, 1);
         drawDropRing(c, ST.bowlTarget[0], ST.bowlTarget[1] + 8, ST.targetR, t, hot, w);
       }
-      /* A bowl with nothing of his in front of it: draw it whole, here. */
-      if (!bowlIsSplit()) {
-        drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple);
-      }
+      /* The bowl, at the position update() resolved. It grows once placed: it
+         is nearer the camera down there, and the taller rim is what occludes
+         the lower muzzle when he noses into it. */
+      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple);
       c.restore();
     }
 
-    /* the poured stream's kibble and drops land IN the bowl, so they go under
-       the near rim, not over it */
     drawParts(c);
-
-    /* ...and only now the near rim and the wall below it, over his muzzle */
-    if (bowlIsSplit()) {
-      c.save();
-      c.globalAlpha = clamp(w, 0, 1);
-      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'front');
-      c.restore();
-    }
 
     if (w > 0.004 && (mode === 'feed' || mode === 'water')) {
       c.save();
@@ -1641,9 +1601,7 @@ export function createCare(rig, opts = {}) {
     get fill() { return fill; },
     /** true while the action owns the whole surface (no nav, no petting UI) */
     get modal() { return !!mode; },
-    start, stop, update, apply, pointer, drawBehind, drawFront, drawOver,
-    /** is the bowl currently drawn in two pieces around him? (verification) */
-    get bowlSplit() { return bowlIsSplit(); },
+    start, stop, update, apply, pointer, drawFront, drawOver,
     /** activity soils the coat — dirt never comes from the clock alone */
     soil(amount) { game.soil(amount, rng); },
     resetStroke() { lastL = null; },
