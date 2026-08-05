@@ -63,7 +63,14 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
-const VERSION = '8.1.0';
+/* 8.3.0 — NOT a typo and NOT a downgrade. The bowl-compositing change shipped as
+   8.2.0 and was reverted (it made the bowl look half-buried in his chest whenever
+   he sat upright, which is the state he is in most of the time). Reverting the
+   commit also reverted this constant to 8.1.0 — but a phone already holding the
+   8.2.0 cache would then never see the revert, because the worker only rebuilds
+   when the cache NAME changes and it has no notion of "newer". So the version
+   moves FORWARD past the withdrawn one. Never let a revert walk this number back. */
+const VERSION = '8.3.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
