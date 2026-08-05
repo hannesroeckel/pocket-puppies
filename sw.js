@@ -63,13 +63,22 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
+/* 8.2.0 — the bowl is split across the dog (ARCHITECTURE §19). No file was
+   added or renamed, so PRECACHE was untouched by that fix; but
+   `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
+   compositing fix served from the old cache is a fix that ships to nobody. */
 /* STAGE 9 (the design-system pass) ADDS TWO MODULES — `src/ui/tokens.js` and
    `src/ui/surface.js` — so this generation MUST move and both MUST appear in
    PRECACHE below. Every UI module now imports tokens.js; if it were missing from
    the list the game would boot fine online and, offline, fail to resolve an
    import in `ui/nav.js`, `ui/hud.js`, `ui/meter.js`, `ui/sheet.js`, `ui/shop.js`,
    `ui/kennel.js` and `ui/install.js` at once — i.e. a blank screen on the plane,
-   from one forgotten line. `py tools/check-precache.py` now expects 51 entries. */
+   from one forgotten line. `py tools/check-precache.py` now expects 51 entries.
+
+   9.0.0 SUPERSEDES 8.2.0 rather than sitting beside it: this branch carries the
+   bowl split as well (it merged in from master), so a device that never saw
+   8.2.0 still gets that fix with this generation. The version is one increasing
+   line, not a per-fix label. */
 const VERSION = '9.0.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;

@@ -1632,6 +1632,14 @@ export function createRoomScene() {
       const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
       if (toyBehind) toy.draw(g);
 
+      /* THE CARE PROPS THAT GO UNDER HIM: the fur pile on the rug, and — the
+         whole point of §19.2 — the placed bowl's vessel, its interior and its
+         food surface. His muzzle goes 18 units into that bowl, so the bowl
+         cannot be on one side of him: `care.drawFront` puts the NEAR rim back
+         over him below. One hook here and one there is what makes a nose
+         inside a bowl composite like a nose inside a bowl. */
+      care.drawBehind(g);
+
       /* HE IS NOT HERE. The room is the whole point of the absence beat. */
       if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat);
       drawParts(c);

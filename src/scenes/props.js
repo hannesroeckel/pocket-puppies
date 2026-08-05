@@ -49,38 +49,97 @@ export const BOWL_BASE = 18;
 export const BOWL_WELL = -8;
 export const BOWL_TOP = -17.5;
 
+/* ---- THE BOWL IS DRAWN IN TWO PIECES, AND A HEAD GOES BETWEEN THEM ----
+   A near-frontal bowl is not one sprite. The camera sees, front to back:
+
+       the NEAR rim and the near outer wall     <- nearer than a muzzle in it
+       the food / water surface                 <- the muzzle is IN this
+       the far interior wall and the FAR rim    <- behind the muzzle
+
+   Painted as one sprite after the dog — which is what stage 8 did — the food
+   ellipse lands on top of the nose and he reads as standing BEHIND a full
+   bowl rather than eating out of it. Every geometric assertion still passed,
+   because the geometry was never wrong: the muzzle really was 18 units inside
+   the bowl. Only the compositing was (ARCHITECTURE §19.2).
+
+   So `layer` splits the SAME drawing, never a second copy of it:
+
+     'back'   everything: shadow, vessel, interior, contents, far rim
+     'front'  the same paint again, CLIPPED to the near region below —
+              the near rim plus the outer wall under it, and nothing else
+     'all'    one pass, for a bowl with nothing in front of it (the resting
+              bowls by the wall, a bowl in her hand mid-drag)
+
+   'front' re-paints rather than drawing its own shape, so the two layers
+   cannot drift apart and there is no seam to antialias: within the clip the
+   pixels are the ones 'all' would have produced. The one thing it must skip
+   is the contact shadow, which is translucent and would double-darken.
+   ---------------------------------------------------------------------- */
+const RIM_RX = 30, RIM_CY = -8, RIM_RY = 9.5;
+const WELL_RX = 24.5, WELL_CY = -7, WELL_RY = 7;
+
+/** the outer vessel wall below the rim plate — the bowl's silhouette */
+function bowlBodyPath(c) {
+  c.moveTo(-RIM_RX, RIM_CY);
+  c.bezierCurveTo(-28, 10, -16, 18, 0, BOWL_BASE);
+  c.bezierCurveTo(16, 18, 28, 10, RIM_RX, RIM_CY);
+}
+
+/**
+ * THE NEAR HALF OF THE VESSEL: everything between the well's near lip and the
+ * base. This is the piece that has to be in front of a muzzle dipped into the
+ * bowl, and it is the only piece that does.
+ *
+ * Bounded below by the body silhouette and above by the well's near arc, with
+ * the rim plate's two tips closed off by the short chords out to ±RIM_RX. The
+ * arc is the line that crosses the muzzle; without it the nose has nothing to
+ * disappear behind and no amount of depth in the numbers will read.
+ */
+export function bowlNearPath(c) {
+  c.beginPath();
+  bowlBodyPath(c);
+  c.lineTo(WELL_RX, WELL_CY);
+  c.ellipse(0, WELL_CY, WELL_RX, WELL_RY, 0, 0, Math.PI, false);
+  c.lineTo(-RIM_RX, RIM_CY);
+  c.closePath();
+}
+
 /**
  * A dog bowl.
  * @param kind  'food' | 'water'
  * @param fill  0..1 contents
  * @param t     seconds, for the water surface wobble
  * @param ripple 0..1 recent disturbance (a lap, a poured stream)
+ * @param layer 'all' | 'back' | 'front'  (see the note above)
  */
-export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0) {
+export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer = 'all') {
   const water = kind === 'water';
+  const front = layer === 'front';
   c.save();
   c.translate(bx, by);
   c.scale(s, s);
+  if (front) { bowlNearPath(c); c.clip(); }
 
-  c.fillStyle = PC.shadow; ell(c, 2, 6, 34, 10); c.fill();
+  /* the contact shadow is translucent, so the front pass must not lay a
+     second copy of it over the back pass's */
+  if (!front) { c.fillStyle = PC.shadow; ell(c, 2, 6, 34, 10); c.fill(); }
 
   const g = c.createLinearGradient(-30, -14, 30, 14);
   g.addColorStop(0, water ? PC.tealL : PC.clayL);
   g.addColorStop(0.5, water ? PC.teal : PC.clay);
   g.addColorStop(1, water ? PC.tealD : PC.clayD);
   c.fillStyle = g;
-  c.beginPath();
-  c.moveTo(-30, -8);
-  c.bezierCurveTo(-28, 10, -16, 18, 0, 18);
-  c.bezierCurveTo(16, 18, 28, 10, 30, -8);
-  c.closePath(); c.fill();
+  c.beginPath(); bowlBodyPath(c); c.closePath(); c.fill();
 
   /* the inner well */
-  c.fillStyle = water ? '#f0f2e6' : PC.cream; ell(c, 0, -8, 30, 9.5); c.fill();
-  c.fillStyle = water ? PC.tealD : '#a97141'; ell(c, 0, -7, 24.5, 7); c.fill();
+  c.fillStyle = water ? '#f0f2e6' : PC.cream; ell(c, 0, RIM_CY, RIM_RX, RIM_RY); c.fill();
+  c.fillStyle = water ? PC.tealD : '#a97141'; ell(c, 0, WELL_CY, WELL_RX, WELL_RY); c.fill();
 
   const f = clamp(fill, 0, 1);
-  if (f > 0.01) {
+  /* the contents live inside the well, which is entirely behind the near lip:
+     the front pass would only be re-laying translucent highlights on the clip
+     edge, so it skips them */
+  if (f > 0.01 && !front) {
     c.save();
     ell(c, 0, -7, 24.5, 7); c.clip();
     if (water) {
@@ -107,26 +166,51 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0) {
         }
       }
     } else {
-      /* kibble piles up from the bottom: reveal pieces in a stable order */
+      /* kibble piles up from the bottom: reveal pieces in a stable order.
+         SPREAD WIDE, not heaped in the middle. Once the food moved behind him
+         (§19) his muzzle covers the centre of the well, so a mound pooled at
+         x=0 reads as an empty bowl the moment he puts his head in it. The
+         spread runs out to the well's own edge instead — it is clipped to the
+         well either way, and it can no longer end up over his nose, because
+         this whole block is now painted before he is. */
       const n = Math.round(f * KIBBLE.length);
+      const wide = 1.12 + f * 0.10;
       c.fillStyle = PC.kibbleD;
-      ell(c, 0, lerp(2, -9, f), 21 * (0.55 + f * 0.45), 6.4 * (0.5 + f * 0.5)); c.fill();
+      ell(c, 0, lerp(2, -8, f), 23.4 * (0.60 + f * 0.40), 6.4 * (0.5 + f * 0.5)); c.fill();
       for (let i = 0; i < n; i++) {
         const k = KIBBLE[i];
         c.fillStyle = PC.kibble;
-        ell(c, k[0] * (0.8 + f * 0.2), k[1] * f + (1 - f) * 2, k[2], k[2] * 0.78, i * 0.7); c.fill();
+        ell(c, k[0] * wide, k[1] * f + (1 - f) * 2, k[2], k[2] * 0.78, i * 0.7); c.fill();
       }
       c.fillStyle = PC.kibbleL;
       for (let i = 0; i < n; i += 3) {
         const k = KIBBLE[i];
-        ell(c, k[0] * (0.8 + f * 0.2) - 1, k[1] * f + (1 - f) * 2 - 1.4, k[2] * 0.36, k[2] * 0.26, 0); c.fill();
+        ell(c, k[0] * wide - 1, k[1] * f + (1 - f) * 2 - 1.4, k[2] * 0.36, k[2] * 0.26, 0); c.fill();
       }
     }
     c.restore();
   }
 
-  c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.6;
-  c.beginPath(); c.ellipse(0, -8, 30, 9.5, 0, Math.PI * 1.05, Math.PI * 1.85); c.stroke();
+  /* THE FAR RIM's highlight — behind anything dipped into the bowl */
+  if (!front) {
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.6;
+    c.beginPath();
+    c.ellipse(0, RIM_CY, RIM_RX, RIM_RY, 0, Math.PI * 1.05, Math.PI * 1.85);
+    c.stroke();
+  }
+  /* THE NEAR LIP — the edge a muzzle disappears behind. Drawn once, by
+     whichever pass is the frontmost one, so the translucent line is never
+     laid down twice. */
+  if (layer !== 'back') {
+    c.strokeStyle = 'rgba(104,58,32,0.22)'; c.lineWidth = 1.5;
+    c.beginPath();
+    c.ellipse(0, WELL_CY, WELL_RX, WELL_RY, 0, Math.PI * 0.08, Math.PI * 0.92);
+    c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1.1;
+    c.beginPath();
+    c.ellipse(0, RIM_CY + 0.6, RIM_RX - 1, RIM_RY - 1, 0, Math.PI * 0.12, Math.PI * 0.88);
+    c.stroke();
+  }
   c.restore();
 }
 
@@ -684,4 +768,6 @@ export default {
   drawLeash, drawCollar, drawFind, drawPawPrint, inkLine, WC,
   /* stage 6 */
   BOWL_BASE, BOWL_WELL, BOWL_TOP,
+  /* stage 8b: the near/far split (§19.2) */
+  bowlNearPath,
 };
