@@ -67,15 +67,25 @@
    added or renamed, so PRECACHE below is untouched and still matches the tree;
    but `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
    compositing fix served from the old cache is a fix that ships to nobody. */
-/* 8.2.1 — the split moves to the right DEPTH (§19.3): the vessel's far half
-   now goes between his body and his head instead of behind all of him, so an
-   upright dog no longer looks like he has a bowl buried in his chest. Four
-   modules changed — `dog/draw.js` (the mid slot), `dog/care.js`, `scenes/room.js`
-   and `scenes/props.js` (the published silhouette the pixel gate reads). Still
-   NO new file, so PRECACHE is untouched and still matches the tree; but this is
-   precisely the kind of fix that ships to nobody if the generation does not
-   move, because the phone that has the defect already has the old cache. */
-const VERSION = '8.2.1';
+/* 8.4.0 — THE SPLIT COMES BACK, AT THE RIGHT DEPTH (§19.3).
+
+   History matters for the number. 8.2.0 split the vessel across the dog and
+   fixed food-painted-over-the-muzzle, but hooked the far half in behind the
+   WHOLE dog, so an upright dog had a bowl buried in his chest. Because upright
+   is most of the time and eating is a few seconds, that was the worse of the
+   two, and master was REVERTED to the unsplit bowl and shipped as 8.3.0.
+
+   So this branch is the only place the split exists, and it carries both
+   halves of the problem at once: the muzzle goes into the vessel (8.2.0's
+   intent) AND nothing of his torso occludes it (§19.3). The generation has to
+   land ABOVE the reverted 8.3.0 that is now live, or the phones that took the
+   revert would never fetch this.
+
+   Four modules changed — `dog/draw.js` (the mid depth slot), `dog/care.js`,
+   `scenes/room.js` and `scenes/props.js` (the published silhouette the pixel
+   gate reads). Still NO new file, so PRECACHE below is untouched and still
+   matches the tree (`py tools/check-precache.py`). */
+const VERSION = '8.4.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

@@ -1704,6 +1704,24 @@ export function createCare(rig, opts = {}) {
           * (rig.sy === undefined ? 1 : rig.sy)).toFixed(2),
         roomFloorY: +rig.floorV.toFixed(2),
         plantShare: +(+rig.plantShare || 0).toFixed(3),
+        /* EXACTLY WHAT drawBowl WAS CALLED WITH THIS FRAME, and whether it was
+           called at all. Published because a verifier that wants to ask "is
+           this device pixel inside the bowl?" has to be able to lay the SAME
+           bowl down on a scratch canvas — and, more importantly, to get an
+           EMPTY answer on the frames where there is no bowl on screen. The
+           first cut of `tools/bowlpixels.py` built its mask from the geometry
+           alone and so kept testing a phantom outline after the action had
+           closed and the bowl had gone, which reads as a defect and is not one.
+           `alpha` is the care fade: a cross-dissolving bowl is legitimately
+           see-through, and only a FULLY OPAQUE pixel is "inside the bowl". */
+        bowlDraw: {
+          onScreen: (mode === 'feed' || mode === 'water') && sp.care.x > 0.004,
+          split: bowlIsSplit(),
+          x: +bowl.x.toFixed(3), y: +bowlDrawY.toFixed(3),
+          s: +bowlScaleNow.toFixed(5), kind: bowl.kind,
+          fill: +sp.fill.x.toFixed(5), t: +t.toFixed(5),
+          ripple: +ripple.toFixed(5), alpha: +clamp(sp.care.x, 0, 1).toFixed(5),
+        },
         /* a clamped scale means no allowed bowl size can both stand on the
            floor and reach his muzzle — i.e. the base is OFF the floor. Loud. */
         scaleClamped: geo ? !!geo.scaleClamped : false,

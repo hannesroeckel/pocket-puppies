@@ -1,0 +1,508 @@
+{
+ "shiba-feed": {
+  "frames": 1551,
+  "phases": [
+   "approach",
+   "eat",
+   "finish",
+   "lick",
+   "place",
+   "pour"
+  ],
+  "framesWithBowlToLookInside": 1551,
+  "framesWhereHisBodyOverlapsTheBowl": 1538,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1418,
+  "framesWithTorsoShowingInsideTheBowl": 204,
+  "worstDefectPx": 35,
+  "worstDefectFracOfBowl": 0.0023,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   323,
+   1546,
+   167,
+   65
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 15541,
+    "torsoInMask": 14384,
+    "defect": 0
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 15545,
+    "torsoInMask": 14389,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 14527,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "eat",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "e-lick": {
+    "phase": "lick",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 15545,
+    "torsoInMask": 14125,
+    "defect": 29
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 15545,
+    "torsoInMask": 14407,
+    "defect": 35
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1551 frames, and the check was not vacuous: his body overlapped the bowl on 1538 frames and the far half took those pixels back on 1418."
+ },
+ "shiba-water": {
+  "frames": 1583,
+  "phases": [
+   "approach",
+   "drink",
+   "finish",
+   "place",
+   "pour",
+   "shakeMuzzle"
+  ],
+  "framesWithBowlToLookInside": 1583,
+  "framesWhereHisBodyOverlapsTheBowl": 1583,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1450,
+  "framesWithTorsoShowingInsideTheBowl": 202,
+  "worstDefectPx": 46,
+  "worstDefectFracOfBowl": 0.003,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   323,
+   1546,
+   167,
+   65
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 15541,
+    "torsoInMask": 14384,
+    "defect": 0
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 15545,
+    "torsoInMask": 14389,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 14513,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "drink",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "e-shakeMuzzle": {
+    "phase": "shakeMuzzle",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 15545,
+    "torsoInMask": 15545,
+    "defect": 0
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 15545,
+    "torsoInMask": 14115,
+    "defect": 37
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 15545,
+    "torsoInMask": 14404,
+    "defect": 46
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1583 frames, and the check was not vacuous: his body overlapped the bowl on 1583 frames and the far half took those pixels back on 1450."
+ },
+ "cockapoo-feed": {
+  "frames": 1551,
+  "phases": [
+   "approach",
+   "eat",
+   "finish",
+   "lick",
+   "place",
+   "pour"
+  ],
+  "framesWithBowlToLookInside": 1551,
+  "framesWhereHisBodyOverlapsTheBowl": 1539,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1418,
+  "framesWithTorsoShowingInsideTheBowl": 317,
+  "worstDefectPx": 53,
+  "worstDefectFracOfBowl": 0.0029,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   305,
+   1509,
+   187,
+   106
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 18451,
+    "torsoInMask": 17363,
+    "defect": 1
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 18462,
+    "torsoInMask": 17379,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 17772,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "eat",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 0
+   },
+   "e-lick": {
+    "phase": "lick",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 2
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 18462,
+    "torsoInMask": 17426,
+    "defect": 40
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 18462,
+    "torsoInMask": 17502,
+    "defect": 49
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1551 frames, and the check was not vacuous: his body overlapped the bowl on 1539 frames and the far half took those pixels back on 1418."
+ },
+ "cockapoo-water": {
+  "frames": 1583,
+  "phases": [
+   "approach",
+   "drink",
+   "finish",
+   "place",
+   "pour",
+   "shakeMuzzle"
+  ],
+  "framesWithBowlToLookInside": 1583,
+  "framesWhereHisBodyOverlapsTheBowl": 1569,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1450,
+  "framesWithTorsoShowingInsideTheBowl": 152,
+  "worstDefectPx": 68,
+  "worstDefectFracOfBowl": 0.0037,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   305,
+   1509,
+   187,
+   106
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 18451,
+    "torsoInMask": 17363,
+    "defect": 0
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 18462,
+    "torsoInMask": 17379,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 17770,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "drink",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 0
+   },
+   "e-shakeMuzzle": {
+    "phase": "shakeMuzzle",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 18462,
+    "torsoInMask": 18462,
+    "defect": 0
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 18462,
+    "torsoInMask": 17415,
+    "defect": 45
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 18462,
+    "torsoInMask": 17475,
+    "defect": 62
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1583 frames, and the check was not vacuous: his body overlapped the bowl on 1569 frames and the far half took those pixels back on 1450."
+ },
+ "schnoodle-feed": {
+  "frames": 1551,
+  "phases": [
+   "approach",
+   "eat",
+   "finish",
+   "lick",
+   "place",
+   "pour"
+  ],
+  "framesWithBowlToLookInside": 1551,
+  "framesWhereHisBodyOverlapsTheBowl": 1538,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1418,
+  "framesWithTorsoShowingInsideTheBowl": 251,
+  "worstDefectPx": 199,
+  "worstDefectFracOfBowl": 0.0091,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   298,
+   1495,
+   207,
+   121
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 21737,
+    "torsoInMask": 20152,
+    "defect": 0
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 21756,
+    "torsoInMask": 20175,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 20598,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "eat",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "e-lick": {
+    "phase": "lick",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 21756,
+    "torsoInMask": 20206,
+    "defect": 168
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 21756,
+    "torsoInMask": 20313,
+    "defect": 197
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1551 frames, and the check was not vacuous: his body overlapped the bowl on 1538 frames and the far half took those pixels back on 1418."
+ },
+ "schnoodle-water": {
+  "frames": 1583,
+  "phases": [
+   "approach",
+   "drink",
+   "finish",
+   "place",
+   "pour",
+   "shakeMuzzle"
+  ],
+  "framesWithBowlToLookInside": 1583,
+  "framesWhereHisBodyOverlapsTheBowl": 1569,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1450,
+  "framesWithTorsoShowingInsideTheBowl": 350,
+  "worstDefectPx": 215,
+  "worstDefectFracOfBowl": 0.0099,
+  "worstDefectPhase": "",
+  "worstDefectBox": [
+   298,
+   1495,
+   207,
+   121
+  ],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "maskPx": 21737,
+    "torsoInMask": 20152,
+    "defect": 0
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "maskPx": 21756,
+    "torsoInMask": 20175,
+    "defect": 0
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 20595,
+    "defect": 0
+   },
+   "d-eating": {
+    "phase": "drink",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "e-shakeMuzzle": {
+    "phase": "shakeMuzzle",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "maskPx": 21756,
+    "torsoInMask": 21756,
+    "defect": 0
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "maskPx": 21756,
+    "torsoInMask": 20192,
+    "defect": 185
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "maskPx": 21756,
+    "torsoInMask": 20294,
+    "defect": 208
+   }
+  },
+  "pass": false,
+  "meaning": "PASS means no pixel of his torso survived inside the bowl's outline on ANY of 1583 frames, and the check was not vacuous: his body overlapped the bowl on 1569 frames and the far half took those pixels back on 1450."
+ },
+ "consoleErrors": [],
+ "allPass": false
+}
