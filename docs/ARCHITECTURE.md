@@ -2142,3 +2142,108 @@ Zero console errors and zero external requests in every run above.
   ~7 frames as it settles; it is reported separately by the gate rather than tolerated, but it was
   measured, not viewed.
 - Blocker 1.7 (the real-phone pass) is still untouched and still gates this.
+
+---
+
+## 19. Stage 8b (the bowl he eats *out of*) — as built
+
+Stage 8 put the bowl's base on the floor and got his muzzle 18 units inside it. Every number was
+right. The human opened it on his iPhone and said:
+
+> "the dog still seems to eat from behind the bowl and not from the bowl. also the bowl is not on
+> the floor but over his paws"
+
+Both halves of that are one defect, and it is not a geometry defect. `care.drawFront` ran *after*
+`dog.draw` in `scenes/room.js`, so the **entire** bowl — vessel, interior, far rim and the food
+surface — was painted on top of him. The nose really was inside the bowl; it was simply covered by
+a full ellipse of kibble. 805 frame assertions passed, a reviewer looked at the render and called
+it correct, and the defect shipped anyway.
+
+### 19.1 The lesson, stated once
+
+**Position and compositing are different properties, and only one of them had ever been tested.**
+A geometric invariant cannot see draw order. `muzIntoBowl` was 18.4 before this change and 18.4
+after it; the picture went from wrong to right without that number moving at all. Any check that
+would have caught this has to read the rendered canvas.
+
+### 19.2 The bowl is split across the dog
+
+A near-frontal bowl is three layers deep, not one sprite. `scenes/props.js` `drawBowl` now takes a
+`layer` argument — `'back' | 'front' | 'all'` — and remains the single source of the bowl's shape:
+
+- **`'back'`**, from the new `care.drawBehind(g)`, *before* the dog: shadow, vessel, interior wall,
+  contents, far rim.
+- **`'front'`**, from `care.drawFront(g)`, *after* the dog: the same paint again, **clipped** to
+  `bowlNearPath()` — the near rim plus the outer wall beneath it. It re-paints rather than drawing
+  its own shape, so the two halves cannot drift apart and there is no seam to antialias. It skips
+  only the contact shadow and the contents, which are translucent and would double-darken.
+- **`'all'`** is unchanged behaviour, for a bowl with nothing of his in front of it: the two resting
+  bowls by the wall, and a bowl in her hand mid-drag. `bowlIsSplit()` is the single predicate.
+
+The muzzle then descends *between* the two: occluded by the near rim, occluding the food. That is
+the whole fix, and it is also what fixed the paws — they are part of the dog, so they now draw over
+the bowl's far side and only the near lip crosses them.
+
+Two smaller compositing errors of the same family went with it: the brushed-out **fur pile** moved
+to `drawBehind` (it lies on the rug; drawn after him it was fur stuck to his back), and the poured
+**kibble and water particles** now draw before the near rim, so food landing in the bowl goes under
+the lip instead of over it.
+
+### 19.3 The occlusion gate (`C:\tmp\pp8\occl.py`)
+
+The gate renders the **same simulation frame four times**, suppressing one layer at a time, and does
+set logic on device pixels. No colour table — a pixel belongs to a layer iff removing that layer
+changes it:
+
+| render | what is suppressed |
+|---|---|
+| `A`   | nothing (what he sees) |
+| `Bf`  | `care.drawFront` |
+| `Bfb` | `drawFront` **and** `drawBehind` |
+| `OLD` | stage 8's order re-created: the whole bowl after the dog |
+
+Over pixels inside both the well and the muzzle ellipse: `M` = muzzle drawn over the food *and*
+surviving; `R` = muzzle pixels the near rim's own rasterised footprint takes back; `F` = muzzle
+pixels lost to anything that is **not** the near rim — the defect, required to be exactly zero.
+
+`OLD` is the part that matters. It runs on the *same frame* as `A`, so the gate proves it can
+**see** the defect rather than merely failing to find it: stage 8's order buries 4.8k–5.9k muzzle
+pixels under food and leaves 0–1 showing; the split inverts both to 0 and 1.6k–4.8k.
+
+### 19.4 Contract deviations
+
+- **The requested placement change was not made, because it contradicts the floor invariant.**
+  The brief asked for the bowl to sit "low and far enough forward that the paws are visible beside
+  it". It cannot, without giving up `rig.floorV`. The chain is fully pinned: `scale =
+  (floorV − (muzBottomV − dipInto)) / (BOWL_BASE − BOWL_WELL)`, and every input is fixed — `floorV`
+  by the invariant, `muzBottomV` by the per-breed head drop, `dipInto = 16` by `muzIntoBowl` 18–19,
+  and the 30:26 aspect by the art. So the bowl's screen width is determined: **84.0 / 91.2 / 98.8**
+  units (shiba / cockapoo / schnoodle) against a gap between his front paws of **55.7 / 46.3 /
+  50.1**. The bowl is 1.5–2.0× wider than the gap, and its base and his paw soles are on the *same*
+  screen line, hence the same depth — so they interpenetrate, and any composite has to pick a
+  winner. Moving it "forward" requires the floor to become a depth→screen-y **plane** rather than a
+  line (the room has the ratio implicitly: `stoop.fwd 7` per `stoop.near 0.030`), which means
+  `bowlBaseY ≠ rig.floorV`. That is precisely the invariant stage 8 established, so it was left
+  alone and reported instead. **The layering achieved the requested reading without it**: each
+  paw's outer half is ≥99% visible, and whole-paw visibility went from 21–29% to 48–59%.
+- **Whole-paw visibility is geometrically bounded, so the gate asserts the outer half.** With the
+  bowl necessarily wider than the gap, "no paw more than half hidden" is not achievable for the
+  schnoodle (47.8% worst). The honest formalisation of "beside, not underneath" is that the outer
+  half of each paw survives untouched, which it does. The whole-paw figure is reported, not gated.
+- **The far rim is behind the *whole* dog, not just the muzzle.** Strictly, the bowl's far rim is
+  nearer than his cheeks and should cross them. It does not: there are two hooks, not a depth
+  buffer. Consequence: with his head down, the bowl reads as an open crescent rather than a full
+  ellipse. Judged the better trade — the alternative puts a rim line across his nose, which is the
+  original defect wearing a hat.
+- **The kibble spread was widened** (`wide` 1.12–1.22, mound rx 21→23.4) so a little food still
+  reads around his muzzle. Safe by construction now: the contents are painted before he is and can
+  no longer land on his nose whatever their extent. Cosmetic, and the only art change here.
+- **`sw.js` 8.1.0 → 8.2.0.** No file was added or renamed, so `PRECACHE` is untouched and
+  `tools/check-precache.py` still reports 49 entries matching the tree — but three modules changed,
+  and a compositing fix served from the old cache ships to nobody.
+- **The gate's own first cut was wrong twice, and both are worth recording.** It used
+  `isPointInPath` for the near-rim footprint; that returned false for every pixel, silently driving
+  `R` to 0 and making `F` count the rim itself. It now rasterises the path and reads the mask back.
+  Before that it identified the rim by `A != Bf`, which also caught the **water drips** — they are
+  drawn inside `drawFront` too — and mis-scored 132 drinking frames. A gate that fails in the
+  reassuring direction is the exact failure mode this section exists to document.

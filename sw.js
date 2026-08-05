@@ -63,7 +63,11 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
-const VERSION = '8.1.0';
+/* 8.2.0 — the bowl is split across the dog (ARCHITECTURE §19). No file was
+   added or renamed, so PRECACHE below is untouched and still matches the tree;
+   but `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
+   compositing fix served from the old cache is a fix that ships to nobody. */
+const VERSION = '8.2.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
