@@ -86,15 +86,27 @@ export function createNaming(opts = {}) {
   /* the copy. Second person, present tense, no exclamation marks — the beat
      carries itself and punctuation shouting over it makes it cheaper. */
   function script() {
-    const she = game.dog.sex === 'm' ? 'He' : 'She';
-    const her = game.dog.sex === 'm' ? 'him' : 'her';
+    /* SUBJECT AND OBJECT ARE DIFFERENT WORDS, and the rename line needs the
+       SUBJECT. This beat had one local holding the object pronoun and used it
+       for both lines, which is right for "what will you call HIM" and wrong for
+       "what should HE be called" — so renaming an already-named dog asked
+       **"What should him be called?"**, and "What should her be called?" for a
+       female. Rendered and read; no gate covers grammar.
+
+       Taken from `game.pron` rather than a local ternary, which is what
+       state/game.js asks every caller to do: the pronoun table is one place and
+       a ternary at each site is how the two forms drifted apart here. */
+    const P = game.pron;
+    const they = P.they;                        // he  / she  — the SUBJECT
+    const them = P.them;                        // him / her  — the OBJECT
+    const They = capitalise(they);
     if (mode === 'rename') {
-      return [{ text: game.isNamed ? 'What should ' + her + ' be called?' : 'What will you call ' + her + '?', ask: true }];
+      return [{ text: game.isNamed ? 'What should ' + they + ' be called?' : 'What will you call ' + them + '?', ask: true }];
     }
     return [
       { text: 'Someone came for you.', hold: NA.beats[0] },
-      { text: she + "'s yours.", hold: NA.beats[1] },
-      { text: 'What will you call ' + her + '?', ask: true },
+      { text: They + "'s yours.", hold: NA.beats[1] },
+      { text: 'What will you call ' + them + '?', ask: true },
     ];
   }
 
@@ -283,6 +295,35 @@ export function createNaming(opts = {}) {
     tb.addColorStop(1, tint(SCRIM, 0));
     c.fillStyle = tb;
     c.fillRect(0, 0, VW, 440);
+
+    /* AND THE BOTTOM BAND, FOR THE SAME REASON AND BY THE SAME METHOD.
+       The band above guarantees the copy down to y=440. `not yet` lives at
+       `LINE_Y.skip` = VH-84 = 760, which is nowhere near it, so it inherited
+       only the radial's ~0.44 over the rug — and the rug is STRIPED, so the
+       word straddled a teal stripe and a cream one. Measured off the render:
+       1.95:1. Half of it read and half of it vanished, which is worse than
+       uniformly faint because it looks like a rendering artefact rather than
+       like something you are meant to be able to press.
+
+       It is a real tap target (see `pointer`), so it does not get to be
+       decorative-faint — the note on the drawText call below already said so
+       and raised its alpha from 0.42 to 0.72, which moved it from invisible to
+       merely illegible, because alpha was never the variable that mattered.
+
+       Same remedy as the top, and deliberately NOT a pill: hold `SCRIM_A` —
+       the alpha ui/text.js SOLVES for this ink to clear 4.5:1 against the worst
+       background — flat across the skip line's own band. Nothing here is
+       hand-tuned; it is the same solved constant the top band uses.
+
+       It starts at 660, below the rug's far edge and well below his paws
+       (~y 540-570), so the pool of light he sits in is untouched. The beat's
+       whole point is that she can watch him while she decides. */
+    const bb = c.createLinearGradient(0, 660, 0, 748);
+    bb.addColorStop(0, tint(SCRIM, 0));
+    bb.addColorStop(0.62, tint(SCRIM, (SCRIM_A + 0.02) * a));
+    bb.addColorStop(1, tint(SCRIM, Math.min(0.80, SCRIM_A + 0.06) * a));
+    c.fillStyle = bb;
+    c.fillRect(0, 660, VW, VH - 660);
     c.restore();
 
     c.save();
