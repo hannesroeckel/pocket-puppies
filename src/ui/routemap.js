@@ -26,6 +26,13 @@ import { Spring } from '../engine/spring.js';
 import { normMix, dominant, ROUTES } from '../state/walks.js';
 import { inkLine, drawPawPrint } from '../scenes/props.js';
 import { drawText } from './text.js';
+/* CHROME ONLY. The map itself is a hand-drawn painting and stays in the `C`
+   palette below (ui/tokens.js rule 2: tokenising a painting makes it beige).
+   What comes from the token set is the furniture sitting ON the painting — the
+   one primary action, which has to be the same object here as it is on the
+   install card and in the ring. */
+import { INK, SURF, PRESS } from './tokens.js';
+import { primaryAction, createPresses } from './surface.js';
 
 const W = BALANCE.view.W;
 const H = BALANCE.view.H;
@@ -140,6 +147,10 @@ export function createRouteMap(opts = {}) {
   let dur = durationFor(pathLength(LOOPS.park));
   let drawn = false;                 // she drew it herself rather than tapping
   let cap = '';                      // '' | 'draw' | 'go' | 'back'
+  /* the Set-off button's tactile press. `cap` already knows the finger is down
+     on it; this turns that boolean into the 100ms compression the rest of the
+     game's controls have. */
+  const presses = createPresses(opts.reduced);
   let live = [];                     // the path being drawn right now
   let travel = 0;
   let downAt = null;
@@ -388,6 +399,8 @@ export function createRouteMap(opts = {}) {
       slide.step(dt);
       if (open) t += dt;
       if (flash > 0) flash = Math.max(0, flash - dt * 2.4);
+      presses.set('go', cap === 'go');
+      presses.update(dt);
     },
 
     /* ---- input ------------------------------------------------------- */
@@ -551,16 +564,20 @@ export function createRouteMap(opts = {}) {
         });
       }
 
-      /* SET OFF */
+      /* SET OFF — the primary action, and the SAME OBJECT as the install
+         card's "Got it" and the ring's "Into the ring". It used to be gold
+         `#e9954f` with a 1.4px stroke and a hue shift on press; that made it
+         the third distinct primary treatment in the game and it read as a
+         different product's button sitting on our map. `cap === 'go'` already
+         knew the thumb was down, so it now compresses like everything else. */
       const b = goBox();
-      const hot = cap === 'go';
-      c.fillStyle = hot ? '#d7823c' : C.gold;
-      roundRect(c, b.x, b.y, b.w, b.h, b.r); c.fill();
-      c.strokeStyle = 'rgba(93,48,24,0.30)'; c.lineWidth = 1.4;
-      roundRect(c, b.x, b.y, b.w, b.h, b.r); c.stroke();
+      const bf = primaryAction(c, {
+        x: b.x, y: b.y - PRESS.edge / 2, w: b.w, h: b.h, r: b.r,
+        p: presses.at('go'), fade: a,
+      });
       drawText(g, copy.setOff ? copy.setOff() : 'Set off', {
-        y: b.y + b.h / 2 + 0.5, size: 15, weight: 700,
-        ink: '#3a1c0c', over: hot ? '#d7823c' : C.gold,
+        y: bf.y + bf.h / 2 + 0.5, size: 15, weight: 700,
+        ink: INK.onStrong, over: SURF.chipStrong,
         maxWidth: b.w - 24, fade: a,
       });
 

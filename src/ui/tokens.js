@@ -137,6 +137,18 @@ export const SURF = {
 };
 
 /**
+ * A specular highlight on a filled thing — the one-pixel bright line along the
+ * top of a meter fill, a coin, a chip.
+ *
+ * White is not in the palette and should not be: this is LIGHT falling on a
+ * surface, not a colour of the product. But it was open-coded six times at
+ * 0.22 / 0.28 / 0.30 / 0.34 / 0.35 / 0.45 / 0.55 across four modules, which is
+ * the same "twelve near-misses" problem one rung down. One function, one
+ * default, and a caller who wants a brighter one has to say so.
+ */
+export const GLOSS = (a = 0.34) => `rgba(255,255,255,${a})`;
+
+/**
  * THE CONSERVATIVE NOMINAL BACKGROUND for translucent chrome.
  *
  * The name pill and the needs panel are cream drawn at alpha ~0.30 over the

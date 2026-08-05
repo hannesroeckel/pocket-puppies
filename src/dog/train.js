@@ -62,6 +62,10 @@ import { capitalise } from '../state/game.js';
 import { TRICKS, TRICK_IDS, TRICK_POSE, trickName, endPosture } from './anim/tricks.js';
 import { matchWord, utteranceSim, normWord } from './voice.js';
 import { drawPlate, drawText } from '../ui/text.js';
+/* CHROME ONLY — the training pad, the signal glyphs and the legend are this
+   module's own art. This is the leave button, which is chrome and was the last
+   place in the game still naming its own cream and its own brown. */
+import { INK, SURF } from '../ui/tokens.js';
 
 const T = BALANCE.train;
 const SG = T.signal;
@@ -1715,24 +1719,37 @@ export function createTraining(rig, opts = {}) {
        the training beat, so it is the last thing that should be hard to read.
        Anchored to the safe-area top edge rather than a hard y. */
     if (hint) {
+      /* THE PLATE MUST CLEAR THE LEAVE BUTTON. It is centred on the screen and
+         the button is not, so the widest plate that still clears it is twice
+         the gap from centre to the button's near edge. Without this the last
+         two words of the longest hint were painted under the X — a defect that
+         passed every contrast and safe-area check, because both were true of
+         the plate and neither knew the button existed. */
+      const XB = UI.close;
+      const maxWidth = 2 * Math.abs(XB.x - XB.r - XB.hintGap - VW / 2);
       drawText(g, hint, {
         anchor: 'top', y: UI.hintY - 30, size: 12.5, weight: 600, ink: C.hint,
+        maxWidth,
         fade: clamp(w, 0, 1) * clamp(hintT / 0.4, 0, 1),
       });
     }
 
     /* ---- leave affordance (same shape and place as the care actions) ---- */
-    c.save();
-    c.globalAlpha = clamp(w, 0, 1) * 0.62;
-    c.fillStyle = '#fff8ea';
-    c.beginPath(); c.arc(342, 62, 17, 0, TAU); c.fill();
-    c.globalAlpha = clamp(w, 0, 1) * 0.8;
-    c.strokeStyle = '#7c4a2f'; c.lineWidth = 2.0; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(336, 56); c.lineTo(348, 68);
-    c.moveTo(348, 56); c.lineTo(336, 68);
-    c.stroke();
-    c.restore();
+    {
+      const XB = UI.close;
+      c.save();
+      c.globalAlpha = clamp(w, 0, 1) * 0.62;
+      c.fillStyle = SURF.chrome;
+      c.beginPath(); c.arc(XB.x, XB.y, XB.r, 0, TAU); c.fill();
+      c.globalAlpha = clamp(w, 0, 1) * 0.8;
+      c.strokeStyle = INK.glyph; c.lineWidth = 2.0; c.lineCap = 'round';
+      const d = XB.r * 0.35;
+      c.beginPath();
+      c.moveTo(XB.x - d, XB.y - d); c.lineTo(XB.x + d, XB.y + d);
+      c.moveTo(XB.x + d, XB.y - d); c.lineTo(XB.x - d, XB.y + d);
+      c.stroke();
+      c.restore();
+    }
 
     /* ---- "CALL HIM" — the only microphone affordance in the game ----
        Drawn only when she has opted in AND the recogniser has not retired

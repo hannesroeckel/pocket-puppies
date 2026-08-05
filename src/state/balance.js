@@ -2141,7 +2141,22 @@ export const BALANCE = {
     /* the training overlay. THE LEGEND IS HER MENTAL MODEL, not a menu: each
        row is a signal she knows and the trick SHE thinks it means, in words.
        That is what makes a mis-association visible instead of mysterious. */
-    train: { hintY: 82, legendTop: 132, rowH: 19, glyphR: 11, maxRows: 8 },
+    train: {
+      hintY: 82, legendTop: 132, rowH: 19, glyphR: 11, maxRows: 8,
+      /* THE LEAVE AFFORDANCE. Was three hardcoded numbers inside train.js's
+         draw (§1: every tunable lives here), which is also how the defect
+         below went unseen for six stages — a button nobody could find in this
+         file is a button nobody lays anything out around.
+
+         `hintGap` is the clearance the hint line must keep from it. The hint
+         is centred on the screen and the button is not, so the hint's usable
+         width is twice the distance from centre to the button's near edge:
+         a long instruction used to run UNDER the X and lose its last two
+         words ("...show him what it means" read as "...show him what it mea").
+         Deriving the width from the button means moving one cannot re-break
+         the other. */
+      close: { x: 342, y: 62, r: 17, hintGap: 9 },
+    },
     /* the route map. A CUTE HAND-DRAWN MAP, not a UI: the paper, the wobble in
        the ink and the little house are the whole charm of the beat. */
     map: {

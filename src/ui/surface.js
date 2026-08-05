@@ -155,6 +155,44 @@ export function tactile(c, o) {
   return { x, y, w, h, dy };
 }
 
+/**
+ * THE PRIMARY ACTION — the one big button on a surface, drawn one way.
+ *
+ * Before stage 9 the game had three of these and they did not know about each
+ * other: the install card's "Got it" was saturated orange `#d9a45e`, the route
+ * map's "Set off" was `#e9954f` gold, and the ring's "Into the ring" was
+ * `C.ribbon` terracotta — three different hues, three different shadow
+ * treatments (none, a 1.4px stroke, a fake 3px offset rect), all meaning
+ * exactly the same thing: *this is the button*.
+ *
+ * Now they are one call. The face is `SURF.chipStrong` — see the long note on
+ * that token for why the primary action became the DARKEST thing on a surface
+ * rather than the most saturated: the supplied palette has no saturated orange,
+ * and two of its light containers differ only in saturation, which is not
+ * enough to carry "press this".
+ *
+ * It is a `tactile()`, so the biggest button in the game is also the one that
+ * most obviously behaves like an object under a thumb. Callers pass their own
+ * press progress; a caller with no press tracking passes nothing and gets the
+ * resting edge, which still unifies the look.
+ *
+ * NOTE ON GEOMETRY: like `tactile()`, this reserves `h + PRESS.edge` of
+ * vertical space and `o.y` is the top of the RESTING FACE. Callers converting
+ * from a plain `roundRect` should lift `y` by `PRESS.edge / 2` to keep the
+ * optical centre where it was, and must offset their label by the returned
+ * `dy` or the text will float while the button sinks.
+ */
+export function primaryAction(c, o) {
+  return tactile(c, {
+    ...o,
+    r: o.r === undefined ? R.lg : o.r,
+    face: o.face || SURF.chipStrong,
+    /* no hairline: the face is already the darkest thing on the surface, and a
+       border on it reads as a second, thinner edge fighting the real one */
+    border: o.border === undefined ? 0 : o.border,
+  });
+}
+
 /* ==========================================================================
    the warm soft shadow
    ========================================================================== */
@@ -268,4 +306,7 @@ export function stitchedDivider(c, x1, y, x2, o = {}) {
   c.restore();
 }
 
-export default { tactile, softShadow, card, insetWell, stitchedDivider, createPresses, roundSub };
+export default {
+  tactile, primaryAction, softShadow, card, insetWell, stitchedDivider,
+  createPresses, roundSub,
+};
