@@ -1963,14 +1963,14 @@ export function createDogRenderer(rig) {
      The dog
      ================================================================== */
   /**
+   * Draw the dog.
+   *
    * @param mood 0..1 — the FAST channel (stage 2). Drives the blush and the
    *   warmth of the face. Stage 1 passed affection here; mood is what the body
    *   is supposed to read off, and it is what the room passes now.
    * @param coat optional coat state (dirt / foam / wet / suds / gloss). Absent
    *   is fine: the dog then renders exactly as it did in stage 1.
-   */
-  /**
-   * Draw the dog.
+   * @param mid optional callback run at the depth seam — see below.
    *
    * `mid` IS A DEPTH SLOT, NOT A FEATURE. He is one sprite on the screen but
    * two depths in the world: his torso and legs stand behind whatever is on
@@ -2183,7 +2183,7 @@ export function createDogRenderer(rig) {
     c.globalAlpha = 1;
     c.restore();
 
-    /* ================== THE DEPTH SLOT (§19.3) ==========================
+    /* ================== THE DEPTH SLOT (§19.5) ==========================
        EVERYTHING ABOVE IS BEHIND A BOWL ON THE FLOOR. EVERYTHING BELOW IS
        IN FRONT OF ITS FAR RIM.
 

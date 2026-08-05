@@ -1385,7 +1385,7 @@ export function createCare(rig, opts = {}) {
   /*  drawing                                                           */
   /* ================================================================== */
   /* ---- THE BOWL IS SPLIT ACROSS THE DOG, BETWEEN HIS BODY AND HIS HEAD ---
-     (§19.2 split it; §19.3 moved the seam to the right depth)
+     (§19.2 split it; §19.5 moved the seam to the right depth)
 
      A placed bowl he is eating out of has his muzzle 18 units inside it, so it
      cannot be one sprite on one side of him. Three hooks, at three depths:
@@ -1443,7 +1443,7 @@ export function createCare(rig, opts = {}) {
   /**
    * THE VESSEL'S FAR HALF: over his body and legs, under his head.
    * Handed to `dog.draw` as its mid slot, so it lands between the two — see
-   * the note above and §19.3. Runs on every frame the dog is drawn; it is
+   * the note above and §19.5. Runs on every frame the dog is drawn; it is
    * `bowlIsSplit()` that decides whether there is anything to lay down.
    */
   function drawMid(g) {

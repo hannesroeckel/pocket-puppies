@@ -323,7 +323,15 @@ class Run:
         raise RuntimeError("phase never reached (last=%s)" % json.dumps(self.rows[-1]))
 
 
-async def boot(pg, base, breed):
+async def boot(pg, base, breed, nogt=False):
+    if nogt:
+        # THE FALLBACK PATH IN THE DEPTH SLOT, exercised rather than assumed.
+        # Without getTransform the slot undoes the dog's translate+scale by
+        # arithmetic instead. Engines that old are long gone from iOS, but an
+        # untested branch in the middle of the compositing fix is exactly the
+        # kind of thing that is wrong when someone finally runs it.
+        await pg.add_init_script(
+            "delete CanvasRenderingContext2D.prototype.getTransform;")
     await pg.goto("%s/index.html?breed=%s" % (base, breed))
     await pg.wait_for_function("() => window.__pp && window.__pp.loop && window.__pp.loop.scene")
     await pg.evaluate("() => window.__pp.skipIntro('Alfie')")
@@ -472,6 +480,7 @@ async def main():
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     old = "--old" in sys.argv
     dark = "--dark" in sys.argv
+    nogt = "--nogt" in sys.argv
     dpr = 3
     if "--dpr" in sys.argv:
         dpr = int(sys.argv[sys.argv.index("--dpr") + 1])
@@ -480,8 +489,9 @@ async def main():
     from playwright.async_api import async_playwright
 
     out, errs, ok = {}, [], True
-    print("bowl depth gate — %s order, dpr %d, %s" %
-          ("STAGE-8 (§19.2)" if old else "current", dpr, "dark" if dark else "light"))
+    print("bowl depth gate — %s order, dpr %d, %s%s" %
+          ("STAGE-8 (§19.2)" if old else "current", dpr, "dark" if dark else "light",
+           ", NO getTransform (fallback path)" if nogt else ""))
     async with async_playwright() as p:
         br = await p.chromium.launch()
         for breed in breeds:
@@ -494,7 +504,7 @@ async def main():
                   if m.type == "error" else None)
             pg.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
             for mode in ("feed", "water"):
-                await boot(pg, base, breed)
+                await boot(pg, base, breed, nogt)
                 rows, marks = await action(pg, mode, ERODE, old)
                 r = judge(rows, marks, old)
                 out["%s-%s" % (breed, mode)] = r
@@ -524,7 +534,7 @@ async def main():
         await br.close()
     out["consoleErrors"] = errs
     out["allPass"] = ok and not errs
-    tag = "old" if old else "fix"
+    tag = "old" if old else ("fix-nogt" if nogt else "fix")
     with open(os.path.join(ROOT, "tools", "bowlpixels-%s.json" % tag), "w") as fh:
         json.dump(out, fh, indent=1)
     print("\nconsole errors:", errs if errs else "none")

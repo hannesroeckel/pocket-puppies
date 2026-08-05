@@ -788,6 +788,6 @@ export default {
   drawLeash, drawCollar, drawFind, drawPawPrint, inkLine, WC,
   /* stage 6 */
   BOWL_BASE, BOWL_WELL, BOWL_TOP,
-  /* stage 8b: the near/far split (§19.2) and the depth seam (§19.3) */
+  /* stage 8b: the near/far split (§19.2) and the depth seam (§19.5) */
   bowlNearPath, bowlSilhouette,
 };

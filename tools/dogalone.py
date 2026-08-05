@@ -1,7 +1,7 @@
 """
 tools/dogalone.py — THE DOG ALONE IS UNCHANGED, byte for byte.
 
-§19.3 restructured `dog/draw.js`'s entry point: `draw` now takes a `mid`
+§19.5 restructured `dog/draw.js`'s entry point: `draw` now takes a `mid`
 callback and calls it between the body/legs pass and the head/muzzle pass.
 That is permitted only if it is a PURE REORDERING — nothing about how any part
 of him looks on its own may move by a single pixel.
@@ -51,7 +51,7 @@ SETUP = r"""() => {
   const sc = window.__pp.loop.scene;
   /* NO BOWL, NO FUR PILE, NO KIBBLE: just him. All three prop layers are
      suppressed, so what is hashed is the dog and the room and nothing that
-     §19.3 moved. `drawMid` does not exist on the pre-fix tree; assigning it
+     §19.5 moved. `drawMid` does not exist on the pre-fix tree; assigning it
      there is harmless because nothing calls it. */
   const noop = () => {};
   sc.care.drawBehind = noop;

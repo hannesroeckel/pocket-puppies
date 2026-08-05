@@ -1579,8 +1579,7 @@ export function createRoomScene() {
          see below. */
       care.drawBehind(g);
 
-      /* HE IS NOT HERE. The room is the whole point of the absence beat. */
-      /* THE BOWL IS THREADED THROUGH HIM AT THREE DEPTHS (§19.3). His muzzle
+      /* THE BOWL IS THREADED THROUGH HIM AT THREE DEPTHS (§19.5). His muzzle
          goes 18 units into a placed bowl, so the vessel cannot be on one side
          of him — but it cannot be behind ALL of him either, because it stands
          on the floor NEARER THE CAMERA THAN HIS CHEST. So `care.drawMid` goes
@@ -1589,7 +1588,9 @@ export function createRoomScene() {
          his muzzle, and `care.drawFront` puts the NEAR rim back over him
          below. Behind the whole dog (where this used to be) his chest cut the
          vessel in half the moment he sat up, which is the defect the human
-         found on his phone. */
+         found on his phone.
+         HE IS NOT HERE while he is away: the room is the whole point of the
+         absence beat, and the dog is simply not drawn. */
       if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat, care.drawMid);
       /* he is away, so nothing of his is in front of anything: the slot still
          has to be run or the bowl would lose its far half entirely */

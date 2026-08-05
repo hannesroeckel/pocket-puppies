@@ -67,7 +67,7 @@
    added or renamed, so PRECACHE below is untouched and still matches the tree;
    but `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
    compositing fix served from the old cache is a fix that ships to nobody. */
-/* 8.4.0 — THE SPLIT COMES BACK, AT THE RIGHT DEPTH (§19.3).
+/* 8.4.0 — THE SPLIT COMES BACK, AT THE RIGHT DEPTH (§19.5).
 
    History matters for the number. 8.2.0 split the vessel across the dog and
    fixed food-painted-over-the-muzzle, but hooked the far half in behind the
@@ -77,7 +77,7 @@
 
    So this branch is the only place the split exists, and it carries both
    halves of the problem at once: the muzzle goes into the vessel (8.2.0's
-   intent) AND nothing of his torso occludes it (§19.3). The generation has to
+   intent) AND nothing of his torso occludes it (§19.5). The generation has to
    land ABOVE the reverted 8.3.0 that is now live, or the phones that took the
    revert would never fetch this.
 
