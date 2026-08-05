@@ -67,7 +67,15 @@
    added or renamed, so PRECACHE below is untouched and still matches the tree;
    but `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
    compositing fix served from the old cache is a fix that ships to nobody. */
-const VERSION = '8.2.0';
+/* 8.2.1 — the split moves to the right DEPTH (§19.3): the vessel's far half
+   now goes between his body and his head instead of behind all of him, so an
+   upright dog no longer looks like he has a bowl buried in his chest. Four
+   modules changed — `dog/draw.js` (the mid slot), `dog/care.js`, `scenes/room.js`
+   and `scenes/props.js` (the published silhouette the pixel gate reads). Still
+   NO new file, so PRECACHE is untouched and still matches the tree; but this is
+   precisely the kind of fix that ships to nobody if the generation does not
+   move, because the phone that has the defect already has the old cache. */
+const VERSION = '8.2.1';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

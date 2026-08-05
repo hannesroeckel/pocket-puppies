@@ -1969,21 +1969,52 @@ export function createDogRenderer(rig) {
    * @param coat optional coat state (dirt / foam / wet / suds / gloss). Absent
    *   is fine: the dog then renders exactly as it did in stage 1.
    */
-  function draw(g, pet, mood, coat) {
+  /**
+   * Draw the dog.
+   *
+   * `mid` IS A DEPTH SLOT, NOT A FEATURE. He is one sprite on the screen but
+   * two depths in the world: his torso and legs stand behind whatever is on
+   * the floor in front of him, while his head reaches out over it. A prop that
+   * lies between those two — the far half of a bowl he is eating out of — has
+   * nowhere to be drawn from outside this function, because from outside the
+   * dog is atomic.
+   *
+   * So `draw` publishes the seam. Called with a `mid` callback the order is
+   *
+   *     tail, hind legs, haunches, body, neck, FRONT LEGS, ruff, collar
+   *     -> mid(g) <-
+   *     head, muzzle, ears, face
+   *
+   * and the callback runs in the CALLER's coordinate space, not the dog's, so
+   * it draws in the same units it would have used outside.
+   *
+   * It reorders NOTHING about the dog himself: with no `mid` passed, or with a
+   * callback that paints nothing, every pixel is what it was before the slot
+   * existed. `tools/dogalone.py` asserts exactly that, byte for byte.
+   */
+  function draw(g, pet, mood, coat, mid) {
     const c = g.ctx;
     const P = rig.pose, s = rig.springs;
     const petLevel = pet ? pet.level : 0;
     const aff = mood === undefined ? 0 : mood;
     const wet = coat ? clamp(coat.wet, 0, 1) : 0;
 
-    c.save();
-    c.translate(rig.x, rig.y);
     /* rig.sy is the FORESHORTENING channel: running into the screen squashes
        vertically while the uniform scale shrinks. 1 for a stage-1 dog.
        rig.sx is its horizontal twin (stage 3), which is how a roll-over reads
        on a rig that cannot show its own back. */
-    c.scale(rig.s * (rig.sx === undefined ? 1 : rig.sx),
-      rig.s * (rig.sy === undefined ? 1 : rig.sy));
+    const kx = rig.s * (rig.sx === undefined ? 1 : rig.sx);
+    const ky = rig.s * (rig.sy === undefined ? 1 : rig.sy);
+    /* the caller's transform, kept so the mid slot can hand it back. Taken
+       before the save so nothing about the dog's own state is involved: the
+       slot swaps the MATRIX and touches no other context field, which is what
+       makes "the dog alone is unchanged" true by construction and not by
+       inspection. */
+    const outer = (mid && c.getTransform) ? c.getTransform() : null;
+
+    c.save();
+    c.translate(rig.x, rig.y);
+    c.scale(kx, ky);
     if (!G) initGrads(c);
 
     const sit = P.sit;
@@ -2151,6 +2182,52 @@ export function createDogRenderer(rig) {
     ell(c, P.headX * 0.85, P.headY + D.headHH * 0.98, D.headHW * 0.57, D.headHH * 0.28); c.fill();
     c.globalAlpha = 1;
     c.restore();
+
+    /* ================== THE DEPTH SLOT (§19.3) ==========================
+       EVERYTHING ABOVE IS BEHIND A BOWL ON THE FLOOR. EVERYTHING BELOW IS
+       IN FRONT OF ITS FAR RIM.
+
+       A bowl standing in front of him is NEARER THE CAMERA THAN HIS CHEST.
+       Nothing above this line may ever occlude any part of it: the torso,
+       the haunches, the ruff, the collar and the front legs are all further
+       away than the vessel is. The one thing that may is his muzzle, and
+       only while it is down inside the bowl — and the muzzle is below.
+
+       §19.2 split the vessel across the dog and put the seam in the wrong
+       place: `care.drawBehind` ran before this whole function, so the far
+       rim, the interior wall and the food went behind the TORSO too. While
+       he ate that was invisible (his head was in the bowl and his body was
+       up and behind it). The instant he sat up and looked at her, his chest
+       cut the vessel in half and the bowl read as half-buried in him. That
+       is what the human photographed, and it is the most ordinary state a
+       bowl can be in — bowl on the floor, dog upright.
+
+       The split was right. The DEPTH it split at was wrong. This is that
+       depth. Compositing is not something the geometry can see: three
+       rounds of geometric assertions passed while the screen was wrong, so
+       `tools/bowlpixels.py` reads the actual pixels instead.
+       ==================================================================== */
+    if (mid) {
+      if (outer) {
+        const local = c.getTransform();
+        c.setTransform(outer);
+        mid(g);
+        c.setTransform(local);
+      } else {
+        /* no getTransform (pre-2017 engines): undo the two transforms by
+           arithmetic instead. Same result; a scale of zero would not be
+           invertible, so a degenerate rig skips the slot rather than
+           dividing by it. */
+        const ok = Math.abs(kx) > 1e-4 && Math.abs(ky) > 1e-4;
+        if (ok) {
+          c.save();
+          c.scale(1 / kx, 1 / ky);
+          c.translate(-rig.x, -rig.y);
+          mid(g);
+          c.restore();
+        }
+      }
+    }
 
     /* ---- head group ---- */
     c.save();

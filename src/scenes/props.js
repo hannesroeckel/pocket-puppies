@@ -105,6 +105,26 @@ export function bowlNearPath(c) {
 }
 
 /**
+ * INSIDE THE BOWL: the whole vessel's fully-opaque footprint, FILLED in the
+ * current style (two fills, because the rim plate and the outer wall overlap
+ * and one nonzero-wound path would cancel in the overlap).
+ *
+ * Published for the same reason BOWL_BASE/WELL/TOP are: a verifier that wants
+ * to ask "is this device pixel inside the bowl?" must not re-derive the shape.
+ * `tools/bowlpixels.py` rasterises this under drawBowl's own transform and
+ * asserts that no pixel of his TORSO survives anywhere inside it — the check
+ * that no amount of geometry could make, and the one that would have caught
+ * §19.2's seam before it reached a phone.
+ *
+ * It deliberately excludes the contact shadow, which is translucent: the floor
+ * legitimately shows through that, so it is not "inside the bowl".
+ */
+export function bowlSilhouette(c) {
+  c.beginPath(); bowlBodyPath(c); c.closePath(); c.fill();
+  c.beginPath(); c.ellipse(0, RIM_CY, RIM_RX, RIM_RY, 0, 0, TAU); c.fill();
+}
+
+/**
  * A dog bowl.
  * @param kind  'food' | 'water'
  * @param fill  0..1 contents
@@ -768,6 +788,6 @@ export default {
   drawLeash, drawCollar, drawFind, drawPawPrint, inkLine, WC,
   /* stage 6 */
   BOWL_BASE, BOWL_WELL, BOWL_TOP,
-  /* stage 8b: the near/far split (§19.2) */
-  bowlNearPath,
+  /* stage 8b: the near/far split (§19.2) and the depth seam (§19.3) */
+  bowlNearPath, bowlSilhouette,
 };
