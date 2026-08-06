@@ -87,6 +87,19 @@ STEP_HASH = r"""async (n) => {
 
 
 async def boot(pg, base, breed):
+    # THE CLOCK HAS TO BE IDENTICAL IN BOTH TREES, and by default it is not:
+    # the loop starts on requestAnimationFrame at page load and runs a handful
+    # of real frames before the harness can call `loop.stop()`. How many, and
+    # with what dt, depends on machine load — the first run of this proof had
+    # the two trees at frames 130/t 2.25 and frames 129/t 2.2165, so his idle
+    # animation was a fraction of a second apart and 107k pixels of dog
+    # "differed". That is a false regression, and a convincing one.
+    #
+    # Stubbing rAF before any script runs means the loop never advances on its
+    # own: every frame in both trees comes from an explicit step() here.
+    await pg.add_init_script(
+        "window.requestAnimationFrame = function () { return 0; };"
+        "window.cancelAnimationFrame = function () {};")
     await pg.goto("%s/index.html?breed=%s" % (base, breed))
     await pg.wait_for_function("() => window.__pp && window.__pp.loop && window.__pp.loop.scene")
     await pg.evaluate("() => window.__pp.skipIntro('Alfie')")
@@ -96,6 +109,10 @@ async def boot(pg, base, breed):
                                  window.__pp.setNeed('thirst', 0.05); }""")
     await pg.evaluate("() => window.__pp.step(1/60, 30)")
     await pg.evaluate(SETUP)
+
+
+CLOCK = """() => ({ t: +window.__pp.loop.t.toFixed(6),
+                     frames: window.__pp.loop.frames })"""
 
 
 async def script(pg, marks):
@@ -163,7 +180,7 @@ async def main():
     async with async_playwright() as p:
         br = await p.chromium.launch()
         for breed in breeds:
-            res = {}
+            res, clocks = {}, {}
             for tag, base in (("before", a_base), ("after", b_base)):
                 ctx = await br.new_context(viewport={"width": 390, "height": 844},
                                            device_scale_factor=dpr, is_mobile=True,
@@ -171,13 +188,17 @@ async def main():
                 pg = await ctx.new_page()
                 marks = []
                 await boot(pg, base, breed)
+                clocks[tag] = await pg.evaluate(CLOCK)
                 res[tag] = (await script(pg, marks), marks)
                 await ctx.close()
+            # a mismatched clock makes every later comparison meaningless, so
+            # say so plainly instead of reporting thousands of "differing" frames
+            sameClock = clocks["before"] == clocks["after"]
             A, mA = res["before"]
             B, mB = res["after"]
             diff = [i for i in range(min(len(A), len(B))) if A[i][0] != B[i][0]]
             same = len(A) == len(B) and not diff
-            ok = ok and same
+            ok = ok and same and sameClock
             out[breed] = {
                 "frames": len(A), "framesAfter": len(B),
                 "identicalFrames": min(len(A), len(B)) - len(diff),
@@ -186,11 +207,17 @@ async def main():
                 "firstDifferencePhase": (A[diff[0]][1], B[diff[0]][1]) if diff else None,
                 "segments": [{"label": l, "at": i, "phase": A[i][1] if i < len(A) else None}
                              for l, i in mA],
-                "pass": same,
+                "clockBefore": clocks["before"], "clockAfter": clocks["after"],
+                "sameClockAtStart": sameClock,
+                "pass": same and sameClock,
             }
             print("  %-10s %s  %d frames hashed, %d identical, %d differ"
                   % (breed, "PASS" if same else "FAIL", len(A),
                      out[breed]["identicalFrames"], len(diff)))
+            if not sameClock:
+                print("     CLOCKS DIFFER before hashing: %s vs %s -- the two "
+                      "trees are not at the same simulated time, so nothing "
+                      "below means anything" % (clocks["before"], clocks["after"]))
             if diff:
                 print("     first difference at frame %d (phase %s)"
                       % (diff[0], A[diff[0]][1]))
