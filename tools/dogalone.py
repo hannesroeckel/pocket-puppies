@@ -1,30 +1,37 @@
 """
-tools/dogalone.py — THE DOG ALONE IS UNCHANGED, byte for byte.
+tools/dogalone.py — THE DOG ALONE IS UNCHANGED, byte for byte, in lockstep.
 
-§19.5 restructured `dog/draw.js`'s entry point: `draw` now takes a `mid`
-callback and calls it between the body/legs pass and the head/muzzle pass.
-That is permitted only if it is a PURE REORDERING — nothing about how any part
-of him looks on its own may move by a single pixel.
+There was an earlier version of this file that could not be trusted, and it is
+worth knowing why. It ran the pre-fix tree to completion, then this one, and
+compared per-frame hashes of a canvas REGION. Run that way it reported 310 of
+1170 frames differing — while the SAME frames, stepped side by side and
+compared as whole images, were bit-identical. Its self-comparison (the same
+tree against itself) passed, so it was deterministic; it simply was not
+measuring what it claimed. A harness whose answer depends on whether the two
+runs are interleaved has to be replaced, not tuned.
 
-This proves it rather than arguing it. Two trees are served side by side (the
-commit before the change, and this one), the SAME deterministic script is run
-in both, and the whole canvas is SHA-256'd every frame with all three care
-prop layers suppressed — so the dog is drawn with no bowl present at all,
-through every pose the care action puts him in: standing and watching, folding
-down, head deep in a bowl that isn't there, licking, shaking, pushing back up,
-and idle at either end.
+So this one holds both trees open at once, advances them one frame at a time
+together, and compares the PNG bytes of the whole page. No hashing, no region,
+no sequential drift: if a single pixel anywhere differs, the bytes differ.
 
-If the two hash streams are identical, the reorder changed nothing about him.
-If they are not, the frame index and the phase are reported.
+Both trees get the same three neutralisations, before any script runs:
 
-Determinism note: the dog is seeded from BALANCE.rng.seed, not from the clock
-(`newDog` takes the shared seeded rng; `Date.now()` only reaches `id`/`bornAt`),
-and the dust motes — the one thing that advances per DRAW rather than per step —
-are switched off in both trees. Nothing else in the frame is stochastic.
+  requestAnimationFrame  stubbed, so the loop never advances on its own and
+                         every frame comes from an explicit step()
+  Date.now               frozen, because state/game.js defaults a dozen
+                         arguments to it and the bond ledger and need decay
+                         would otherwise advance with real time
+  dust motes             switched off (they advance once per DRAW, not per
+                         step, so a second draw of the "same" frame moves them)
+
+and all three care prop layers are suppressed, so the dog is drawn with NO
+bowl present at all — through every pose the action puts him in: standing and
+watching, folding down, head deep into a bowl that isn't there, licking,
+shaking, pushing back up, and idle at either end.
 
 Usage:
     py tools/dogalone.py --before C:\\path\\to\\pre-fix\\tree [breeds]
-Exit code 0 = every hashed frame matched.
+Exit code 0 = every frame of every breed was byte-identical.
 """
 import sys, os, json, asyncio, functools, http.server, socketserver, threading, pathlib
 
@@ -33,10 +40,6 @@ BREEDS_ALL = ["shiba", "cockapoo", "schnoodle"]
 
 
 class _Q(socketserver.ThreadingTCPServer):
-    # NOT allow_reuse_address: on Windows that lets a second server bind a port
-    # a zombie from an interrupted run is still holding, and requests then go to
-    # the dead one and the harness hangs at page load with no error at all. Ask
-    # the OS for a free port instead.
     allow_reuse_address = False
     daemon_threads = True
 
@@ -44,88 +47,38 @@ class _Q(socketserver.ThreadingTCPServer):
         pass
 
 
-def serve(port, root):
+def serve(root):
     h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=root)
     srv = _Q(("127.0.0.1", 0), h)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return "http://127.0.0.1:%d" % srv.server_address[1]
 
 
-SETUP = r"""() => {
+PIN = ("window.requestAnimationFrame = function () { return 0; };"
+       "window.cancelAnimationFrame = function () {};"
+       "Date.now = function () { return 1767225600000; };")
+
+SETUP = """() => {
   const sc = window.__pp.loop.scene;
-  /* NO BOWL, NO FUR PILE, NO KIBBLE: just him. All three prop layers are
-     suppressed, so what is hashed is the dog and the room and nothing that
-     §19.5 moved. `drawMid` does not exist on the pre-fix tree; assigning it
-     there is harmless because nothing calls it. */
   const noop = () => {};
   sc.care.drawBehind = noop;
   sc.care.drawMid = noop;
   sc.care.drawFront = noop;
-  /* dust motes advance once per DRAW, not per step, and are the only thing in
-     the frame that could differ between two runs of the same script */
   window.__pp.BALANCE.particles.motes = 0;
   sc.resize(window.__pp.app);
-  return true;
-}"""
-
-# THE REGION THE CHANGE COULD POSSIBLY TOUCH: the dog, plus the floor in front
-# of him where a bowl would stand. Reading the whole 1170x2532 canvas back every
-# frame is an 11.8 MB GPU->CPU copy and made this sweep take longer than the
-# rest of the verification put together. The FULL canvas is checked separately
-# and comes out bit-identical (diff bbox None, DPR 3, both trees on the same
-# clock), and nothing outside this rect is drawn by code this branch touches.
-RECT = """() => {
-  const v = window.__pp.view;
-  const X = (vx) => Math.max(0, Math.round((v.offX + vx * v.vs) * v.dpr));
-  const Y = (vy) => Math.max(0, Math.round((v.offY + vy * v.vs) * v.dpr));
-  const cv = document.querySelector('canvas');
-  const x0 = X(70), y0 = Y(300);
-  return { x: x0, y: y0,
-           w: Math.min(cv.width, X(320)) - x0,
-           h: Math.min(cv.height, Y(800)) - y0 };
-}"""
-
-STEP_HASH = r"""async (a) => {
-  const n = a.n, r = a.rect;
-  const cv = document.querySelector('canvas');
-  const cx = cv.getContext('2d');
-  const out = [];
-  for (let k = 0; k < n; k++) {
-    window.__pp.step(1 / 60, 1);
-    const d = cx.getImageData(r.x, r.y, r.w, r.h);
-    const h = await crypto.subtle.digest('SHA-256', d.data.buffer);
-    const b = new Uint8Array(h);
-    let s = '';
-    for (let i = 0; i < 10; i++) s += b[i].toString(16).padStart(2, '0');
-    const care = window.__pp.loop.scene.debug.care;
-    out.push([s, care.phase || '', +(care.w || 0).toFixed(3)]);
-  }
-  return out;
+  return { t: +window.__pp.loop.t.toFixed(6), frames: window.__pp.loop.frames };
 }"""
 
 
-async def boot(pg, base, breed):
-    # THE CLOCK HAS TO BE IDENTICAL IN BOTH TREES, and by default it is not:
-    # the loop starts on requestAnimationFrame at page load and runs a handful
-    # of real frames before the harness can call `loop.stop()`. How many, and
-    # with what dt, depends on machine load — the first run of this proof had
-    # the two trees at frames 130/t 2.25 and frames 129/t 2.2165, so his idle
-    # animation was a fraction of a second apart and 107k pixels of dog
-    # "differed". That is a false regression, and a convincing one.
-    #
-    # Stubbing rAF before any script runs means the loop never advances on its
-    # own: every frame in both trees comes from an explicit step() here.
-    #
-    # THE WALL CLOCK HAS TO GO TOO. `state/game.js` defaults a dozen arguments
-    # to `Date.now()`, so the bond ledger and the need decay advance with real
-    # time as well as with dt. The two trees are run one after the other, which
-    # puts minutes between them, and that alone made 309 of 1170 frames differ
-    # while the SAME frames stepped in lockstep were bit-identical. Freezing it
-    # removes the difference between "run now" and "run in five minutes".
-    await pg.add_init_script(
-        "window.requestAnimationFrame = function () { return 0; };"
-        "window.cancelAnimationFrame = function () {};"
-        "Date.now = function () { return 1767225600000; };")
+async def openpg(br, base, breed, dpr):
+    ctx = await br.new_context(viewport={"width": 390, "height": 844},
+                               device_scale_factor=dpr, is_mobile=True, has_touch=True)
+    pg = await ctx.new_page()
+    errs = []
+    pg.on("pageerror", lambda e: errs.append(str(e)))
+    pg.on("console", lambda m: errs.append(m.type + ": " + m.text)
+          if m.type == "error" else None)
+    await pg.add_init_script(PIN)
     await pg.goto("%s/index.html?breed=%s" % (base, breed))
     await pg.wait_for_function("() => window.__pp && window.__pp.loop && window.__pp.loop.scene")
     await pg.evaluate("() => window.__pp.skipIntro('Alfie')")
@@ -134,44 +87,73 @@ async def boot(pg, base, breed):
     await pg.evaluate("""() => { window.__pp.setNeed('hunger', 0.05);
                                  window.__pp.setNeed('thirst', 0.05); }""")
     await pg.evaluate("() => window.__pp.step(1/60, 30)")
-    await pg.evaluate(SETUP)
+    clock = await pg.evaluate(SETUP)
+    return ctx, pg, clock, errs
 
 
-CLOCK = """() => ({ t: +window.__pp.loop.t.toFixed(6),
-                     frames: window.__pp.loop.frames })"""
+async def run(br, a_base, b_base, breed, dpr, out):
+    ca, pa, cla, ea = await openpg(br, a_base, breed, dpr)
+    cb, pb, clb, eb = await openpg(br, b_base, breed, dpr)
+    marks, diffs, n = [], [], 0
 
+    async def steps(k, label, hashed=True):
+        nonlocal n
+        marks.append((label, n))
+        for _ in range(k):
+            await pa.evaluate("() => window.__pp.step(1/60, 1)")
+            await pb.evaluate("() => window.__pp.step(1/60, 1)")
+            n += 1
+            if not hashed:
+                continue
+            sa = await pa.screenshot()
+            sb = await pb.screenshot()
+            if sa != sb:
+                diffs.append([n, label])
 
-async def script(pg, marks):
-    """the same frames in both trees. `__pp.drag` is one evaluate and steps
-    internally, so the two runs cannot drift apart."""
-    S = await pg.evaluate("() => window.__pp.BALANCE.care")
+    async def both(js, arg=None):
+        if arg is None:
+            await pa.evaluate(js)
+            await pb.evaluate(js)
+        else:
+            await pa.evaluate(js, arg)
+            await pb.evaluate(js, arg)
+
+    S = await pa.evaluate("() => window.__pp.BALANCE.care")
     st = S["stage"]
-    rows = []
-
-    rect = await pg.evaluate(RECT)
-
-    async def hashn(n, label):
-        marks.append((label, len(rows)))
-        rows.extend(await pg.evaluate(STEP_HASH, {"n": n, "rect": rect}))
-
-    await hashn(50, "idle-before")
+    await steps(40, "idle-before")
     for mode in ("feed", "water"):
         home = st["bowlHome"] if mode == "feed" else st["waterHome"]
         pourer = S["feed"]["sackHome"] if mode == "feed" else S["water"]["jugHome"]
         over = [st["bowlTarget"][0], st["bowlTarget"][1] - 80]
-        await pg.evaluate("(m) => window.__pp.care(m)", mode)
-        await hashn(10, mode + "-open")
-        await pg.evaluate("(a) => window.__pp.drag({from: a[0], to: a[1], steps: 16})",
-                          [home, st["bowlTarget"]])
-        await hashn(40, mode + "-placed-upright")
-        await pg.evaluate("(a) => window.__pp.drag({from: a[0], to: a[1], steps: 16, hold: 3.6})",
-                          [pourer, over])
-        # long enough to cover approach, eating, licking/shaking, finish, fade
-        await hashn(430, mode + "-through-the-action")
-        await pg.evaluate("() => window.__pp.stopCare()")
-        await hashn(60, mode + "-at-rest")
-    await hashn(40, "idle-after")
-    return rows
+        await both("(m) => window.__pp.care(m)", mode)
+        await steps(10, mode + "-open")
+        await both("(a) => window.__pp.drag({from: a[0], to: a[1], steps: 16})",
+                   [home, st["bowlTarget"]])
+        await steps(30, mode + "-placed-upright")
+        await both("(a) => window.__pp.drag({from: a[0], to: a[1], steps: 16, hold: 3.6})",
+                   [pourer, over])
+        await steps(300, mode + "-through-the-action")
+        await both("() => window.__pp.stopCare()")
+        await steps(40, mode + "-at-rest")
+    await steps(30, "idle-after")
+
+    ok = (not diffs) and cla == clb and not ea and not eb
+    out[breed] = {
+        "framesCompared": n, "differingFrames": len(diffs),
+        "firstDifference": diffs[0] if diffs else None,
+        "clockBefore": cla, "clockAfter": clb, "sameClock": cla == clb,
+        "segments": [{"label": l, "atFrame": i} for l, i in marks],
+        "consoleBefore": ea, "consoleAfter": eb,
+        "pass": ok,
+    }
+    print("  %-10s %s  %d frames compared in lockstep, %d differ  (clock %s)"
+          % (breed, "PASS" if ok else "FAIL", n, len(diffs),
+             "matched" if cla == clb else "DIFFERENT"))
+    if diffs:
+        print("     first difference at frame %d (%s)" % (diffs[0][0], diffs[0][1]))
+    await ca.close()
+    await cb.close()
+    return ok
 
 
 async def main():
@@ -182,11 +164,6 @@ async def main():
     dpr = 3
     if "--dpr" in sys.argv:
         dpr = int(sys.argv[sys.argv.index("--dpr") + 1])
-    # the VALUES of --before/--dpr are positional-looking, so they have to be
-    # excluded explicitly. Taking them as the breed list ran the whole proof
-    # against a breed id of "C:\\tmp\\ppb2\\before", which silently dropped
-    # ?breed= (and with it ?preview), so each tree booted a fresh unseeded save
-    # minutes apart and 1069 of 1170 frames "differed".
     taken = {"--before", "--dpr"}
     argv, skip = [], False
     for a in sys.argv[1:]:
@@ -199,65 +176,22 @@ async def main():
         if not a.startswith("--"):
             argv.append(a)
     breeds = argv[0].split(",") if argv else BREEDS_ALL
-    a_base = serve(8841, before)
-    b_base = serve(8842, ROOT)
-    from playwright.async_api import async_playwright
 
+    a_base, b_base = serve(before), serve(ROOT)
+    from playwright.async_api import async_playwright
     out, ok = {}, True
-    print("dog-alone identity: before=%s  after=%s  dpr=%d" % (before, ROOT, dpr))
+    print("dog alone, lockstep: before=%s  after=%s  dpr=%d" % (before, ROOT, dpr))
     async with async_playwright() as p:
         br = await p.chromium.launch()
         for breed in breeds:
-            res, clocks = {}, {}
-            for tag, base in (("before", a_base), ("after", b_base)):
-                ctx = await br.new_context(viewport={"width": 390, "height": 844},
-                                           device_scale_factor=dpr, is_mobile=True,
-                                           has_touch=True)
-                pg = await ctx.new_page()
-                marks = []
-                await boot(pg, base, breed)
-                clocks[tag] = await pg.evaluate(CLOCK)
-                res[tag] = (await script(pg, marks), marks)
-                await ctx.close()
-            # a mismatched clock makes every later comparison meaningless, so
-            # say so plainly instead of reporting thousands of "differing" frames
-            sameClock = clocks["before"] == clocks["after"]
-            A, mA = res["before"]
-            B, mB = res["after"]
-            diff = [i for i in range(min(len(A), len(B))) if A[i][0] != B[i][0]]
-            same = len(A) == len(B) and not diff
-            ok = ok and same and sameClock
-            out[breed] = {
-                "frames": len(A), "framesAfter": len(B),
-                "identicalFrames": min(len(A), len(B)) - len(diff),
-                "differingFrames": len(diff),
-                "firstDifferenceAt": diff[0] if diff else None,
-                "firstDifferencePhase": (A[diff[0]][1], B[diff[0]][1]) if diff else None,
-                "segments": [{"label": l, "at": i, "phase": A[i][1] if i < len(A) else None}
-                             for l, i in mA],
-                "clockBefore": clocks["before"], "clockAfter": clocks["after"],
-                "sameClockAtStart": sameClock,
-                "pass": same and sameClock,
-            }
-            print("  %-10s %s  %d frames hashed, %d identical, %d differ"
-                  % (breed, "PASS" if same else "FAIL", len(A),
-                     out[breed]["identicalFrames"], len(diff)))
-            if not sameClock:
-                print("     CLOCKS DIFFER before hashing: %s vs %s -- the two "
-                      "trees are not at the same simulated time, so nothing "
-                      "below means anything" % (clocks["before"], clocks["after"]))
-            if diff:
-                print("     first difference at frame %d (phase %s)"
-                      % (diff[0], A[diff[0]][1]))
-            # checkpoint after every breed: this run is long, and a stall two
-            # breeds in should not cost the two that already passed
+            ok = await run(br, a_base, b_base, breed, dpr, out) and ok
             with open(os.path.join(ROOT, "tools", "dogalone.json"), "w") as fh:
                 json.dump(out, fh, indent=1)
         await br.close()
     out["allPass"] = ok
     with open(os.path.join(ROOT, "tools", "dogalone.json"), "w") as fh:
         json.dump(out, fh, indent=1)
-    print("ALL PASS — the dog alone is pixel-identical" if ok else "FAILED")
+    print("ALL PASS — the dog alone is byte-identical" if ok else "FAILED")
     sys.exit(0 if ok else 1)
 
 

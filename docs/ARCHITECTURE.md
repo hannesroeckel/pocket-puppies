@@ -2332,3 +2332,22 @@ Three things learned while writing it, all recorded because each made the gate l
 **`sw.js` 8.2.0 → 8.4.0**, not 8.2.1: the revert shipped as 8.3.0, so the generation has to land
 above what is live or the phones that took the revert would never fetch this. No file added or
 renamed; `PRECACHE` still 49 entries matching the tree.
+
+#### 19.5.1 What was actually measured
+
+| gate | result |
+|---|---|
+| `tools/bowlpixels.py` (current order) | **0** torso pixels inside the bowl's outline, on every checked frame of all six actions — shiba/cockapoo/schnoodle x feed/water, 1,391–1,423 checked frames each, every phase from `place` to `finish`. Zero console errors. |
+| `tools/bowlpixels.py --old` (§19.2's order, same frames) | schnoodle feed **8,641 px = 39.8%** of the bowl buried at `finish`; water **9,898 px = 45.6%**. And **0 while eating** — which is exactly why every eating render passed and the defect shipped twice. |
+| `tools/dogalone.py` (lockstep, whole-page PNG bytes, DPR 3) | 830 frames per breed, all three breeds, **0 differing frames**, clocks matched. |
+| dark mode | the canvas is **byte-identical** to light at both the placed-upright and the finish beat, with and without reduced motion (the app pins `color-scheme: light`). |
+| frame cost, bowl split, real loop | DPR 2: median 2.0–2.2 ms, p95 3.7–4.5 ms. DPR 3: median 2.1–2.3 ms, p95 3.6–5.3 ms. Budget is 16.7 ms. Zero external requests. |
+| v1–v6 saves | all six migrate, minimal and realistic, name and coins preserved; v2–v6 boot and feed with the bowl split. (v1 refuses to start care on this tree **and on the pre-fix tree** — pre-existing, not this change.) |
+| offline | boots and plays with the network killed, `pp-cache-v8.4.0`, 50 entries. |
+
+The eating composite was checked against the reference it was built to match
+(the right-hand panel of `C:	mp\pp8\shots\PAIRZOOM-shiba-feed.png`): muzzle
+down inside the vessel, near rim crossing in front of it, mouth and food
+visible behind the rim, both front paws whole and beside it. Unchanged — which
+is what the model predicts, because the head's relationship to both halves of
+the bowl never moved. Only the torso's did.

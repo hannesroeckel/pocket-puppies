@@ -318,7 +318,7 @@
   "colourTiePixelsIgnoredWorstFrame": 21,
   "replayMismatchWorstFrame": 1,
   "replayMismatchWorstAnyFrame": 1,
-  "replayMismatchWorstFrac": 0.33333,
+  "replayMismatchWorstFrac": 5.4e-05,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
   "worstDefectPhase": null,
@@ -465,7 +465,7 @@
     }
    ]
   },
-  "pass": false,
+  "pass": true,
   "meaning": "PASS means: on all 1391 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1391 of those frames and the far half took those pixels back on 1391. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "cockapoo-water": {
@@ -637,7 +637,7 @@
   "colourTiePixelsIgnoredWorstFrame": 10,
   "replayMismatchWorstFrame": 1,
   "replayMismatchWorstAnyFrame": 1,
-  "replayMismatchWorstFrac": 1,
+  "replayMismatchWorstFrac": 4.6e-05,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
   "worstDefectPhase": null,
@@ -784,7 +784,7 @@
     }
    ]
   },
-  "pass": false,
+  "pass": true,
   "meaning": "PASS means: on all 1391 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1391 of those frames and the far half took those pixels back on 1391. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "schnoodle-water": {
@@ -938,5 +938,5 @@
   "meaning": "PASS means: on all 1423 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1423 of those frames and the far half took those pixels back on 1423. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "consoleErrors": [],
- "allPass": false
+ "allPass": true
 }

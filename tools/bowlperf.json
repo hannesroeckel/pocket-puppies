@@ -1,0 +1,101 @@
+{
+ "dpr2 light motion schnoodle": {
+  "frames": 456,
+  "workMedian": 2,
+  "workP95": 3.8,
+  "workMax": 5.5,
+  "frameMedian": 33.3,
+  "frameP95": 33.4,
+  "samples": 125,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr2 light reduced schnoodle": {
+  "frames": 447,
+  "workMedian": 2.3,
+  "workP95": 3.9,
+  "workMax": 5,
+  "frameMedian": 33.3,
+  "frameP95": 50,
+  "samples": 116,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr2 dark motion schnoodle": {
+  "frames": 467,
+  "workMedian": 2,
+  "workP95": 3.7,
+  "workMax": 6.3,
+  "frameMedian": 33.3,
+  "frameP95": 33.4,
+  "samples": 136,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr2 dark reduced schnoodle": {
+  "frames": 464,
+  "workMedian": 2,
+  "workP95": 3.8,
+  "workMax": 6.5,
+  "frameMedian": 33.3,
+  "frameP95": 33.4,
+  "samples": 133,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr3 light motion schnoodle": {
+  "frames": 445,
+  "workMedian": 2,
+  "workP95": 4.5,
+  "workMax": 5.1,
+  "frameMedian": 33.3,
+  "frameP95": 50,
+  "samples": 114,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr3 light reduced schnoodle": {
+  "frames": 431,
+  "workMedian": 2.3,
+  "workP95": 4.3,
+  "workMax": 5.1,
+  "frameMedian": 33.3,
+  "frameP95": 50,
+  "samples": 101,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr3 dark motion schnoodle": {
+  "frames": 431,
+  "workMedian": 2.2,
+  "workP95": 4.5,
+  "workMax": 6.6,
+  "frameMedian": 33.3,
+  "frameP95": 50,
+  "samples": 100,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "dpr3 dark reduced schnoodle": {
+  "frames": 451,
+  "workMedian": 2,
+  "workP95": 4,
+  "workMax": 5.2,
+  "frameMedian": 33.3,
+  "frameP95": 33.4,
+  "samples": 120,
+  "bowlSplitAtStart": true,
+  "bowlSplitAtEnd": true,
+  "pass": true
+ },
+ "consoleErrors": [],
+ "externalRequests": [],
+ "allPass": true
+}
