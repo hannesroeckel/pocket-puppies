@@ -15,9 +15,11 @@
   "framesWhereHisBodyOverlapsTheBowl": 1391,
   "framesWhereTheFarHalfTookThosePixelsBack": 0,
   "framesWithTorsoShowingInsideTheBowl": 935,
-  "colourTiePixelsIgnoredWorstFrame": 0,
-  "worstDefectPx": 8640,
-  "worstDefectFracOfBowl": 0.3978,
+  "colourTiePixelsIgnoredWorstFrame": 236,
+  "replayMismatchWorstFrame": 21722,
+  "replayMismatchWorstAnyFrame": 21722,
+  "worstDefectPx": 8633,
+  "worstDefectFracOfBowl": 0.3974,
   "worstDefectPhase": "finish",
   "worstDefectBox": [
    292,
@@ -58,7 +60,7 @@
     "maskPx": 21711,
     "torsoInMask": 20106,
     "backOverTorso": 0,
-    "defect": 8292
+    "defect": 8116
    },
    "b-pouring": {
     "phase": "pour",
@@ -68,7 +70,7 @@
     "maskPx": 21723,
     "torsoInMask": 20121,
     "backOverTorso": 0,
-    "defect": 8296
+    "defect": 8113
    },
    "c-approach": {
     "phase": "approach",
@@ -78,7 +80,7 @@
     "maskPx": 21722,
     "torsoInMask": 20555,
     "backOverTorso": 0,
-    "defect": 7772
+    "defect": 7536
    },
    "d-eating": {
     "phase": "eat",
@@ -131,8 +133,102 @@
     "defect": 0
    }
   },
+  "worstReplayFrame": {
+   "phase": "approach",
+   "px": 21722,
+   "bd": {
+    "onScreen": true,
+    "split": true,
+    "x": 178,
+    "y": 692.112,
+    "s": 1.64682,
+    "kind": "food",
+    "fill": 1,
+    "t": 12,
+    "ripple": 0,
+    "alpha": 1
+   },
+   "samples": [
+    {
+     "x": 378,
+     "y": 1495,
+     "his": [
+      198,
+      133,
+      82
+     ],
+     "rendered": [
+      198,
+      133,
+      82
+     ],
+     "replayed": [
+      250,
+      241,
+      225
+     ]
+    },
+    {
+     "x": 379,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      81
+     ],
+     "rendered": [
+      198,
+      132,
+      81
+     ],
+     "replayed": [
+      250,
+      241,
+      225
+     ]
+    },
+    {
+     "x": 380,
+     "y": 1495,
+     "his": [
+      198,
+      133,
+      82
+     ],
+     "rendered": [
+      198,
+      133,
+      82
+     ],
+     "replayed": [
+      250,
+      240,
+      223
+     ]
+    },
+    {
+     "x": 381,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      82
+     ],
+     "rendered": [
+      198,
+      132,
+      82
+     ],
+     "replayed": [
+      249,
+      239,
+      221
+     ]
+    }
+   ]
+  },
   "pass": true,
-  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 935 of 1391 checked frames, worst 8640 px (39.8% of the bowl)"
+  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 935 of 1391 checked frames, worst 8633 px (39.7% of the bowl)"
  },
  "schnoodle-water": {
   "frames": 1583,
@@ -150,7 +246,9 @@
   "framesWhereHisBodyOverlapsTheBowl": 1423,
   "framesWhereTheFarHalfTookThosePixelsBack": 0,
   "framesWithTorsoShowingInsideTheBowl": 1146,
-  "colourTiePixelsIgnoredWorstFrame": 0,
+  "colourTiePixelsIgnoredWorstFrame": 140,
+  "replayMismatchWorstFrame": 21722,
+  "replayMismatchWorstAnyFrame": 21722,
   "worstDefectPx": 9898,
   "worstDefectFracOfBowl": 0.4557,
   "worstDefectPhase": "approach",
@@ -193,7 +291,7 @@
     "maskPx": 21711,
     "torsoInMask": 20106,
     "backOverTorso": 0,
-    "defect": 8292
+    "defect": 8166
    },
    "b-pouring": {
     "phase": "pour",
@@ -203,7 +301,7 @@
     "maskPx": 21723,
     "torsoInMask": 20121,
     "backOverTorso": 0,
-    "defect": 8129
+    "defect": 8002
    },
    "c-approach": {
     "phase": "approach",
@@ -213,7 +311,7 @@
     "maskPx": 21722,
     "torsoInMask": 20560,
     "backOverTorso": 0,
-    "defect": 8736
+    "defect": 8650
    },
    "d-eating": {
     "phase": "drink",
@@ -266,8 +364,564 @@
     "defect": 0
    }
   },
+  "worstReplayFrame": {
+   "phase": "approach",
+   "px": 21722,
+   "bd": {
+    "onScreen": true,
+    "split": true,
+    "x": 178,
+    "y": 692.112,
+    "s": 1.64682,
+    "kind": "water",
+    "fill": 1,
+    "t": 11.98333,
+    "ripple": 0,
+    "alpha": 1
+   },
+   "samples": [
+    {
+     "x": 378,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      82
+     ],
+     "rendered": [
+      198,
+      132,
+      82
+     ],
+     "replayed": [
+      247,
+      248,
+      241
+     ]
+    },
+    {
+     "x": 379,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      81
+     ],
+     "rendered": [
+      198,
+      132,
+      81
+     ],
+     "replayed": [
+      247,
+      248,
+      241
+     ]
+    },
+    {
+     "x": 380,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      81
+     ],
+     "rendered": [
+      198,
+      132,
+      81
+     ],
+     "replayed": [
+      246,
+      247,
+      240
+     ]
+    },
+    {
+     "x": 381,
+     "y": 1495,
+     "his": [
+      198,
+      132,
+      81
+     ],
+     "rendered": [
+      198,
+      132,
+      81
+     ],
+     "replayed": [
+      245,
+      247,
+      239
+     ]
+    }
+   ]
+  },
   "pass": true,
   "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 1146 of 1423 checked frames, worst 9898 px (45.6% of the bowl)"
+ },
+ "shiba-feed": {
+  "frames": 1551,
+  "phases": [
+   "approach",
+   "eat",
+   "finish",
+   "lick",
+   "place",
+   "pour"
+  ],
+  "framesChecked": 1391,
+  "framesNotChecked_noBowlOnScreen": 104,
+  "framesNotChecked_bowlCrossFading": 56,
+  "framesWhereHisBodyOverlapsTheBowl": 1391,
+  "framesWhereTheFarHalfTookThosePixelsBack": 0,
+  "framesWithTorsoShowingInsideTheBowl": 982,
+  "colourTiePixelsIgnoredWorstFrame": 220,
+  "replayMismatchWorstFrame": 15523,
+  "replayMismatchWorstAnyFrame": 15523,
+  "worstDefectPx": 5778,
+  "worstDefectFracOfBowl": 0.3722,
+  "worstDefectPhase": "finish",
+  "worstDefectBox": [
+   309,
+   1510,
+   183,
+   52
+  ],
+  "checkedPerPhase": {
+   "approach": {
+    "checked": 51,
+    "defectFrames": 51
+   },
+   "eat": {
+    "checked": 499,
+    "defectFrames": 172
+   },
+   "finish": {
+    "checked": 127,
+    "defectFrames": 112
+   },
+   "lick": {
+    "checked": 91,
+    "defectFrames": 24
+   },
+   "pour": {
+    "checked": 623,
+    "defectFrames": 623
+   }
+  },
+  "phasesWithTooFewCheckedFrames": [],
+  "beatsWithNoBowlToLookInside": [],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "bowlOnScreen": true,
+    "bowlAlpha": 0.99301,
+    "maskPx": 15514,
+    "torsoInMask": 14336,
+    "backOverTorso": 0,
+    "defect": 5681
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "bowlOnScreen": true,
+    "bowlAlpha": 0.99944,
+    "maskPx": 15524,
+    "torsoInMask": 14347,
+    "backOverTorso": 0,
+    "defect": 5678
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 14502,
+    "backOverTorso": 0,
+    "defect": 4900
+   },
+   "d-eating": {
+    "phase": "eat",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 2
+   },
+   "e-lick": {
+    "phase": "lick",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 0
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 5769
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "bowlOnScreen": false,
+    "bowlAlpha": 0.61807,
+    "maskPx": 0,
+    "torsoInMask": 0,
+    "backOverTorso": 0,
+    "defect": 0
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "bowlOnScreen": false,
+    "bowlAlpha": 0,
+    "maskPx": 0,
+    "torsoInMask": 0,
+    "backOverTorso": 0,
+    "defect": 0
+   }
+  },
+  "worstReplayFrame": {
+   "phase": "approach",
+   "px": 15523,
+   "bd": {
+    "onScreen": true,
+    "split": true,
+    "x": 178,
+    "y": 694.598,
+    "s": 1.39907,
+    "kind": "food",
+    "fill": 1,
+    "t": 11.96667,
+    "ripple": 0,
+    "alpha": 1
+   },
+   "samples": [
+    {
+     "x": 390,
+     "y": 1510,
+     "his": [
+      246,
+      227,
+      205
+     ],
+     "rendered": [
+      246,
+      227,
+      205
+     ],
+     "replayed": [
+      247,
+      234,
+      211
+     ]
+    },
+    {
+     "x": 391,
+     "y": 1510,
+     "his": [
+      247,
+      228,
+      206
+     ],
+     "rendered": [
+      247,
+      228,
+      206
+     ],
+     "replayed": [
+      247,
+      234,
+      210
+     ]
+    },
+    {
+     "x": 392,
+     "y": 1510,
+     "his": [
+      246,
+      227,
+      205
+     ],
+     "rendered": [
+      246,
+      227,
+      205
+     ],
+     "replayed": [
+      247,
+      234,
+      210
+     ]
+    },
+    {
+     "x": 393,
+     "y": 1510,
+     "his": [
+      247,
+      227,
+      206
+     ],
+     "rendered": [
+      247,
+      227,
+      206
+     ],
+     "replayed": [
+      247,
+      234,
+      209
+     ]
+    }
+   ]
+  },
+  "pass": true,
+  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 982 of 1391 checked frames, worst 5778 px (37.2% of the bowl)"
+ },
+ "shiba-water": {
+  "frames": 1583,
+  "phases": [
+   "approach",
+   "drink",
+   "finish",
+   "place",
+   "pour",
+   "shakeMuzzle"
+  ],
+  "framesChecked": 1423,
+  "framesNotChecked_noBowlOnScreen": 104,
+  "framesNotChecked_bowlCrossFading": 56,
+  "framesWhereHisBodyOverlapsTheBowl": 1423,
+  "framesWhereTheFarHalfTookThosePixelsBack": 0,
+  "framesWithTorsoShowingInsideTheBowl": 952,
+  "colourTiePixelsIgnoredWorstFrame": 173,
+  "replayMismatchWorstFrame": 15523,
+  "replayMismatchWorstAnyFrame": 15523,
+  "worstDefectPx": 7040,
+  "worstDefectFracOfBowl": 0.4535,
+  "worstDefectPhase": "approach",
+  "worstDefectBox": [
+   309,
+   1510,
+   183,
+   52
+  ],
+  "checkedPerPhase": {
+   "approach": {
+    "checked": 45,
+    "defectFrames": 45
+   },
+   "drink": {
+    "checked": 574,
+    "defectFrames": 111
+   },
+   "finish": {
+    "checked": 127,
+    "defectFrames": 127
+   },
+   "pour": {
+    "checked": 623,
+    "defectFrames": 623
+   },
+   "shakeMuzzle": {
+    "checked": 54,
+    "defectFrames": 46
+   }
+  },
+  "phasesWithTooFewCheckedFrames": [],
+  "beatsWithNoBowlToLookInside": [],
+  "perCheckpoint": {
+   "a-placed-upright": {
+    "phase": "pour",
+    "w": 0.993,
+    "bowlOnScreen": true,
+    "bowlAlpha": 0.99301,
+    "maskPx": 15514,
+    "torsoInMask": 14336,
+    "backOverTorso": 0,
+    "defect": 5733
+   },
+   "b-pouring": {
+    "phase": "pour",
+    "w": 0.999,
+    "bowlOnScreen": true,
+    "bowlAlpha": 0.99944,
+    "maskPx": 15524,
+    "torsoInMask": 14347,
+    "backOverTorso": 0,
+    "defect": 5665
+   },
+   "c-approach": {
+    "phase": "approach",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 14489,
+    "backOverTorso": 0,
+    "defect": 5922
+   },
+   "d-eating": {
+    "phase": "drink",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 0
+   },
+   "e-shakeMuzzle": {
+    "phase": "shakeMuzzle",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 5634
+   },
+   "f-finish-upright": {
+    "phase": "finish",
+    "w": 1,
+    "bowlOnScreen": true,
+    "bowlAlpha": 1,
+    "maskPx": 15523,
+    "torsoInMask": 15523,
+    "backOverTorso": 0,
+    "defect": 7040
+   },
+   "g-fading": {
+    "phase": "",
+    "w": 0.618,
+    "bowlOnScreen": false,
+    "bowlAlpha": 0.61807,
+    "maskPx": 0,
+    "torsoInMask": 0,
+    "backOverTorso": 0,
+    "defect": 0
+   },
+   "h-idle-home": {
+    "phase": "",
+    "w": 0,
+    "bowlOnScreen": false,
+    "bowlAlpha": 0,
+    "maskPx": 0,
+    "torsoInMask": 0,
+    "backOverTorso": 0,
+    "defect": 0
+   }
+  },
+  "worstReplayFrame": {
+   "phase": "approach",
+   "px": 15523,
+   "bd": {
+    "onScreen": true,
+    "split": true,
+    "x": 178,
+    "y": 694.598,
+    "s": 1.39907,
+    "kind": "water",
+    "fill": 1,
+    "t": 11.95,
+    "ripple": 0,
+    "alpha": 1
+   },
+   "samples": [
+    {
+     "x": 390,
+     "y": 1510,
+     "his": [
+      246,
+      227,
+      205
+     ],
+     "rendered": [
+      246,
+      227,
+      205
+     ],
+     "replayed": [
+      242,
+      244,
+      234
+     ]
+    },
+    {
+     "x": 391,
+     "y": 1510,
+     "his": [
+      247,
+      228,
+      206
+     ],
+     "rendered": [
+      247,
+      228,
+      206
+     ],
+     "replayed": [
+      242,
+      244,
+      234
+     ]
+    },
+    {
+     "x": 392,
+     "y": 1510,
+     "his": [
+      246,
+      227,
+      205
+     ],
+     "rendered": [
+      246,
+      227,
+      205
+     ],
+     "replayed": [
+      242,
+      244,
+      234
+     ]
+    },
+    {
+     "x": 393,
+     "y": 1510,
+     "his": [
+      247,
+      228,
+      206
+     ],
+     "rendered": [
+      247,
+      228,
+      206
+     ],
+     "replayed": [
+      242,
+      244,
+      234
+     ]
+    }
+   ]
+  },
+  "pass": true,
+  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 952 of 1423 checked frames, worst 7040 px (45.4% of the bowl)"
  },
  "consoleErrors": [],
  "allPass": true

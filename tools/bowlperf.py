@@ -18,7 +18,11 @@ BUDGET = {"workMedian": 4.0, "workP95": 8.0}   # 60fps is 16.7ms; baseline was 1
 
 
 class _Q(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
+    # NOT allow_reuse_address: on Windows that lets a second server bind a port
+    # a zombie from an interrupted run is still holding, and requests then go to
+    # the dead one and the harness hangs at page load with no error at all. Ask
+    # the OS for a free port instead.
+    allow_reuse_address = False
     daemon_threads = True
 
     def handle_error(self, *a):
@@ -27,9 +31,9 @@ class _Q(socketserver.ThreadingTCPServer):
 
 def serve(port, root):
     h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=root)
-    srv = _Q(("127.0.0.1", port), h)
+    srv = _Q(("127.0.0.1", 0), h)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    return "http://127.0.0.1:%d" % port
+    return "http://127.0.0.1:%d" % srv.server_address[1]
 
 
 async def measure(pg, base, breed, mode, label, out):
