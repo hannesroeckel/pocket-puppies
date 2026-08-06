@@ -37,6 +37,38 @@ Then **delete the posture-based disambiguation** — it exists only to prop up t
 Safe for the obedience contest, which performs by id (`perform(id, {judged:true})`) and never
 goes through cue interpretation.
 
+## 1b. There is no trick list — training is guesswork ⚠️ same root cause as 1
+
+> "we also need more descriptions for the player regarding the tricks. currently its just a
+> guessing"
+
+**Confirmed.** The teaching prompts exist (`TRICKS[id].hint`) but the *only* way they surface
+is the **ghost gesture hint**: `train.js` ~1274 waits for `sinceInput > T.hintAfter`, then
+cycles through teachable tricks one at a time. So a player learns what's possible by stopping
+and waiting. There is no list, no picker, and nothing that says what a trick even *is*.
+
+Combined with issue 1 (sit and lie down sharing a gesture), the training screen currently
+asks her to discover an invisible ladder by trial and error.
+
+**Fix — a real trick list in the Train screen.** For each trick:
+
+| element | example | source |
+|---|---|---|
+| name | "Lie down" | `TRICKS[id].name` — exists |
+| what he does | "He settles onto his front, head up." | **needs authoring** — no such field today |
+| how to ask | "From a sit, stroke down and sweep along the floor." | `TRICKS[id].hint` — exists, update for issue 1 |
+| how well he knows it | not a bar — words, e.g. "getting it" / "knows it" / "knows it cold" | `repertoire()` exposes live `reliability` |
+| locked, and why | "Teach him to sit first." | `prereq` — exists |
+
+Notes:
+- **No XP bars.** Progress in words, consistent with the no-bond-meter rule.
+- Keep the ghost gesture hint — it's good discoverability *during* teaching. This is about
+  knowing what exists *before* you start.
+- Add a `does:` field to each entry in `dog/anim/tricks.js` and keep the copy pronoun-
+  parameterised from `game.pron` (the pattern is already established in `train.js`'s `COPY`).
+- The mis-association cue legend already exists and is separate — it shows what he *thinks* a
+  word means. Don't merge the two; they answer different questions.
+
 ## 2. More to buy in the shop
 
 Current stock is 8: chew bone 55, biscuits 25, good treats 60, softer brush 70, oatmeal soap
