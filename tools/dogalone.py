@@ -130,15 +130,30 @@ async def script(pg, marks):
 
 
 async def main():
-    argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     if "--before" not in sys.argv:
         print("need --before <path to the pre-fix tree>")
         sys.exit(2)
     before = sys.argv[sys.argv.index("--before") + 1]
-    breeds = argv[0].split(",") if argv else BREEDS_ALL
     dpr = 3
     if "--dpr" in sys.argv:
         dpr = int(sys.argv[sys.argv.index("--dpr") + 1])
+    # the VALUES of --before/--dpr are positional-looking, so they have to be
+    # excluded explicitly. Taking them as the breed list ran the whole proof
+    # against a breed id of "C:\\tmp\\ppb2\\before", which silently dropped
+    # ?breed= (and with it ?preview), so each tree booted a fresh unseeded save
+    # minutes apart and 1069 of 1170 frames "differed".
+    taken = {"--before", "--dpr"}
+    argv, skip = [], False
+    for a in sys.argv[1:]:
+        if skip:
+            skip = False
+            continue
+        if a in taken:
+            skip = True
+            continue
+        if not a.startswith("--"):
+            argv.append(a)
+    breeds = argv[0].split(",") if argv else BREEDS_ALL
     a_base = serve(8841, before)
     b_base = serve(8842, ROOT)
     from playwright.async_api import async_playwright
