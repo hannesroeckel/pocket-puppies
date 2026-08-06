@@ -106,8 +106,9 @@ INSTALL = r"""async (old) => {
   const cv = document.querySelector('canvas');
   const cx = cv.getContext('2d');
   const care = sc.care;
-  const realBehind = care.drawBehind, realMid = care.drawMid;
-  const G = { props, sc, cv, cx, view, old: !!old, R: null, M0: null, M1: null, r: null };
+  const realBehind = care.drawBehind, realMid = care.drawMid, realFront = care.drawFront;
+  const G = { props, sc, cv, cx, view, old: !!old,
+              R: null, M0: null, M1: null, A: null, r: null };
   window.__bp = G;
 
   /* the region of interest: the bowl's own bounding box, plus a little */
@@ -140,6 +141,22 @@ INSTALL = r"""async (old) => {
     if (!G.old) realMid(gg);
     G.M1 = grab(G.r);
   };
+  /* A: THE COMPOSITE, TAKEN BEFORE THE OVERLAY.
+     `scenes/room.js` lays a full-screen GRAIN PATTERN at alpha 0.55 plus three
+     vignette gradients over the finished frame. Read the canvas after the step
+     and almost every pixel has been nudged by the grain, so "A == M0" stops
+     meaning "his body is still showing" and starts meaning "the grain happened
+     to leave this byte alone" -- which made the first run of this gate report
+     16 defective pixels on a frame where a third of the bowl was visibly
+     missing, and would have made the fix's zero nearly meaningless.
+     `care.drawFront` is the last layer that touches the bowl, so the composite
+     is complete here: room, dog, both halves of the vessel, no grain, no hand
+     glow, no UI. All four buffers now come from the same pass and the same
+     side of the overlay. */
+  care.drawFront = (gg) => {
+    realFront(gg);
+    if (G.r) G.A = grab(G.r);
+  };
   return true;
 }"""
 
@@ -152,10 +169,9 @@ STEP_AND_READ = r"""(cfg) => {
     split: !!sc.care.bowlSplit, placed: !!d.placed,
     held: !!(sc.care.bowl && sc.care.bowl.held),
   };
-  if (!G.R || !G.M0 || !G.r) { out.skipped = 'dog not drawn'; return out; }
+  if (!G.R || !G.M0 || !G.A || !G.r) { out.skipped = 'dog or bowl not drawn'; return out; }
   const { x0, y0, W, H, bs, bx, baseY } = G.r;
-  const A = cx.getImageData(x0, y0, W, H).data;
-  const R = G.R, M0 = G.M0, M1 = G.M1;
+  const R = G.R, M0 = G.M0, M1 = G.M1, A = G.A;
 
   /* ---- INSIDE THE BOWL ------------------------------------------------
      Two conditions, ANDed, and each is asked of the thing that knows:
