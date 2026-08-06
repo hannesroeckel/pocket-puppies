@@ -99,6 +99,31 @@ we made), fluffy up-curled tail.
 rigorous contact → down → passing → up cycle, and the foot-falls do not read as a consistent
 gait. Fine as a *look* target; the actual gait timing has to be built properly, not traced.
 
+### v2 sheets — 2026-08-06, proportions corrected. **This is enough; stop iterating.**
+
+`refs/schnoodle-turnaround-v2.png` and `refs/schnoodle-walkcycle-v2.png` (v1 kept alongside).
+
+**Fixed, and this was the important one:** the proportions now match the game. Short stubby
+legs, body low and chunky, large head. He reads as a puppy rather than a small adult dog, which
+is exactly the neoteny the in-game rig was tuned for.
+
+**Two residual drifts — accept them, don't spend more rounds on it:**
+- **The ears got longer**, hanging well past the jaw as full curtains. That is drifting toward
+  the *cockapoo's* ear treatment; ours is `ear: 'semi'` at `earH: 60`. Use v1's shorter, more
+  semi-flopped ear as the shape reference and v2's body.
+- **The beard still didn't land** — he still reads as a toy poodle around the muzzle. Since our
+  beard is same-colour fur volume rather than a marking, an image model has almost nothing to
+  latch onto. Build it from the existing in-game data instead; the reference can't help here.
+
+**On the walk sheet: it is a bound/gallop, not a walk.** Frame 4 has all four feet off the
+ground (a suspension phase, which a trot never has), and the frames don't share a ground line.
+As noted before, the gait has to be authored with real timing regardless — so this is a *look*
+reference for how the fur and silhouette behave in motion, and at that it is fine.
+
+**Conclusion: sufficient. Further rounds have diminishing returns**, because everything still
+wrong is either something the model can't express (same-colour beard) or something we have to
+build properly anyway (gait timing).
+
 Still worth generating later, at no urgency: the **cockapoo** turnaround, and a couple of
 in-motion poses (sitting, lying, mid-trick in profile).
 
