@@ -175,6 +175,10 @@ async def main():
             if diff:
                 print("     first difference at frame %d (phase %s)"
                       % (diff[0], A[diff[0]][1]))
+            # checkpoint after every breed: this run is long, and a stall two
+            # breeds in should not cost the two that already passed
+            with open(os.path.join(ROOT, "tools", "dogalone.json"), "w") as fh:
+                json.dump(out, fh, indent=1)
         await br.close()
     out["allPass"] = ok
     with open(os.path.join(ROOT, "tools", "dogalone.json"), "w") as fh:

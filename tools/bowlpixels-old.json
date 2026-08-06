@@ -1,6 +1,6 @@
 {
  "schnoodle-feed": {
-  "frames": 1529,
+  "frames": 1551,
   "phases": [
    "approach",
    "eat",
@@ -9,21 +9,21 @@
    "place",
    "pour"
   ],
-  "framesChecked": 1369,
+  "framesChecked": 1391,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1369,
+  "framesWhereHisBodyOverlapsTheBowl": 1391,
   "framesWhereTheFarHalfTookThosePixelsBack": 0,
-  "framesWithTorsoShowingInsideTheBowl": 1003,
+  "framesWithTorsoShowingInsideTheBowl": 935,
   "colourTiePixelsIgnoredWorstFrame": 0,
-  "worstDefectPx": 112,
-  "worstDefectFracOfBowl": 0.0052,
-  "worstDefectPhase": "pour",
+  "worstDefectPx": 8640,
+  "worstDefectFracOfBowl": 0.3978,
+  "worstDefectPhase": "finish",
   "worstDefectBox": [
-   305,
+   292,
    1495,
-   194,
-   60
+   217,
+   62
   ],
   "checkedPerPhase": {
    "approach": {
@@ -31,16 +31,16 @@
     "defectFrames": 51
    },
    "eat": {
-    "checked": 477,
-    "defectFrames": 181
+    "checked": 499,
+    "defectFrames": 120
    },
    "finish": {
     "checked": 127,
-    "defectFrames": 117
+    "defectFrames": 114
    },
    "lick": {
     "checked": 91,
-    "defectFrames": 31
+    "defectFrames": 27
    },
    "pour": {
     "checked": 623,
@@ -56,9 +56,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99301,
     "maskPx": 21711,
-    "torsoInMask": 20108,
+    "torsoInMask": 20106,
     "backOverTorso": 0,
-    "defect": 110
+    "defect": 8292
    },
    "b-pouring": {
     "phase": "pour",
@@ -66,9 +66,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99944,
     "maskPx": 21723,
-    "torsoInMask": 20122,
+    "torsoInMask": 20121,
     "backOverTorso": 0,
-    "defect": 106
+    "defect": 8296
    },
    "c-approach": {
     "phase": "approach",
@@ -76,9 +76,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 21722,
-    "torsoInMask": 20551,
+    "torsoInMask": 20555,
     "backOverTorso": 0,
-    "defect": 87
+    "defect": 7772
    },
    "d-eating": {
     "phase": "eat",
@@ -88,7 +88,7 @@
     "maskPx": 21722,
     "torsoInMask": 21722,
     "backOverTorso": 0,
-    "defect": 1
+    "defect": 0
    },
    "e-lick": {
     "phase": "lick",
@@ -98,7 +98,7 @@
     "maskPx": 21722,
     "torsoInMask": 21722,
     "backOverTorso": 0,
-    "defect": 2
+    "defect": 0
    },
    "f-finish-upright": {
     "phase": "finish",
@@ -108,7 +108,7 @@
     "maskPx": 21722,
     "torsoInMask": 21722,
     "backOverTorso": 0,
-    "defect": 16
+    "defect": 8631
    },
    "g-fading": {
     "phase": "",
@@ -131,11 +131,11 @@
     "defect": 0
    }
   },
-  "pass": false,
-  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 1003 of 1369 checked frames, worst 112 px (0.5% of the bowl)"
+  "pass": true,
+  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 935 of 1391 checked frames, worst 8640 px (39.8% of the bowl)"
  },
  "schnoodle-water": {
-  "frames": 1571,
+  "frames": 1583,
   "phases": [
    "approach",
    "drink",
@@ -144,21 +144,21 @@
    "pour",
    "shakeMuzzle"
   ],
-  "framesChecked": 1411,
+  "framesChecked": 1423,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1411,
+  "framesWhereHisBodyOverlapsTheBowl": 1423,
   "framesWhereTheFarHalfTookThosePixelsBack": 0,
-  "framesWithTorsoShowingInsideTheBowl": 1277,
+  "framesWithTorsoShowingInsideTheBowl": 1146,
   "colourTiePixelsIgnoredWorstFrame": 0,
-  "worstDefectPx": 115,
-  "worstDefectFracOfBowl": 0.0053,
+  "worstDefectPx": 9898,
+  "worstDefectFracOfBowl": 0.4557,
   "worstDefectPhase": "approach",
   "worstDefectBox": [
-   305,
+   292,
    1495,
-   194,
-   60
+   217,
+   62
   ],
   "checkedPerPhase": {
    "approach": {
@@ -166,8 +166,8 @@
     "defectFrames": 45
    },
    "drink": {
-    "checked": 562,
-    "defectFrames": 430
+    "checked": 574,
+    "defectFrames": 302
    },
    "finish": {
     "checked": 127,
@@ -179,7 +179,7 @@
    },
    "shakeMuzzle": {
     "checked": 54,
-    "defectFrames": 52
+    "defectFrames": 49
    }
   },
   "phasesWithTooFewCheckedFrames": [],
@@ -191,9 +191,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99301,
     "maskPx": 21711,
-    "torsoInMask": 20108,
+    "torsoInMask": 20106,
     "backOverTorso": 0,
-    "defect": 104
+    "defect": 8292
    },
    "b-pouring": {
     "phase": "pour",
@@ -201,9 +201,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99944,
     "maskPx": 21723,
-    "torsoInMask": 20122,
+    "torsoInMask": 20121,
     "backOverTorso": 0,
-    "defect": 95
+    "defect": 8129
    },
    "c-approach": {
     "phase": "approach",
@@ -211,9 +211,9 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 21722,
-    "torsoInMask": 20559,
+    "torsoInMask": 20560,
     "backOverTorso": 0,
-    "defect": 102
+    "defect": 8736
    },
    "d-eating": {
     "phase": "drink",
@@ -233,7 +233,7 @@
     "maskPx": 21722,
     "torsoInMask": 21722,
     "backOverTorso": 0,
-    "defect": 17
+    "defect": 4044
    },
    "f-finish-upright": {
     "phase": "finish",
@@ -243,7 +243,7 @@
     "maskPx": 21722,
     "torsoInMask": 21722,
     "backOverTorso": 0,
-    "defect": 20
+    "defect": 9898
    },
    "g-fading": {
     "phase": "",
@@ -266,9 +266,9 @@
     "defect": 0
    }
   },
-  "pass": false,
-  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 1277 of 1411 checked frames, worst 115 px (0.5% of the bowl)"
+  "pass": true,
+  "meaning": "PASS here means the gate CAN see the defect: the old order shows fur inside the bowl on 1146 of 1423 checked frames, worst 9898 px (45.6% of the bowl)"
  },
  "consoleErrors": [],
- "allPass": false
+ "allPass": true
 }

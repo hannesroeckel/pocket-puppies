@@ -28,30 +28,51 @@ So this gate does two things no previous check did:
 
 THE ASSERTION, EXACTLY
 ----------------------
-`dog.draw`'s mid slot is a probe point as well as a fix. Three buffers are
-grabbed from the real render — no second draw, so nothing drifts between them:
+`dog.draw`'s mid slot is a probe point as well as a fix. Four buffers are
+grabbed from ONE real render — no second draw, so nothing drifts between them —
+and all four sit on the same side of the grain overlay:
 
     R    in care.drawBehind, after it   the room and the rug: NO dog at all
     M0   at the top of the mid slot     R + his TORSO, and nothing of his head
     M1   at the bottom of the mid slot  M0 + the vessel's far half
-    A    after the frame is finished    what he actually sees
+    A    at the end of care.drawFront   the finished composite: room, dog,
+                                        both halves of the vessel
 
-Then, over the pixels inside the bowl's published silhouette:
+A is NOT read after the step. room.js lays a full-screen grain pattern at
+alpha 0.55 over the finished frame, which nudges nearly every byte; measured
+there, "the torso is still showing" degenerates into "the grain missed this
+pixel", and the broken order scored 16 defective pixels on a frame with a
+third of the bowl visibly missing.
 
-    torso(p)   M0[p] != R[p]      his body painted this pixel
-    defect(p)  torso(p) and A[p] == M0[p]
-               his body painted it and NOTHING ever painted over it, so the
-               final image is still his fur inside the bowl's outline.
+A fifth buffer is built independently, not taken from the render:
 
-`defect` must be 0 on every frame. Note what it does NOT need: a colour
-table, a hue threshold, or a phase gate. A translucent bowl (care fading in
-or out) still CHANGES the pixel, so A != M0 and it is not counted — the test
-is valid at every value of `w` without being told about `w`.
+    REF  M0 with the far half drawn over it, from care.debug.bowlDraw
+         — what the bowl region MUST look like before his head goes on.
+
+Then, over the pixels inside the bowl's published silhouette (frames where an
+opaque bowl is actually on screen):
+
+    torso(p)   M0[p] != R[p]                   his body painted this pixel
+    defect(p)  torso(p) and A[p] == M0[p] and A[p] != REF[p]
+               his body painted it, the final image is still exactly his
+               body's colour, and that is NOT what the bowl would have
+               painted there.
+
+The REF clause is what makes it tie-proof. Without it the test cannot tell a
+buried bowl from a bowl whose cream matches a cream chest — and the cockapoo
+produced exactly one such pixel in 29 million. With it, a colour tie is
+excluded on the correct grounds: the screen is showing the right colour.
+
+`defect` must be 0 on every frame. Two supporting statistics:
 
     backOverTorso(p)   torso(p) and M1[p] != M0[p]
                the fix doing its work: a pixel his body owned that the
                vessel's far half took back. Must be > 0 somewhere, or the
                torso never overlapped the bowl and the gate proved nothing.
+    replayMismatch     M1[p] != REF[p]
+               the self-check: if the independently drawn far half disagrees
+               with the one in the render, `bowlDraw` is lying and every
+               number here is suspect. Asserted to be 0.
 
 `--old` re-creates §19.2's order on the same frames (the far half hooked into
 `drawBehind`, before the whole dog) and measures the same statistic. If the
@@ -235,8 +256,31 @@ STEP_AND_READ = r"""(cfg) => {
     mask = nx;
   }
 
+  /* ---- REF: THE CORRECT COMPOSITE, BUILT INDEPENDENTLY ------------------
+     His body (M0) with the vessel's far half laid over it, drawn here from
+     `care.debug.bowlDraw` rather than taken from the render. This is what the
+     bowl region MUST look like before his head goes on.
+
+     It exists to kill colour ties honestly. Testing "the final pixel still
+     equals his body's colour" alone cannot tell a buried bowl from a bowl
+     whose cream happens to match a cream chest -- and the cockapoo turned up
+     exactly one such pixel in 29 million. With REF the question becomes
+     "is the final pixel his body AND NOT what the bowl would have painted",
+     which is false whenever the two colours agree, because then the screen is
+     showing the right colour whatever produced it. */
+  const [, rk] = mkCanvas();
+  rk.save();
+  rk.setTransform(1, 0, 0, 1, 0, 0);
+  rk.putImageData(new ImageData(new Uint8ClampedArray(M0), W, H), 0, 0);
+  rk.restore();
+  if (opaqueEnough) {
+    rk.globalAlpha = bd.alpha;
+    G.props.drawBowl(rk, bd.x, bd.y, bd.s, bd.kind, bd.fill, bd.t, bd.ripple, 'back');
+  }
+  const REF = rk.getImageData(0, 0, W, H).data;
+
   const same = (P, Q, i) => P[i] === Q[i] && P[i + 1] === Q[i + 1] && P[i + 2] === Q[i + 2];
-  let maskPx = 0, torsoPx = 0, defect = 0, back = 0, tie = 0;
+  let maskPx = 0, torsoPx = 0, defect = 0, back = 0, tie = 0, replayMiss = 0;
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
   const samples = [];
   for (let y = 0; y < H; y++) {
@@ -249,21 +293,26 @@ STEP_AND_READ = r"""(cfg) => {
       torsoPx++;
       const tookBack = !same(M1, M0, i); /* the vessel's far half repainted it */
       if (tookBack) back++;
+      /* the replay self-check: in the current order the slot paints the far
+         half, so M1 must agree with the independently drawn REF. If it does
+         not, `bowlDraw` is lying about what was drawn and every number here is
+         suspect. (In --old mode the slot paints nothing, so this is expected
+         to differ and is reported but not asserted.) */
+      if (!same(M1, REF, i)) replayMiss++;
       if (!same(A, M0, i)) continue;     /* something painted over his body */
       /* His body painted this pixel and the final image is still exactly his
-         body's colour. That is the defect -- UNLESS the far half demonstrably
-         repainted the pixel already, in which case his body is behind the bowl
-         here whatever the final colour is, and what restored the colour was
-         the head, the near rim or a kibble happening to match his fur. A
-         colour tie is not a depth bug, so it is counted separately and named
-         rather than folded into either answer. */
-      if (tookBack) { tie++; continue; }
+         body's colour. THE DEFECT -- unless the bowl would have painted that
+         same colour here anyway, in which case nothing is visibly wrong and
+         the screen is right whatever produced it. That is a colour tie, and it
+         is named rather than folded into either answer. */
+      if (same(A, REF, i)) { tie++; continue; }
       defect++;
       if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
       if (y < by0) by0 = y; if (y > by1) by1 = y;
       if (samples.length < 4) {
         samples.push({ x: x0 + x, y: y0 + y,
                        room: [R[i], R[i + 1], R[i + 2]],
+                       bowlWouldPaint: [REF[i], REF[i + 1], REF[i + 2]],
                        his: [M0[i], M0[i + 1], M0[i + 2]],
                        afterFarHalf: [M1[i], M1[i + 1], M1[i + 2]],
                        final: [A[i], A[i + 1], A[i + 2]] });
@@ -271,6 +320,7 @@ STEP_AND_READ = r"""(cfg) => {
     }
   }
   out.colourTiesNotCounted = tie;
+  out.replayMismatchPx = replayMiss;
   if (samples.length) out.defectSamples = samples;
   out.maskPx = maskPx;
   out.torsoInMask = torsoPx;
@@ -455,6 +505,8 @@ def judge(rows, marks, old):
         "framesWithTorsoShowingInsideTheBowl": len(bad),
         "colourTiePixelsIgnoredWorstFrame": max((f.get("colourTiesNotCounted", 0)
                                                  for f in rows), default=0),
+        "replayMismatchWorstFrame": max((f.get("replayMismatchPx", 0)
+                                         for f in rows), default=0),
         "worstDefectPx": worst.get("defect", 0),
         "worstDefectFracOfBowl": worst.get("defectFrac", 0),
         "worstDefectPhase": worst.get("phase") if worst.get("defect") else None,
@@ -476,6 +528,7 @@ def judge(rows, marks, old):
                              100 * worst.get("defectFrac", 0)))
     else:
         res["pass"] = (not bad and not uncovered and not thin
+                       and res["replayMismatchWorstFrame"] == 0
                        and len(checked) >= MIN_MASK_FRAMES
                        and len(overlap) >= MIN_OVERLAP_FRAMES
                        and len(took) >= MIN_OVERLAP_FRAMES)
@@ -534,7 +587,7 @@ async def main():
                           "framesWhereTheFarHalfTookThosePixelsBack",
                           "framesWithTorsoShowingInsideTheBowl",
                           "worstDefectPx", "worstDefectFracOfBowl", "worstDefectPhase",
-                          "colourTiePixelsIgnoredWorstFrame",
+                          "colourTiePixelsIgnoredWorstFrame", "replayMismatchWorstFrame",
                           "phasesWithTooFewCheckedFrames", "beatsWithNoBowlToLookInside"):
                     print("    %-42s %s" % (k, r[k]))
                 print("    checked frames per phase: %s"
