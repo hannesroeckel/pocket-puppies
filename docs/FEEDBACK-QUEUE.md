@@ -69,6 +69,36 @@ Notes:
 - The mis-association cue legend already exists and is separate — it shows what he *thinks* a
   word means. Don't merge the two; they answer different questions.
 
+## 1c. The ball can land behind the nav bar and become unreachable 🐞 BUG — fix first
+
+> "sometimes when flicking the ball it is behind the navigation buttons which doesn't allow
+> the player to reach it again"
+
+**Confirmed, with numbers.** Design space is 390×844 (`BALANCE.view`). The nav is `h: 58`
+(`BALANCE.ui.nav`) sitting above the device's bottom safe-area inset (40 on the target
+iPhone), so **the nav's top edge lands around y ≈ 746**.
+
+The toy's positions are hardcoded and none of them know the nav exists:
+
+| where | value | verdict |
+|---|---|---|
+| `T.home` | `[330, 736]` | **10 units** above the nav — any variance tucks it under |
+| `toy.y = 782` after `hitReaction()` (`dog/toy.js` ~176) | 782 | **inside the nav band — unreachable** |
+| x clamps | `40–350`, `54–336` | irrelevant; the nav spans the full width |
+
+So hitting him with the ball is the reliable way to lose it: he flinches, the ball drops "at
+her feet" at y=782, and the nav swallows it. She cannot pick it up again.
+
+**Fix — derive the bound, don't patch the number.** This is the same mistake as the bowl's
+floor: a hardcoded constant with nothing tying it to the thing it must respect. Publish a
+single **reachable play area** (bottom = nav top edge − margin, computed from the real nav
+geometry *and* `env(safe-area-inset-bottom)`), and clamp **every** interactive prop to it —
+the toy, both bowls, and anything a walk brings home. Then assert it: no interactive prop's
+hit area may ever intersect the nav's rect, on any frame, at any safe-area inset.
+
+Note the nav is being restructured from 8 pills to ~5 on `feature/design-pass`, which changes
+its height — another reason the bound must be derived rather than typed in.
+
 ## 2. More to buy in the shop
 
 Current stock is 8: chew bone 55, biscuits 25, good treats 60, softer brush 70, oatmeal soap
