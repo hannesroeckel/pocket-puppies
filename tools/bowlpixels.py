@@ -267,22 +267,49 @@ STEP_AND_READ = r"""(cfg) => {
      exactly one such pixel in 29 million. With REF the question becomes
      "is the final pixel his body AND NOT what the bowl would have painted",
      which is false whenever the two colours agree, because then the screen is
-     showing the right colour whatever produced it. */
+     showing the right colour whatever produced it.
+
+     Gated on bd.split, NOT on "a bowl is on screen": the slot only lays the far
+     half down when the vessel is actually split around him. While it is still
+     in her hand, or not yet placed, the WHOLE bowl goes down in the front pass
+     instead and the slot paints nothing -- so compositing a far half into REF
+     there invents a layer the render never drew.
+
+     And gated on bd.split ALONE, not on the opacity used for the mask: while
+     the care fade is running the vessel is still split and the slot still
+     paints it, just see-through. Skipping REF there left the whole far half
+     out of the reference on those frames and reported it as 4-5k px of
+     replayMismatch -- the self-check correctly refusing to believe a
+     reference that had been built from the wrong condition. */
+  const slotPaints = !!bd.split;
   const [, rk] = mkCanvas();
   rk.save();
   rk.setTransform(1, 0, 0, 1, 0, 0);
   rk.putImageData(new ImageData(new Uint8ClampedArray(M0), W, H), 0, 0);
   rk.restore();
-  if (opaqueEnough) {
+  if (slotPaints) {
     rk.globalAlpha = bd.alpha;
     G.props.drawBowl(rk, bd.x, bd.y, bd.s, bd.kind, bd.fill, bd.t, bd.ripple, 'back');
   }
   const REF = rk.getImageData(0, 0, W, H).data;
+  out.slotPaints = slotPaints;
 
   const same = (P, Q, i) => P[i] === Q[i] && P[i + 1] === Q[i + 1] && P[i + 2] === Q[i + 2];
+  /* REF is an INDEPENDENT re-render of the same paint, so comparing it needs a
+     rounding tolerance: laying a gradient over a putImageData'd buffer lands
+     within one least-significant bit of laying it over the live canvas, and
+     4,199 px of a shiba's eating frame differed by exactly that -- rendered
+     [247,233,208] vs replayed [247,233,209], both plainly the bowl's cream
+     against fur at [226,141,75]. Two LSBs is far below anything visible and
+     far above the rounding.
+     `same` stays EXACT where it is meaningful: A and M0 come off the same
+     canvas, so "his body's colour survived untouched" is a bit-for-bit claim. */
+  const near = (P, Q, i) => Math.abs(P[i] - Q[i]) <= 2
+    && Math.abs(P[i + 1] - Q[i + 1]) <= 2 && Math.abs(P[i + 2] - Q[i + 2]) <= 2;
   let maskPx = 0, torsoPx = 0, defect = 0, back = 0, tie = 0, replayMiss = 0;
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
   const samples = [];
+  const rs = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const j = y * W + x;
@@ -298,14 +325,20 @@ STEP_AND_READ = r"""(cfg) => {
          not, `bowlDraw` is lying about what was drawn and every number here is
          suspect. (In --old mode the slot paints nothing, so this is expected
          to differ and is reported but not asserted.) */
-      if (!same(M1, REF, i)) replayMiss++;
+      if (!near(M1, REF, i)) {
+        replayMiss++;
+        if (rs.length < 4) rs.push({ x: x0 + x, y: y0 + y,
+              his: [M0[i], M0[i+1], M0[i+2]],
+              rendered: [M1[i], M1[i+1], M1[i+2]],
+              replayed: [REF[i], REF[i+1], REF[i+2]] });
+      }
       if (!same(A, M0, i)) continue;     /* something painted over his body */
       /* His body painted this pixel and the final image is still exactly his
          body's colour. THE DEFECT -- unless the bowl would have painted that
          same colour here anyway, in which case nothing is visibly wrong and
          the screen is right whatever produced it. That is a colour tie, and it
          is named rather than folded into either answer. */
-      if (same(A, REF, i)) { tie++; continue; }
+      if (tookBack || near(A, REF, i)) { tie++; continue; }
       defect++;
       if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
       if (y < by0) by0 = y; if (y > by1) by1 = y;
@@ -321,6 +354,8 @@ STEP_AND_READ = r"""(cfg) => {
   }
   out.colourTiesNotCounted = tie;
   out.replayMismatchPx = replayMiss;
+  if (rs.length) out.replaySamples = rs;
+  out.bd = bd;
   if (samples.length) out.defectSamples = samples;
   out.maskPx = maskPx;
   out.torsoInMask = torsoPx;
@@ -505,8 +540,12 @@ def judge(rows, marks, old):
         "framesWithTorsoShowingInsideTheBowl": len(bad),
         "colourTiePixelsIgnoredWorstFrame": max((f.get("colourTiesNotCounted", 0)
                                                  for f in rows), default=0),
+        # only over CHECKED frames: REF is only ever consulted there, so a
+        # disagreement on a frame the gate does not look inside is noise
         "replayMismatchWorstFrame": max((f.get("replayMismatchPx", 0)
-                                         for f in rows), default=0),
+                                         for f in checked), default=0),
+        "replayMismatchWorstAnyFrame": max((f.get("replayMismatchPx", 0)
+                                            for f in rows), default=0),
         "worstDefectPx": worst.get("defect", 0),
         "worstDefectFracOfBowl": worst.get("defectFrac", 0),
         "worstDefectPhase": worst.get("phase") if worst.get("defect") else None,
@@ -516,6 +555,10 @@ def judge(rows, marks, old):
         "phasesWithTooFewCheckedFrames": thin,
         "beatsWithNoBowlToLookInside": uncovered,
         "perCheckpoint": cp,
+        "worstReplayFrame": (lambda f: {"phase": f.get("phase"), "px": f.get("replayMismatchPx"),
+                                        "bd": f.get("bd"), "samples": f.get("replaySamples")}
+                             )(max(checked, key=lambda f: f.get("replayMismatchPx", 0)))
+        if checked else None,
     }
     if old:
         # the control: the gate must SEE §19.2's defect, not merely fail to
@@ -588,6 +631,7 @@ async def main():
                           "framesWithTorsoShowingInsideTheBowl",
                           "worstDefectPx", "worstDefectFracOfBowl", "worstDefectPhase",
                           "colourTiePixelsIgnoredWorstFrame", "replayMismatchWorstFrame",
+                          "replayMismatchWorstAnyFrame",
                           "phasesWithTooFewCheckedFrames", "beatsWithNoBowlToLookInside"):
                     print("    %-42s %s" % (k, r[k]))
                 print("    checked frames per phase: %s"
