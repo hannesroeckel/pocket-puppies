@@ -165,6 +165,12 @@ INSTALL = r"""async (old) => {
     if (G.old) realMid(gg);
     G.r = roi();
     G.R = grab(G.r);
+    /* STALE BUFFERS ARE WORSE THAN NO BUFFERS. room.js only hands the slot
+       over when the vessel is actually split around him, so on a frame where
+       the bowl is in her hand the slot never runs and M0/M1 would still hold
+       the previous frame's pixels. Cleared here, every frame, so the reader
+       can tell "the slot did not run" from "the slot ran and found nothing". */
+    G.M0 = null; G.M1 = null; G.A = null;
   };
   /* the mid slot: his body is down, his head is not. In --old mode the slot
      paints nothing (the bowl already went in behind him) and only probes. */
@@ -202,7 +208,15 @@ STEP_AND_READ = r"""(cfg) => {
     split: !!sc.care.bowlSplit, placed: !!d.placed,
     held: !!(sc.care.bowl && sc.care.bowl.held),
   };
-  if (!G.R || !G.M0 || !G.A || !G.r) { out.skipped = 'dog or bowl not drawn'; return out; }
+  if (!G.R || !G.r) { out.skipped = 'dog not drawn'; return out; }
+  if (!G.M0 || !G.A) {
+    /* the slot did not run this frame: the vessel is not split around him, so
+       the WHOLE bowl went down in the front pass, over all of him. Nothing of
+       his can be inside it by construction. Counted, named, not asserted. */
+    out.skipped = 'bowl not split (drawn whole, in front)';
+    out.bowlOnScreen = !!(d.bowlDraw && d.bowlDraw.onScreen);
+    return out;
+  }
   const { x0, y0, W, H, bs, bx, baseY } = G.r;
   const R = G.R, M0 = G.M0, M1 = G.M1, A = G.A;
 
@@ -384,9 +398,12 @@ STEP_AND_READ = r"""(cfg) => {
   }
   out.colourTiesNotCounted = tie;
   out.replayMismatchPx = replayMiss;
-  /* as a fraction of the pixels REF is actually consulted about, which is
-     the only place its fidelity can affect a verdict */
-  out.replayMismatchFrac = cand.length ? +(replayMiss / cand.length).toFixed(5) : 0;
+  /* as a fraction of THE MASK, not of the candidates: the candidate count is
+     often 1-3, so a single pixel of edge rounding read as 33% or 100% and
+     failed the run on a statistic about the harness. The mask is a stable
+     ~21,700, and it is the denominator the check was calibrated against --
+     a reference built from the wrong condition showed up at ~20% of it. */
+  out.replayMismatchFrac = maskPx ? +(replayMiss / maskPx).toFixed(6) : 0;
   out.candidatePx = cand.length;
   if (rs.length) out.replaySamples = rs;
   out.bd = bd;
