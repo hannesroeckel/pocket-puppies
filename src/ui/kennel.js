@@ -114,12 +114,19 @@ export const COPY = {
      line 2 gives the count and the chip gives the gap, so this gives the HOW.
      Widening the slot would mean narrowing the chip or restacking a 92-unit
      card, and neither is worth it for one row. */
-  newLockedNote: 'By caring for him.',
+  /* NO TERMINAL FULL STOP, here or in `newReadyNote`. The row-note slot is
+     period-free everywhere else in the game — all eleven of the shop's item
+     notes and every 'earned' note below — and these two were the exceptions.
+     It showed: the adoption card carried 'She is ready to come home' with no
+     stop directly above 'Nothing to pay.' with one, in the same card, two
+     lines apart. Sentences that stand alone (`knock`, `reveal`, `earnedNone`)
+     keep their stops; notes that label a row do not. */
+  newLockedNote: 'By caring for him',
   newReady: 'She is ready to come home',
   /* SHORT ON PURPOSE: it shares the line with the 'Bring her home' chip, and
      the long version truncated to "You earn...". The four words that matter
      are the ones that say this is not a purchase. */
-  newReadyNote: 'Nothing to pay.',
+  newReadyNote: 'Nothing to pay',
   adopt: 'Bring her home',
   atGate: (at) => `${at} care points`,
 

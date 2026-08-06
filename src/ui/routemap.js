@@ -209,7 +209,14 @@ export function createRouteMap(opts = {}) {
     c.fillStyle = `rgba(48,24,12,${(0.52 * a).toFixed(3)})`;
     c.fillRect(0, 0, W, H);
     const top = M.top - 26 + (1 - a) * 40;
-    const h = M.bottom - M.top + 96;
+    /* THE PAPER HAS TO REACH PAST THE SET-OFF PILL. `cardTail` was a hardcoded
+       96 here, which put the paper's bottom edge at 770 while the pill —
+       centred at setOff.y=754, 50 tall, plus the 4-unit tactile edge under it —
+       ends at 781. The primary action of the whole beat hung 11 units off the
+       bottom of its own card, over the dimmed room. Rendered and seen; no gate
+       measures a button against the card it sits on. Now a tunable, because
+       every number that positions something belongs in state/balance.js. */
+    const h = M.bottom - M.top + M.cardTail;
     const g = c.createLinearGradient(0, top, 0, top + h);
     g.addColorStop(0, C.paper); g.addColorStop(0.6, C.paper); g.addColorStop(1, C.paper2);
     c.fillStyle = g;

@@ -61,8 +61,11 @@ export function heartPath(c, x, y, s, rot) {
    for is a bond you optimise instead of a creature you read. Quantifying it
    also quantifies NEGLECT, which is how a pet game starts accusing someone who
    had a busy week — and "he never resents her" is a principle this project has
-   spent six stages protecting. `drawAffectionMeter` above is still unmounted
-   and must stay that way; this function is not the loophole.
+   spent six stages protecting. `drawAffectionMeter` is not "above, unmounted"
+   any more — stage 9 DELETED it, along with the generic `drawBar` it shared a
+   shape with (see the file header). Do not read this row-drawing function as the
+   place to reintroduce either one: it takes a `row` from a fixed table and there
+   is no row for the bond, by construction.
 
    ENERGY IS HERE AS A WORD AND NOT AS A BAR, which is a deliberate line rather
    than an omission — see the note on `BALANCE.ui.tokens.needs`. Nothing she can

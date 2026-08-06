@@ -1341,7 +1341,11 @@ export const BALANCE = {
         { id: 'bone', kind: 'toy', name: 'A chew bone', cost: 55,
           note: 'He can fetch this one instead of the ball' },
         { id: 'treatPlain', kind: 'treat', name: 'Bag of biscuits', cost: 25,
-          give: 5, note: 'Five of them. He will hear the bag.' },
+          /* ONE CLAUSE, NO TERMINAL STOP, like the eleven notes around it. This
+             read 'Five of them. He will hear the bag.' — the only note in the
+             shop with a full stop at the end of it, which on screen made this
+             one row look like it had been written by someone else. */
+          give: 5, note: 'Five of them — he will hear the bag' },
         { id: 'treatGood', kind: 'treat', name: 'The good treats', cost: 60,
           give: 5, needs: 'treatsGood',
           note: 'The ones from behind the counter' },
@@ -2165,6 +2169,14 @@ export const BALANCE = {
          brown drawn over the dimmed room, which is the cream-on-cream mistake
          in the other direction */
       titleY: 102, hintY: 123, choiceY: 706,
+      /* how far the paper runs on BELOW `bottom`, so it finishes underneath the
+         Set-off pill instead of behind it. The pill's lowest pixel — including
+         the 4-unit tactile edge — is at setOff.y + setOff.h/2 + edge/2 = 781;
+         the paper's bottom is (top - 26) + (bottom - top + cardTail), so 119
+         puts it at 793 and leaves 12 units of paper under the button. At the
+         old value of 96 the paper stopped at 770 and the button hung off it.
+         Ceiling: the safe-area bottom is at 844 - 40 = 804. */
+      cardTail: 119,
       wobble: 1.9,          // how far the "hand-drawn" ink strays, virtual units
       wobbleRate: 3.1,
       house: [196, 640],
