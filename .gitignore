@@ -1,0 +1,9 @@
+# Reference art — generated turnaround sheets, walk cycles, photo references.
+# Deliberately NOT committed: this repo is public (GitHub Pages serves it), these
+# are large binaries, and they are a target to draw against rather than anything
+# the game ships. Keep them local; docs/V2-PLAN.md records what they're for.
+/refs/
+
+# Working scratch
+/tools/__pycache__/
+*.pyc
