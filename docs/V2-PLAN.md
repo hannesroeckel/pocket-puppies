@@ -69,8 +69,42 @@ stages of a step.*
 Breeds: **schnoodle** (warm auburn `#b4703f`, the gift puppy — do this one first),
 **cockapoo** (apricot/cream), **shiba** (orange-tan and cream).
 
+## ✅ Reference sheets received — 2026-08-06
+
+Hannes generated them in ChatGPT and dropped them in `refs/` (gitignored, local only):
+
+- **`refs/schnoodle-turnaround.png`** — front, three-quarter, **full side profile**, rear.
+  Consistent character across all four.
+- **`refs/schnoodle-walkcycle.png`** — four side-profile frames of a step.
+
+**What they give us.** The side profile is the silhouette the rig has never had, and the walk
+sheet is a usable *look* reference for the gait. Colour and character match the in-game dog
+closely: warm auburn curly coat, big round dark eyes with catchlights, short muzzle, dark
+button nose, floppy curly ears framing the face, no contrasting eyebrows (which is the call
+we made), fluffy up-curled tail.
+
+**Two discrepancies to resolve deliberately rather than by accident:**
+
+1. **Proportions differ.** The reference dog stands on noticeably **longer legs** with a more
+   upright adult stance. The in-game dog is chunkier and shorter-legged — deliberately, for
+   neoteny (see the cute-vs-angry audit in `dog/breeds.js`). **Match the game's proportions,
+   not the reference's**, or the side view will not read as the same animal as the front view.
+   Take the reference for silhouette, coat, ear and tail *shapes*; keep our leg length,
+   head-to-body ratio and eye size.
+2. **The reference reads more toy-poodle than schnoodle** — no beard or moustache at all. The
+   in-game dog keeps a soft **same-colour** beard breaking his jaw line. Keep ours; it is what
+   stops him being a plain doodle, and it costs nothing now that it is not a pale patch.
+
+**On the walk sheet specifically:** the four frames are four attractive poses rather than a
+rigorous contact → down → passing → up cycle, and the foot-falls do not read as a consistent
+gait. Fine as a *look* target; the actual gait timing has to be built properly, not traced.
+
+Still worth generating later, at no urgency: the **cockapoo** turnaround, and a couple of
+in-motion poses (sitting, lying, mid-trick in profile).
+
 ## Sequencing
 1. Ship the gift.
 2. Let her live with it for a while — what she actually does with it is better information
    than any plan here.
-3. Then v2, starting with the turnaround sheets.
+3. Then v2. ✅ Reference sheets are now in hand, so the first real step is
+   `silhouette.side` for the schnoodle.
