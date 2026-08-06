@@ -1591,7 +1591,19 @@ export function createRoomScene() {
          found on his phone.
          HE IS NOT HERE while he is away: the room is the whole point of the
          absence beat, and the dog is simply not drawn. */
-      if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat, care.drawMid);
+      /* The slot is handed over ONLY when there is actually a vessel to thread
+         through him. `care.bowlSplit` is `bowlIsSplit()` itself, not a copy of
+         its condition, and `drawMid` re-asks it anyway, so the two cannot
+         drift apart. Passing it unconditionally cost nothing visible but was
+         not free: entering the slot swaps the transform out and back, and a
+         re-derived matrix rounds the odd antialiased fur edge one bit
+         differently, which showed up as four pixels of ±1 on a frame with no
+         bowl in it at all. With no bowl there is now no slot, so the dog is
+         byte-for-byte what he was before §19.5 by construction rather than by
+         measurement — and `getTransform` is off the per-frame path for all the
+         time he is not being fed. */
+      const bowlSlot = care.bowlSplit ? care.drawMid : null;
+      if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat, bowlSlot);
       /* he is away, so nothing of his is in front of anything: the slot still
          has to be run or the bowl would lose its far half entirely */
       else care.drawMid(g);

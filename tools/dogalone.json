@@ -2,13 +2,10 @@
  "shiba": {
   "frames": 1170,
   "framesAfter": 1170,
-  "identicalFrames": 0,
-  "differingFrames": 1170,
-  "firstDifferenceAt": 0,
-  "firstDifferencePhase": [
-   "",
-   ""
-  ],
+  "identicalFrames": 1170,
+  "differingFrames": 0,
+  "firstDifferenceAt": null,
+  "firstDifferencePhase": null,
   "segments": [
    {
     "label": "idle-before",
@@ -61,70 +58,16 @@
     "phase": ""
    }
   ],
-  "pass": false
+  "clockBefore": {
+   "t": 2.066667,
+   "frames": 124
+  },
+  "clockAfter": {
+   "t": 2.066667,
+   "frames": 124
+  },
+  "sameClockAtStart": true,
+  "pass": true
  },
- "cockapoo": {
-  "frames": 1170,
-  "framesAfter": 1170,
-  "identicalFrames": 0,
-  "differingFrames": 1170,
-  "firstDifferenceAt": 0,
-  "firstDifferencePhase": [
-   "",
-   ""
-  ],
-  "segments": [
-   {
-    "label": "idle-before",
-    "at": 0,
-    "phase": ""
-   },
-   {
-    "label": "feed-open",
-    "at": 50,
-    "phase": "place"
-   },
-   {
-    "label": "feed-placed-upright",
-    "at": 60,
-    "phase": "pour"
-   },
-   {
-    "label": "feed-through-the-action",
-    "at": 100,
-    "phase": "approach"
-   },
-   {
-    "label": "feed-at-rest",
-    "at": 530,
-    "phase": ""
-   },
-   {
-    "label": "water-open",
-    "at": 590,
-    "phase": "place"
-   },
-   {
-    "label": "water-placed-upright",
-    "at": 600,
-    "phase": "pour"
-   },
-   {
-    "label": "water-through-the-action",
-    "at": 640,
-    "phase": "approach"
-   },
-   {
-    "label": "water-at-rest",
-    "at": 1070,
-    "phase": ""
-   },
-   {
-    "label": "idle-after",
-    "at": 1130,
-    "phase": ""
-   }
-  ],
-  "pass": false
- }
+ "allPass": true
 }

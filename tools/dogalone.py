@@ -68,13 +68,31 @@ SETUP = r"""() => {
   return true;
 }"""
 
-STEP_HASH = r"""async (n) => {
+# THE REGION THE CHANGE COULD POSSIBLY TOUCH: the dog, plus the floor in front
+# of him where a bowl would stand. Reading the whole 1170x2532 canvas back every
+# frame is an 11.8 MB GPU->CPU copy and made this sweep take longer than the
+# rest of the verification put together. The FULL canvas is checked separately
+# and comes out bit-identical (diff bbox None, DPR 3, both trees on the same
+# clock), and nothing outside this rect is drawn by code this branch touches.
+RECT = """() => {
+  const v = window.__pp.view;
+  const X = (vx) => Math.max(0, Math.round((v.offX + vx * v.vs) * v.dpr));
+  const Y = (vy) => Math.max(0, Math.round((v.offY + vy * v.vs) * v.dpr));
+  const cv = document.querySelector('canvas');
+  const x0 = X(70), y0 = Y(300);
+  return { x: x0, y: y0,
+           w: Math.min(cv.width, X(320)) - x0,
+           h: Math.min(cv.height, Y(800)) - y0 };
+}"""
+
+STEP_HASH = r"""async (a) => {
+  const n = a.n, r = a.rect;
   const cv = document.querySelector('canvas');
   const cx = cv.getContext('2d');
   const out = [];
   for (let k = 0; k < n; k++) {
     window.__pp.step(1 / 60, 1);
-    const d = cx.getImageData(0, 0, cv.width, cv.height);
+    const d = cx.getImageData(r.x, r.y, r.w, r.h);
     const h = await crypto.subtle.digest('SHA-256', d.data.buffer);
     const b = new Uint8Array(h);
     let s = '';
@@ -97,9 +115,17 @@ async def boot(pg, base, breed):
     #
     # Stubbing rAF before any script runs means the loop never advances on its
     # own: every frame in both trees comes from an explicit step() here.
+    #
+    # THE WALL CLOCK HAS TO GO TOO. `state/game.js` defaults a dozen arguments
+    # to `Date.now()`, so the bond ledger and the need decay advance with real
+    # time as well as with dt. The two trees are run one after the other, which
+    # puts minutes between them, and that alone made 309 of 1170 frames differ
+    # while the SAME frames stepped in lockstep were bit-identical. Freezing it
+    # removes the difference between "run now" and "run in five minutes".
     await pg.add_init_script(
         "window.requestAnimationFrame = function () { return 0; };"
-        "window.cancelAnimationFrame = function () {};")
+        "window.cancelAnimationFrame = function () {};"
+        "Date.now = function () { return 1767225600000; };")
     await pg.goto("%s/index.html?breed=%s" % (base, breed))
     await pg.wait_for_function("() => window.__pp && window.__pp.loop && window.__pp.loop.scene")
     await pg.evaluate("() => window.__pp.skipIntro('Alfie')")
@@ -122,9 +148,11 @@ async def script(pg, marks):
     st = S["stage"]
     rows = []
 
+    rect = await pg.evaluate(RECT)
+
     async def hashn(n, label):
         marks.append((label, len(rows)))
-        rows.extend(await pg.evaluate(STEP_HASH, n))
+        rows.extend(await pg.evaluate(STEP_HASH, {"n": n, "rect": rect}))
 
     await hashn(50, "idle-before")
     for mode in ("feed", "water"):
