@@ -2235,6 +2235,11 @@ pixels under food and leaves 0–1 showing; the split inverts both to 0 and 1.6k
   buffer. Consequence: with his head down, the bowl reads as an open crescent rather than a full
   ellipse. Judged the better trade — the alternative puts a rim line across his nose, which is the
   original defect wearing a hat.
+  > **THIS DEVIATION WAS THE DEFECT. See §19.5.** "Behind the whole dog" is fine while his head is
+  > down — and the sentence above only ever considered that case. It is wrong the moment he sits
+  > up, because then the thing behind which the far rim sits is his *chest*, and the bowl reads as
+  > half-buried in him. Upright is most of the time. There are now **three** hooks, and the middle
+  > one is between his body and his head.
 - **The kibble spread was widened** (`wide` 1.12–1.22, mound rx 21→23.4) so a little food still
   reads around his muzzle. Safe by construction now: the contents are painted before he is and can
   no longer land on his nose whatever their extent. Cosmetic, and the only art change here.
@@ -2247,3 +2252,102 @@ pixels under food and leaves 0–1 showing; the split inverts both to 0 and 1.6k
   Before that it identified the rim by `A != Bf`, which also caught the **water drips** — they are
   drawn inside `drawFront` too — and mis-scored 132 drinking frames. A gate that fails in the
   reassuring direction is the exact failure mode this section exists to document.
+
+### 19.5 The depth seam: the split moves between his body and his head
+
+§19.2 was reverted. It has now landed again, at the right depth.
+
+**What the human saw the second time.** "now the bowl looks like it is partially inside the dog" —
+with a screenshot of him sitting upright after finishing, the placed bowl in front of him at floor
+level, and its upper/far portion hidden behind his chest. §19.2 was correct in intent (the food used
+to be painted over his muzzle) and correct to split the vessel. It hooked the far half in through
+`care.drawBehind`, which runs *before the whole dog*, so the far rim, the interior wall and the food
+were composited behind his **torso** as well as his head.
+
+**Why nobody caught it, and this is the part that matters.** Every render checked for §19.2 was an
+*eating* frame, where the defect is invisible: his head is down over the bowl and his body is up and
+behind it. The upright/"full" state with a bowl on the floor — the most ordinary state a bowl can be
+in — had never been rendered by anyone. The gate in §19.3 was sound and passed honestly; it simply
+only ever looked at the muzzle and the well, and the defect was in his chest.
+
+**The correct model.** The bowl stands on the floor *in front of* him, so it is nearer the camera
+than his torso. Therefore: nothing on his torso may ever occlude any part of the bowl, and the only
+thing that may is his muzzle, while it descends into the vessel.
+
+**The fix: `dog/draw.js` publishes a depth slot.** `draw(g, pet, mood, coat, mid)` calls `mid(g)`
+between the body pass and the head pass, in the *caller's* coordinate space:
+
+```
+tail, hind legs, haunches, body, tail root, neck, FRONT LEGS, ruff, collar, chest shadow
+                              -> mid(g) <-
+                       head, muzzle, ears, face, furnishings
+```
+
+`care.drawBehind` splits in two accordingly. The fur pile stays under all of him (a pile of shed fur
+on the rug really is behind his paws); the vessel, its interior, its far rim and the food move to
+`care.drawMid`, which `scenes/room.js` hands to the slot. `care.drawFront` is unchanged, so the near
+rim still comes back over his muzzle and the nose still sits *between* the two halves — the eating
+composite of §19.2 is preserved exactly, because the head's relationship to both halves never moved.
+Only the torso's did.
+
+Chosen over the cheaper alternative (gate the split on the pose, drawing the whole bowl in front of
+him while he is upright) because that has a switch point, and a switch point in compositing is a pop
+waiting for the one frame nobody rendered — which is the mistake being fixed. The slot is right at
+every pose and every intermediate frame, and it is the general answer for any prop at chest depth.
+
+**It is a pure reordering.** The slot swaps only the transform matrix (`getTransform` /
+`setTransform`, with an arithmetic fallback) and touches no other context field, so nothing about
+how any part of him looks on its own can move. `tools/dogalone.py` proves it rather than arguing it:
+the pre-fix tree and this one are served side by side, the same script is run in both with all three
+care prop layers suppressed, and the whole canvas is SHA-256'd every frame.
+
+**The gate that would have caught it: `tools/bowlpixels.py`.** Two things §19.3's gate did not do.
+
+1. It drives the **whole action** and asserts on **every frame** — placed-and-upright, pouring,
+   approaching, eating/drinking, licking/shaking, **finished and sat back up**, fading, at rest —
+   for all three breeds and both feed and water. Not a sample.
+2. The assertion is **no pixel of his torso may survive inside the bowl's outline**. The slot is
+   its own probe: `R` (before the dog), `M0` (top of the slot: room + torso), `M1` (bottom of the
+   slot: + the far half) and `A` (final) are all grabbed from one real render, so nothing drifts
+   between them. `torso(p) = M0[p] != R[p]`; the defect is `torso(p)` and `A[p] == M0[p]` — his body
+   painted it and nothing ever painted over it.
+
+`--old` re-creates §19.2's order on the same frames, so the gate proves it can *see* the defect
+rather than merely failing to find it.
+
+Three things learned while writing it, all recorded because each made the gate lie for a while:
+
+- A mask built from geometry alone kept testing a **phantom** bowl after the action closed and the
+  bowl had gone, reading the dog standing where a bowl used to be as ~20k defective pixels. The mask
+  is now the published silhouette ANDed with the bowl the game actually drew, from
+  `care.debug.bowlDraw` — empty exactly when there is no bowl on screen.
+- Laying that bowl down at the care fade's own alpha meant that at alpha 0.993 only the
+  double-painted rim overlap reached 255, silently shrinking the mask to a third of the bowl on
+  precisely the "placed, upright, not yet eating" beat. The fade is now one frame-level gate, not a
+  per-pixel one.
+- A pixel the far half demonstrably repainted cannot be a depth defect whatever colour the final
+  image ends up — the shiba's cream chest against the bowl's cream ties on a handful of pixels per
+  frame. Those are counted and named as colour ties instead of being folded into either answer.
+
+**`sw.js` 8.2.0 → 8.4.0**, not 8.2.1: the revert shipped as 8.3.0, so the generation has to land
+above what is live or the phones that took the revert would never fetch this. No file added or
+renamed; `PRECACHE` still 49 entries matching the tree.
+
+#### 19.5.1 What was actually measured
+
+| gate | result |
+|---|---|
+| `tools/bowlpixels.py` (current order) | **0** torso pixels inside the bowl's outline, on every checked frame of all six actions — shiba/cockapoo/schnoodle x feed/water, 1,391–1,423 checked frames each, every phase from `place` to `finish`. Zero console errors. |
+| `tools/bowlpixels.py --old` (§19.2's order, same frames) | schnoodle feed **8,641 px = 39.8%** of the bowl buried at `finish`; water **9,898 px = 45.6%**. And **0 while eating** — which is exactly why every eating render passed and the defect shipped twice. |
+| `tools/dogalone.py` (lockstep, whole-page PNG bytes, DPR 3) | 830 frames per breed, all three breeds, **0 differing frames**, clocks matched. |
+| dark mode | the canvas is **byte-identical** to light at both the placed-upright and the finish beat, with and without reduced motion (the app pins `color-scheme: light`). |
+| frame cost, bowl split, real loop | DPR 2: median 2.0–2.2 ms, p95 3.7–4.5 ms. DPR 3: median 2.1–2.3 ms, p95 3.6–5.3 ms. Budget is 16.7 ms. Zero external requests. |
+| v1–v6 saves | all six migrate, minimal and realistic, name and coins preserved; v2–v6 boot and feed with the bowl split. (v1 refuses to start care on this tree **and on the pre-fix tree** — pre-existing, not this change.) |
+| offline | boots and plays with the network killed, `pp-cache-v8.4.0`, 50 entries. |
+
+The eating composite was checked against the reference it was built to match
+(the right-hand panel of `C:	mp\pp8\shots\PAIRZOOM-shiba-feed.png`): muzzle
+down inside the vessel, near rim crossing in front of it, mouth and food
+visible behind the rim, both front paws whole and beside it. Unchanged — which
+is what the model predicts, because the head's relationship to both halves of
+the bowl never moved. Only the torso's did.

@@ -63,23 +63,46 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
-/* 8.2.0 — the bowl is split across the dog (ARCHITECTURE §19). No file was
-   added or renamed, so PRECACHE was untouched by that fix; but
-   `scenes/props.js`, `dog/care.js` and `scenes/room.js` all changed, and a
-   compositing fix served from the old cache is a fix that ships to nobody. */
-/* STAGE 9 (the design-system pass) ADDS TWO MODULES — `src/ui/tokens.js` and
-   `src/ui/surface.js` — so this generation MUST move and both MUST appear in
-   PRECACHE below. Every UI module now imports tokens.js; if it were missing from
-   the list the game would boot fine online and, offline, fail to resolve an
-   import in `ui/nav.js`, `ui/hud.js`, `ui/meter.js`, `ui/sheet.js`, `ui/shop.js`,
-   `ui/kennel.js` and `ui/install.js` at once — i.e. a blank screen on the plane,
-   from one forgotten line. `py tools/check-precache.py` now expects 51 entries.
+/* THE RULE THIS NUMBER TAUGHT US: a revert must never walk it backwards. When
+   8.2.0 was reverted, reverting the commit also reverted this constant to 8.1.0
+   — and a phone already holding the 8.2.0 cache would then have kept serving the
+   withdrawn version for ever, because the worker only rebuilds when the cache
+   NAME changes and has no notion of "newer". The revert shipped as 8.3.0 for
+   exactly that reason. Always forward, never back.
 
-   9.0.0 SUPERSEDES 8.2.0 rather than sitting beside it: this branch carries the
-   bowl split as well (it merged in from master), so a device that never saw
-   8.2.0 still gets that fix with this generation. The version is one increasing
-   line, not a per-fix label. */
-const VERSION = '9.0.0';
+   HISTORY OF THE BOWL, because the number records it:
+     8.2.0  split the vessel across the dog — fixed food-painted-over-the-muzzle,
+            but hooked the far half in behind the WHOLE dog, so an upright dog had
+            a bowl buried in his chest. Upright is most of the time and eating is
+            a few seconds, so that was the worse of the two failures.
+     8.3.0  the revert. Unsplit bowl, shipped forward, and this is what the
+            phones in the field are holding.
+     8.4.0  the split comes back AT THE RIGHT DEPTH (§19.5): `dog/draw.js` gained
+            a `mid` callback, so `care.drawMid` threads the vessel/interior/far
+            rim/food between his body and his head, `care.drawFront` carries only
+            the near rim and `care.drawBehind` only the fur pile. The muzzle goes
+            into the vessel (8.2.0's intent) AND his torso no longer occludes it.
+
+   8.5.0 — THE DESIGN-SYSTEM PASS, ON TOP OF THE 8.4.0 BOWL.
+
+   TWO MODULES ARE NEW — `src/ui/tokens.js` and `src/ui/surface.js` — so this
+   generation MUST move and both MUST appear in PRECACHE below. Every UI module
+   now imports tokens.js; if it were missing from the list the game would boot
+   fine online and, offline, fail to resolve an import in `ui/nav.js`, `ui/hud.js`,
+   `ui/meter.js`, `ui/sheet.js`, `ui/shop.js`, `ui/kennel.js` and `ui/install.js`
+   at once — i.e. a blank screen on the plane, from one forgotten line.
+   `py tools/check-precache.py` now expects 51 entries.
+
+   WHY 8.5.0 AND NOT THE 9.0.0 THIS BRANCH USED TO CARRY. While the design pass
+   was unmerged it numbered itself 9.0.0, chosen when master was still on the
+   reverted 8.3.0. Master then shipped the real bowl fix as 8.4.0. 9.0.0 was
+   never deployed anywhere — no phone has ever held a `pp-cache-v9.0.0` — so
+   collapsing it to 8.5.0 walks nothing backwards for any real device, and it
+   keeps the deployed line contiguous: 8.3.0 (live) -> 8.4.0 (bowl) -> 8.5.0
+   (bowl + design pass). What must never happen is landing AT OR BELOW 8.4.0,
+   which would leave a phone that took the bowl fix serving it for ever with no
+   design pass on top. */
+const VERSION = '8.5.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

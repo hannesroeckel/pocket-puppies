@@ -1384,13 +1384,30 @@ export function createCare(rig, opts = {}) {
   /* ================================================================== */
   /*  drawing                                                           */
   /* ================================================================== */
-  /* ---- THE BOWL IS SPLIT ACROSS THE DOG (§19.2) -----------------------
+  /* ---- THE BOWL IS SPLIT ACROSS THE DOG, BETWEEN HIS BODY AND HIS HEAD ---
+     (§19.2 split it; §19.5 moved the seam to the right depth)
+
      A placed bowl he is eating out of has his muzzle 18 units inside it, so it
-     cannot be one sprite on one side of him. `drawBehind` lays the vessel, its
-     interior and the food; the dog is drawn; `drawFront` lays the near rim and
-     the wall under it back over him. The nose then sits BETWEEN the two, which
-     is the only arrangement that reads as eating rather than as standing
-     behind a bowl (the defect the human found on his phone).
+     cannot be one sprite on one side of him. Three hooks, at three depths:
+
+       drawBehind  under the WHOLE dog          the brushed-out fur pile
+       drawMid     under his HEAD, over his BODY the vessel, its interior,
+                                                 its far rim and the food
+       drawFront   over all of him               the near rim and the wall
+                                                 under it, plus the kibble
+
+     The nose then sits between drawMid and drawFront, which is the only
+     arrangement that reads as eating rather than as standing behind a bowl.
+
+     WHY drawMid IS NOT drawBehind. It was, and that was the defect the human
+     photographed. A bowl on the floor in front of him is nearer the camera
+     than his chest, so NOTHING of his torso may occlude any part of it —
+     but `drawBehind` runs before the whole dog, torso included. While he ate
+     nobody could tell: his head was down in the bowl and his body was up and
+     behind it. The moment he sat up ("Alfie is full"), his chest cut the
+     vessel in half and the bowl looked half-buried in him. `dog.draw`'s mid
+     slot is the seam between his body and his head, which is where the far
+     half of the bowl actually is.
 
      A bowl in her hand, or one still being dragged, has nothing of his in
      front of it and is drawn whole in the front pass — splitting it would put
@@ -1400,14 +1417,14 @@ export function createCare(rig, opts = {}) {
       && bowl.placed && !bowl.held;
   }
 
-  /** the parts of a care action that belong BEHIND the dog */
+  /** the parts of a care action that belong UNDER THE WHOLE DOG */
   function drawBehind(g) {
     const c = g.ctx;
-    const w = sp.care.x;
 
     /* the brushed-out fur pile lies ON THE RUG. Drawn after him it was fur
        stuck to his back — the same compositing mistake as the bowl, one
-       action over. */
+       action over. It stays under ALL of him: unlike the bowl, a pile of
+       shed fur on the rug really is behind his paws. */
     if (pile.length) {
       c.save();
       for (const q of pile) {
@@ -1421,13 +1438,21 @@ export function createCare(rig, opts = {}) {
       c.globalAlpha = 1;
       c.restore();
     }
+  }
 
-    if (bowlIsSplit()) {
-      c.save();
-      c.globalAlpha = clamp(w, 0, 1);
-      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'back');
-      c.restore();
-    }
+  /**
+   * THE VESSEL'S FAR HALF: over his body and legs, under his head.
+   * Handed to `dog.draw` as its mid slot, so it lands between the two — see
+   * the note above and §19.5. Runs on every frame the dog is drawn; it is
+   * `bowlIsSplit()` that decides whether there is anything to lay down.
+   */
+  function drawMid(g) {
+    if (!bowlIsSplit()) return;
+    const c = g.ctx;
+    c.save();
+    c.globalAlpha = clamp(sp.care.x, 0, 1);
+    drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'back');
+    c.restore();
   }
 
   /** props + particles that belong IN FRONT of the dog (bowls, kibble) */
@@ -1641,7 +1666,7 @@ export function createCare(rig, opts = {}) {
     get fill() { return fill; },
     /** true while the action owns the whole surface (no nav, no petting UI) */
     get modal() { return !!mode; },
-    start, stop, update, apply, pointer, drawBehind, drawFront, drawOver,
+    start, stop, update, apply, pointer, drawBehind, drawMid, drawFront, drawOver,
     /** is the bowl currently drawn in two pieces around him? (verification) */
     get bowlSplit() { return bowlIsSplit(); },
     /** activity soils the coat — dirt never comes from the clock alone */
@@ -1679,6 +1704,24 @@ export function createCare(rig, opts = {}) {
           * (rig.sy === undefined ? 1 : rig.sy)).toFixed(2),
         roomFloorY: +rig.floorV.toFixed(2),
         plantShare: +(+rig.plantShare || 0).toFixed(3),
+        /* EXACTLY WHAT drawBowl WAS CALLED WITH THIS FRAME, and whether it was
+           called at all. Published because a verifier that wants to ask "is
+           this device pixel inside the bowl?" has to be able to lay the SAME
+           bowl down on a scratch canvas — and, more importantly, to get an
+           EMPTY answer on the frames where there is no bowl on screen. The
+           first cut of `tools/bowlpixels.py` built its mask from the geometry
+           alone and so kept testing a phantom outline after the action had
+           closed and the bowl had gone, which reads as a defect and is not one.
+           `alpha` is the care fade: a cross-dissolving bowl is legitimately
+           see-through, and only a FULLY OPAQUE pixel is "inside the bowl". */
+        bowlDraw: {
+          onScreen: (mode === 'feed' || mode === 'water') && sp.care.x > 0.004,
+          split: bowlIsSplit(),
+          x: +bowl.x.toFixed(3), y: +bowlDrawY.toFixed(3),
+          s: +bowlScaleNow.toFixed(5), kind: bowl.kind,
+          fill: +sp.fill.x.toFixed(5), t: +t.toFixed(5),
+          ripple: +ripple.toFixed(5), alpha: +clamp(sp.care.x, 0, 1).toFixed(5),
+        },
         /* a clamped scale means no allowed bowl size can both stand on the
            floor and reach his muzzle — i.e. the base is OFF the floor. Loud. */
         scaleClamped: geo ? !!geo.scaleClamped : false,

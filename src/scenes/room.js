@@ -1632,16 +1632,39 @@ export function createRoomScene() {
       const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
       if (toyBehind) toy.draw(g);
 
-      /* THE CARE PROPS THAT GO UNDER HIM: the fur pile on the rug, and — the
-         whole point of §19.2 — the placed bowl's vessel, its interior and its
-         food surface. His muzzle goes 18 units into that bowl, so the bowl
-         cannot be on one side of him: `care.drawFront` puts the NEAR rim back
-         over him below. One hook here and one there is what makes a nose
-         inside a bowl composite like a nose inside a bowl. */
+      /* THE CARE PROPS THAT GO UNDER ALL OF HIM: the brushed-out fur pile,
+         which really is on the rug behind his paws. The BOWL is not here —
+         see below. */
       care.drawBehind(g);
 
-      /* HE IS NOT HERE. The room is the whole point of the absence beat. */
-      if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat);
+      /* THE BOWL IS THREADED THROUGH HIM AT THREE DEPTHS (§19.5). His muzzle
+         goes 18 units into a placed bowl, so the vessel cannot be on one side
+         of him — but it cannot be behind ALL of him either, because it stands
+         on the floor NEARER THE CAMERA THAN HIS CHEST. So `care.drawMid` goes
+         into `dog.draw`'s mid slot, which sits between his body and his head:
+         the far rim, the interior and the food land over his torso and under
+         his muzzle, and `care.drawFront` puts the NEAR rim back over him
+         below. Behind the whole dog (where this used to be) his chest cut the
+         vessel in half the moment he sat up, which is the defect the human
+         found on his phone.
+         HE IS NOT HERE while he is away: the room is the whole point of the
+         absence beat, and the dog is simply not drawn. */
+      /* The slot is handed over ONLY when there is actually a vessel to thread
+         through him. `care.bowlSplit` is `bowlIsSplit()` itself, not a copy of
+         its condition, and `drawMid` re-asks it anyway, so the two cannot
+         drift apart. Passing it unconditionally cost nothing visible but was
+         not free: entering the slot swaps the transform out and back, and a
+         re-derived matrix rounds the odd antialiased fur edge one bit
+         differently, which showed up as four pixels of ±1 on a frame with no
+         bowl in it at all. With no bowl there is now no slot, so the dog is
+         byte-for-byte what he was before §19.5 by construction rather than by
+         measurement — and `getTransform` is off the per-frame path for all the
+         time he is not being fed. */
+      const bowlSlot = care.bowlSplit ? care.drawMid : null;
+      if (!walk.hidesDog) dog.draw(g, pet, a.game.moodLevel, care.coat, bowlSlot);
+      /* he is away, so nothing of his is in front of anything: the slot still
+         has to be run or the bowl would lose its far half entirely */
+      else care.drawMid(g);
       drawParts(c);
 
       if (!toyBehind) toy.draw(g);
