@@ -63,14 +63,32 @@
    tree) but the generation MUST still move, or every one of those six modules is
    served from the old cache for ever and the fix ships to nobody. A previous
    stage nearly shipped a 404-offline regression by forgetting exactly this. */
-/* 8.3.0 — NOT a typo and NOT a downgrade. The bowl-compositing change shipped as
-   8.2.0 and was reverted (it made the bowl look half-buried in his chest whenever
-   he sat upright, which is the state he is in most of the time). Reverting the
-   commit also reverted this constant to 8.1.0 — but a phone already holding the
-   8.2.0 cache would then never see the revert, because the worker only rebuilds
-   when the cache NAME changes and it has no notion of "newer". So the version
-   moves FORWARD past the withdrawn one. Never let a revert walk this number back. */
-const VERSION = '8.3.0';
+/* 8.4.0 — THE SPLIT COMES BACK, AT THE RIGHT DEPTH (§19.5).
+
+   THE RULE THIS NUMBER TAUGHT US: a revert must never walk it backwards. When
+   8.2.0 was reverted, reverting the commit also reverted this constant to 8.1.0
+   — and a phone already holding the 8.2.0 cache would then have kept serving the
+   withdrawn version for ever, because the worker only rebuilds when the cache
+   NAME changes and has no notion of "newer". The revert shipped as 8.3.0 for
+   exactly that reason. Always forward, never back.
+
+   History matters for the number. 8.2.0 split the vessel across the dog and
+   fixed food-painted-over-the-muzzle, but hooked the far half in behind the
+   WHOLE dog, so an upright dog had a bowl buried in his chest. Because upright
+   is most of the time and eating is a few seconds, that was the worse of the
+   two, and master was REVERTED to the unsplit bowl and shipped as 8.3.0.
+
+   So this branch is the only place the split exists, and it carries both
+   halves of the problem at once: the muzzle goes into the vessel (8.2.0's
+   intent) AND nothing of his torso occludes it (§19.5). The generation has to
+   land ABOVE the reverted 8.3.0 that is now live, or the phones that took the
+   revert would never fetch this.
+
+   Four modules changed — `dog/draw.js` (the mid depth slot), `dog/care.js`,
+   `scenes/room.js` and `scenes/props.js` (the published silhouette the pixel
+   gate reads). Still NO new file, so PRECACHE below is untouched and still
+   matches the tree (`py tools/check-precache.py`). */
+const VERSION = '8.4.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

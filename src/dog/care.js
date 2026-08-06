@@ -1384,12 +1384,47 @@ export function createCare(rig, opts = {}) {
   /* ================================================================== */
   /*  drawing                                                           */
   /* ================================================================== */
-  /** props + particles that belong IN FRONT of the dog (bowls, kibble) */
-  function drawFront(g) {
-    const c = g.ctx;
-    const w = sp.care.x;
+  /* ---- THE BOWL IS SPLIT ACROSS THE DOG, BETWEEN HIS BODY AND HIS HEAD ---
+     (§19.2 split it; §19.5 moved the seam to the right depth)
 
-    /* the brushed-out fur pile persists on the floor while brushing */
+     A placed bowl he is eating out of has his muzzle 18 units inside it, so it
+     cannot be one sprite on one side of him. Three hooks, at three depths:
+
+       drawBehind  under the WHOLE dog          the brushed-out fur pile
+       drawMid     under his HEAD, over his BODY the vessel, its interior,
+                                                 its far rim and the food
+       drawFront   over all of him               the near rim and the wall
+                                                 under it, plus the kibble
+
+     The nose then sits between drawMid and drawFront, which is the only
+     arrangement that reads as eating rather than as standing behind a bowl.
+
+     WHY drawMid IS NOT drawBehind. It was, and that was the defect the human
+     photographed. A bowl on the floor in front of him is nearer the camera
+     than his chest, so NOTHING of his torso may occlude any part of it —
+     but `drawBehind` runs before the whole dog, torso included. While he ate
+     nobody could tell: his head was down in the bowl and his body was up and
+     behind it. The moment he sat up ("Alfie is full"), his chest cut the
+     vessel in half and the bowl looked half-buried in him. `dog.draw`'s mid
+     slot is the seam between his body and his head, which is where the far
+     half of the bowl actually is.
+
+     A bowl in her hand, or one still being dragged, has nothing of his in
+     front of it and is drawn whole in the front pass — splitting it would put
+     its interior behind a dog it is currently floating over. */
+  function bowlIsSplit() {
+    return (mode === 'feed' || mode === 'water') && sp.care.x > 0.004
+      && bowl.placed && !bowl.held;
+  }
+
+  /** the parts of a care action that belong UNDER THE WHOLE DOG */
+  function drawBehind(g) {
+    const c = g.ctx;
+
+    /* the brushed-out fur pile lies ON THE RUG. Drawn after him it was fur
+       stuck to his back — the same compositing mistake as the bowl, one
+       action over. It stays under ALL of him: unlike the bowl, a pile of
+       shed fur on the rug really is behind his paws. */
     if (pile.length) {
       c.save();
       for (const q of pile) {
@@ -1403,9 +1438,29 @@ export function createCare(rig, opts = {}) {
       c.globalAlpha = 1;
       c.restore();
     }
+  }
+
+  /**
+   * THE VESSEL'S FAR HALF: over his body and legs, under his head.
+   * Handed to `dog.draw` as its mid slot, so it lands between the two — see
+   * the note above and §19.5. Runs on every frame the dog is drawn; it is
+   * `bowlIsSplit()` that decides whether there is anything to lay down.
+   */
+  function drawMid(g) {
+    if (!bowlIsSplit()) return;
+    const c = g.ctx;
+    c.save();
+    c.globalAlpha = clamp(sp.care.x, 0, 1);
+    drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'back');
+    c.restore();
+  }
+
+  /** props + particles that belong IN FRONT of the dog (bowls, kibble) */
+  function drawFront(g) {
+    const c = g.ctx;
+    const w = sp.care.x;
 
     if (w > 0.004 && (mode === 'feed' || mode === 'water')) {
-      const cfg = mode === 'feed' ? C.feed : C.water;
       c.save();
       c.globalAlpha = clamp(w, 0, 1);
       /* the drop ring, while there is still something to place */
@@ -1414,14 +1469,24 @@ export function createCare(rig, opts = {}) {
         const hot = clamp(1 - d / (ST.snap * 2.4), 0, 1);
         drawDropRing(c, ST.bowlTarget[0], ST.bowlTarget[1] + 8, ST.targetR, t, hot, w);
       }
-      /* The bowl, at the position update() resolved. It grows once placed: it
-         is nearer the camera down there, and the taller rim is what occludes
-         the lower muzzle when he noses into it. */
-      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple);
+      /* A bowl with nothing of his in front of it: draw it whole, here. */
+      if (!bowlIsSplit()) {
+        drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple);
+      }
       c.restore();
     }
 
+    /* the poured stream's kibble and drops land IN the bowl, so they go under
+       the near rim, not over it */
     drawParts(c);
+
+    /* ...and only now the near rim and the wall below it, over his muzzle */
+    if (bowlIsSplit()) {
+      c.save();
+      c.globalAlpha = clamp(w, 0, 1);
+      drawBowl(c, bowl.x, bowlDrawY, bowlScaleNow, bowl.kind, sp.fill.x, t, ripple, 'front');
+      c.restore();
+    }
 
     if (w > 0.004 && (mode === 'feed' || mode === 'water')) {
       c.save();
@@ -1601,7 +1666,9 @@ export function createCare(rig, opts = {}) {
     get fill() { return fill; },
     /** true while the action owns the whole surface (no nav, no petting UI) */
     get modal() { return !!mode; },
-    start, stop, update, apply, pointer, drawFront, drawOver,
+    start, stop, update, apply, pointer, drawBehind, drawMid, drawFront, drawOver,
+    /** is the bowl currently drawn in two pieces around him? (verification) */
+    get bowlSplit() { return bowlIsSplit(); },
     /** activity soils the coat — dirt never comes from the clock alone */
     soil(amount) { game.soil(amount, rng); },
     resetStroke() { lastL = null; },
@@ -1637,6 +1704,24 @@ export function createCare(rig, opts = {}) {
           * (rig.sy === undefined ? 1 : rig.sy)).toFixed(2),
         roomFloorY: +rig.floorV.toFixed(2),
         plantShare: +(+rig.plantShare || 0).toFixed(3),
+        /* EXACTLY WHAT drawBowl WAS CALLED WITH THIS FRAME, and whether it was
+           called at all. Published because a verifier that wants to ask "is
+           this device pixel inside the bowl?" has to be able to lay the SAME
+           bowl down on a scratch canvas — and, more importantly, to get an
+           EMPTY answer on the frames where there is no bowl on screen. The
+           first cut of `tools/bowlpixels.py` built its mask from the geometry
+           alone and so kept testing a phantom outline after the action had
+           closed and the bowl had gone, which reads as a defect and is not one.
+           `alpha` is the care fade: a cross-dissolving bowl is legitimately
+           see-through, and only a FULLY OPAQUE pixel is "inside the bowl". */
+        bowlDraw: {
+          onScreen: (mode === 'feed' || mode === 'water') && sp.care.x > 0.004,
+          split: bowlIsSplit(),
+          x: +bowl.x.toFixed(3), y: +bowlDrawY.toFixed(3),
+          s: +bowlScaleNow.toFixed(5), kind: bowl.kind,
+          fill: +sp.fill.x.toFixed(5), t: +t.toFixed(5),
+          ripple: +ripple.toFixed(5), alpha: +clamp(sp.care.x, 0, 1).toFixed(5),
+        },
         /* a clamped scale means no allowed bowl size can both stand on the
            floor and reach his muzzle — i.e. the base is OFF the floor. Loud. */
         scaleClamped: geo ? !!geo.scaleClamped : false,
