@@ -148,3 +148,21 @@ asset in the project.
 
 **Fix:** per-dog `lastSeenAt`, stamped when she switches away; trigger the reunion on whichever
 gap is longer.
+
+## 5. Toasts land on top of the thing they are describing
+
+Noticed in two places, so it is a pattern rather than a one-off:
+
+- Feeding: the **"Biscuit is full"** toast sits directly over the bowl it refers to.
+- Play: a hud hint *"Flick the ball up-screen"* and a toast *"Flick the ball up — never
+  sideways"* are shown at once, and **the toast covers the very ball it names**.
+
+Both are legible — `ui/text.js` guarantees contrast — so no gate catches them. The defect is
+placement and redundancy, not readability: a message should not obscure its own subject.
+
+**Fix:** give the toast a placement rule that avoids the active prop's rect (it can already be
+asked for — `props.js` publishes the bowl's draw args, and `toy.toy` carries the ball's
+position), and de-duplicate the Play hint/toast pair down to one message.
+
+Reported by the stage agent as deliberately out of scope, since deduplicating touches
+toy/hint sequencing rather than a token.
