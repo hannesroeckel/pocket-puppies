@@ -105,6 +105,34 @@ export function bowlNearPath(c) {
 }
 
 /**
+ * BELOW THE NEAR LIP: the half-plane-ish region under the well's near arc,
+ * extended sideways past the vessel and downwards past its base.
+ *
+ * This is the region in which NOTHING OF HIS MUZZLE MAY SHOW. Above the near
+ * lip his face is legitimately in the open air over the bowl; the moment it
+ * crosses that arc it is meant to be inside the vessel, and the vessel — near
+ * wall or far wall — is what the eye must see instead. §19.7's defect was
+ * exactly this and only this: his jaw was wider than the arc, so past ±WELL_RX
+ * it came out below the line into open floor, and the near wall could never
+ * have covered it because the near wall does not extend that far.
+ *
+ * Published, like `bowlNearPath` and `bowlSilhouette`, so `tools/bowlpixels.py`
+ * asks props.js where the line is rather than re-deriving an ellipse and then
+ * agreeing with itself. `reach` is how far past the vessel to carry the line;
+ * the default covers any muzzle the three breeds can present.
+ */
+export function bowlBelowLipPath(c, reach = 400) {
+  c.beginPath();
+  c.moveTo(-reach, WELL_CY);
+  c.lineTo(-WELL_RX, WELL_CY);
+  /* the near (lower) arc, right to left, so the region below it is enclosed */
+  c.ellipse(0, WELL_CY, WELL_RX, WELL_RY, 0, Math.PI, 0, true);
+  c.lineTo(reach, WELL_CY);
+  c.lineTo(reach, reach); c.lineTo(-reach, reach);
+  c.closePath();
+}
+
+/**
  * INSIDE THE BOWL: the whole vessel's fully-opaque footprint, FILLED in the
  * current style (two fills, because the rim plate and the outer wall overlap
  * and one nonzero-wound path would cancel in the overlap).
@@ -790,4 +818,6 @@ export default {
   BOWL_BASE, BOWL_WELL, BOWL_TOP,
   /* stage 8b: the near/far split (§19.2) and the depth seam (§19.5) */
   bowlNearPath, bowlSilhouette,
+  /* §19.7: the line his muzzle may not show below */
+  bowlBelowLipPath,
 };
