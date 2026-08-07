@@ -101,8 +101,14 @@
    keeps the deployed line contiguous: 8.3.0 (live) -> 8.4.0 (bowl) -> 8.5.0
    (bowl + design pass). What must never happen is landing AT OR BELOW 8.4.0,
    which would leave a phone that took the bowl fix serving it for ever with no
-   design pass on top. */
-const VERSION = '8.5.0';
+   design pass on top.
+
+   8.6.0 (§19.7): the fourth bowl defect — his chin outside the vessel and
+   below it. The vessel's own art changed (SPREAD, and a foot instead of a
+   point) and the eating stoop changed with it, so a phone holding 8.5.0 would
+   otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
+   went out, so this is 8.6.0 and never anything at or below it. */
+const VERSION = '8.6.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

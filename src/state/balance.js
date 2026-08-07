@@ -398,10 +398,15 @@ export const BALANCE = {
        beard's reach (its authored `at` + path, times headHH) under-predicts
        the drawn overhang by ~19 virtual units, because the drink bob and
        `headPitch` swing it down after the solve has finished. Swept at 0.77 /
-       0.70 / 0.63 with the new gate reading every frame; 0.70 left 96 px and
-       0.63 was clear with a much larger bowl, so 0.68 takes the margin at the
-       cheaper end. ARCHITECTURE §19.7. */
-    headDownShare: 0.68,
+       0.70 / 0.63 with the new gate reading every frame, then 0.68 against the
+       whole action rather than one frame -- which found the last of it, and
+       found that THE BOB IS THE BINDING CONSTRAINT, not the resting stoop: at
+       0.68/0.73 the resting pose cleared the floor and the deepest bite still
+       put 40-54 px of beard through it, in a 43x8 device-pixel sliver sitting
+       exactly on the bowl's base line. So the pair below is set from the
+       CEILING down (see `headMaxShare`) and this is the ceiling minus the
+       bob's budget. ARCHITECTURE §19.7. */
+    headDownShare: 0.64,
     /* THE HARD CEILING, and it is enforced where the value is USED, not where
        it is solved. `dog/care.js applyBowl` clamps `headDrop + bite * bobDepth`
        to `headRoom * headMaxShare` on every frame, so no bite, no lick and no
@@ -419,8 +424,19 @@ export const BALANCE = {
        position: left at 0.82 while the resting depth came up to 0.68, a bite
        or a lap could still have dipped 0.14 of his head room past the resting
        pose and put the beard back through the floor on exactly the frames
-       nobody screenshots. */
-    headMaxShare: 0.73,
+       nobody screenshots.
+
+       IT IS THIS NUMBER, NOT `headDownShare`, THAT §19.7 IS REALLY ABOUT. The
+       deepest frame of a bite is the lowest his face ever goes, so it is the
+       frame the floor invariant has to hold on; the resting stoop only has to
+       stay under it. 0.665 puts the deepest bite about 2.5 virtual units clear
+       of the floor on the Schnoodle, measured on the worst frame of the whole
+       action rather than on one chosen frame. `headDownShare` is then set from
+       here downwards, taking the lift out of the BOB in preference to the
+       resting stoop -- because the solved vessel is sized off the resting
+       stoop, so the bowl grows for all three breeds if the lift is taken
+       there and grows for none of them if it is taken here. */
+    headMaxShare: 0.665,
     /* HOW BIG A BITE ACTUALLY GETS. `applyBowl` dips the head by
        `bite * bobDepth` where `bite` is a KICKED spring clamped to this, so
        the deepest frame of a bite is 1.4x the nominal bob — and the ceiling
