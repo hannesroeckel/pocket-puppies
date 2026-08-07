@@ -22,12 +22,45 @@ So this gate does two things no previous check did:
      AND SITTING BACK UP, fading, and at rest. Not a sample. Interval
      sampling is what let the stage-2 disembodied head ship.
 
-  2. It asserts on ACTUAL DEVICE PIXELS:
+  2. It asserts on ACTUAL DEVICE PIXELS, in BOTH directions:
 
-         NO PIXEL OF HIS TORSO MAY SURVIVE ANYWHERE INSIDE THE BOWL'S OUTLINE.
+         A. NO PIXEL OF HIS TORSO MAY SURVIVE ANYWHERE INSIDE THE BOWL'S
+            OUTLINE.                                                (§19.5)
 
-THE ASSERTION, EXACTLY
-----------------------
+         B. NO PIXEL OF HIS FACE MAY SURVIVE ANYWHERE OUTSIDE THE BOWL'S
+            OUTLINE, BELOW THE NEAR-LIP LINE.                       (§19.7)
+
+THE SECOND ASSERTION, AND WHY IT IS THE FIRST ONE'S BLIND SPOT
+--------------------------------------------------------------
+A held for 805 frames on three breeds while B was failing by four thousand
+pixels a frame, and the human found B on his phone: "now the chin of the dog
+goes through the bowl and shows out underneath it as well". The two are
+complements and only the pair says anything. A alone says the bowl is never
+buried in him. It says nothing at all about him being outside the bowl — and
+a vessel narrower than his own jaw satisfies A perfectly, because the jaw it
+fails to contain is nowhere near the inside of it.
+
+THE LINE. `props.bowlBelowLipPath` — published there, not rebuilt here, for
+the same reason `bowlSilhouette` is. Above the well's near arc his face is in
+the open air over the bowl and may be anywhere. The moment it crosses that arc
+it is meant to be INSIDE the vessel, and the vessel — its near wall in front,
+its far wall behind — is what the eye must see instead of him.
+
+HIS FACE, NOT HIS HEAD. `dog/draw.js` calls `probe('face-in')` and
+`probe('face-out')` between its two ear passes, so `F1 - F0` is his skull,
+cheeks, muzzle, beard, nose and mouth and NO EAR. Measured across the whole
+head group instead, this statistic is 28,605 px on a Cockapoo and means
+nothing: her ear curtains hang past the jaw and down beside the bowl, which is
+what a spaniel ear does and what no bowl should ever be asked to cover. Read
+at the seam it is 4,543 px, all of it jaw. The renderer draws the distinction;
+the harness must not guess at it with a bounding box.
+
+`--narrow` puts the vessel back to its pre-§19.7 width (and the stoop back to
+0.77) and measures the same statistic, so the gate has to SEE the defect it
+was written for before its zero means anything.
+
+THE FIRST ASSERTION, EXACTLY
+----------------------------
 `dog.draw`'s mid slot is a probe point as well as a fix. Four buffers are
 grabbed from ONE real render — no second draw, so nothing drifts between them —
 and all four sit on the same side of the grain overlay:
@@ -35,6 +68,8 @@ and all four sit on the same side of the grain overlay:
     R    in care.drawBehind, after it   the room and the rug: NO dog at all
     M0   at the top of the mid slot     R + his TORSO, and nothing of his head
     M1   at the bottom of the mid slot  M0 + the vessel's far half
+    F0   at the head group's face seam  M1 + his far ear(s), no face yet
+    F1   at the other end of that seam  F0 + HIS WHOLE FACE, no near ear
     A    at the end of care.drawFront   the finished composite: room, dog,
                                         both halves of the vessel
 
@@ -82,7 +117,8 @@ and says so.
 Usage
 -----
     py tools/bowlpixels.py                    # the fix, 3 breeds x feed/water
-    py tools/bowlpixels.py --old              # the defect, to prove it is seen
+    py tools/bowlpixels.py --old              # §19.2's defect, to prove it is seen
+    py tools/bowlpixels.py --narrow           # §19.7's defect, ditto
     py tools/bowlpixels.py --dpr 3 --dark
     py tools/bowlpixels.py shiba              # one breed
 
@@ -99,6 +135,12 @@ ERODE = 2          # device px shaved off the silhouette, so its own antialiased
                    # covered pixel) cannot be misread as fur inside the bowl
 MIN_MASK_FRAMES = 120    # frames that must actually have a bowl to look inside
 MIN_OVERLAP_FRAMES = 20  # frames where his body and the bowl must overlap at all
+MIN_DIPPED_FRAMES = 60   # frames where his FACE must actually be down inside the
+                         # vessel below the near lip. Assertion B is a claim
+                         # about a dog eating out of a bowl; a dog who never got
+                         # his face into it satisfies it for the wrong reason,
+                         # which is precisely how assertion A came to hold for
+                         # 805 frames while the screen was wrong.
 MAX_REPLAY_FRAC = 0.02   # the replay self-check is about the HARNESS, not the
                          # game: an independent re-render lands within a couple of
                          # LSBs over the flats but can differ by more along the
@@ -138,22 +180,27 @@ INSTALL = r"""async (old) => {
   const sc = window.__pp.loop.scene, view = window.__pp.view;
   const cv = document.querySelector('canvas');
   const cx = cv.getContext('2d');
-  const care = sc.care;
+  const care = sc.care, dog = sc.dog;
   const realBehind = care.drawBehind, realMid = care.drawMid, realFront = care.drawFront;
   const G = { props, sc, cv, cx, view, old: !!old,
-              R: null, M0: null, M1: null, A: null, r: null };
+              R: null, M0: null, M1: null, F0: null, F1: null, A: null, r: null };
   window.__bp = G;
 
-  /* the region of interest: the bowl's own bounding box, plus a little */
+  /* THE REGION OF INTEREST HAS TO HOLD HIS JAW, not just the bowl (§19.7).
+     Assertion A only ever looked inside the vessel, so the bowl's own bounding
+     box plus a little was the whole world. Assertion B is about pixels of him
+     OUTSIDE it, and his face reaches |x| ~58 of the vessel's own units — twice
+     the old window's half-width. A window that stops at the rim cannot fail
+     the new assertion, which is a different way of not looking. */
   const roi = () => {
     const d = sc.debug.care, bs = d.bowlScaleNow || 1;
     const bx = care.bowl.x, baseY = d.bowlBaseY;
     const DX = (vx) => (view.offX + vx * view.vs) * view.dpr;
     const DY = (vy) => (view.offY + vy * view.vs) * view.dpr;
-    const x0 = Math.max(0, Math.floor(DX(bx - 36 * bs)) - 6);
-    const x1 = Math.min(cv.width, Math.ceil(DX(bx + 36 * bs)) + 6);
-    const y0 = Math.max(0, Math.floor(DY(baseY - 40 * bs)) - 6);
-    const y1 = Math.min(cv.height, Math.ceil(DY(baseY + 8 * bs)) + 6);
+    const x0 = Math.max(0, Math.floor(DX(bx - 88 * bs)) - 6);
+    const x1 = Math.min(cv.width, Math.ceil(DX(bx + 88 * bs)) + 6);
+    const y0 = Math.max(0, Math.floor(DY(baseY - 44 * bs)) - 6);
+    const y1 = Math.min(cv.height, Math.ceil(DY(baseY + 22 * bs)) + 6);
     return { x0, y0, W: Math.max(1, x1 - x0), H: Math.max(1, y1 - y0), bs, bx, baseY };
   };
   const grab = (r) => cx.getImageData(r.x0, r.y0, r.W, r.H).data;
@@ -170,7 +217,15 @@ INSTALL = r"""async (old) => {
        the bowl is in her hand the slot never runs and M0/M1 would still hold
        the previous frame's pixels. Cleared here, every frame, so the reader
        can tell "the slot did not run" from "the slot ran and found nothing". */
-    G.M0 = null; G.M1 = null; G.A = null;
+    G.M0 = null; G.M1 = null; G.A = null; G.F0 = null; G.F1 = null;
+  };
+  /* THE FACE SEAM (§19.7). Between the head group's two ear passes, so
+     `F1 - F0` is his face and nothing of his ears. Installed on the renderer
+     itself because only the renderer knows where that boundary is. */
+  dog.probe = (name) => {
+    if (!G.r) return;
+    if (name === 'face-in') G.F0 = grab(G.r);
+    else if (name === 'face-out') G.F1 = grab(G.r);
   };
   /* the mid slot: his body is down, his head is not. In --old mode the slot
      paints nothing (the bowl already went in behind him) and only probes. */
@@ -218,7 +273,7 @@ STEP_AND_READ = r"""(cfg) => {
     return out;
   }
   const { x0, y0, W, H, bs, bx, baseY } = G.r;
-  const R = G.R, M0 = G.M0, M1 = G.M1, A = G.A;
+  const R = G.R, M0 = G.M0, M1 = G.M1, A = G.A, F0 = G.F0, F1 = G.F1;
 
   /* ---- INSIDE THE BOWL ------------------------------------------------
      Two conditions, ANDed, and each is asked of the thing that knows:
@@ -280,6 +335,83 @@ STEP_AND_READ = r"""(cfg) => {
       }
     }
     mask = nx;
+  }
+
+  /* ==== ASSERTION B: NO PIXEL OF HIS FACE OUTSIDE THE VESSEL, BELOW THE
+     NEAR LIP (§19.7) ======================================================
+     Three questions, each asked of the thing that knows:
+
+       face(p)      F1[p] != F0[p]    his FACE painted it -- skull, cheeks,
+                    muzzle, beard, nose, mouth, and no ear, because the seam
+                    is inside the head group between the two ear passes
+       survives(p)  A[p] == F1[p]     and nothing painted over it afterwards:
+                    not the near wall, not the near ear, not the toy
+       below(p)     props.bowlBelowLipPath, under drawBowl's own transform
+
+     ...and then it must be INSIDE the vessel's outline. `SILD` is that outline
+     dilated by one device pixel, so the vessel's own antialiased edge cannot
+     be read as "outside": a face pixel exactly on the edge is a blend of him
+     and the wall, which `survives` already excludes, and the dilation makes
+     that robust to a pixel of rounding rather than resting on it. The
+     UNDILATED count is reported alongside so the dilation cannot hide a real
+     one-pixel fringe -- if the two disagree by much, the fringe is real.
+
+     Not gated on "he is dipped in": every frame with an opaque split vessel is
+     asserted, approach and finish included. Scoping to the frames where the
+     defect is expected is how §19.5's blind spot happened. */
+  const eq = (P, Q, i) => P[i] === Q[i] && P[i + 1] === Q[i + 1] && P[i + 2] === Q[i + 2];
+  let faceOut = 0, faceOutRaw = 0, faceBelowIn = 0;
+  let fx0 = 1e9, fy0 = 1e9, fx1 = -1e9, fy1 = -1e9;
+  const fsamp = [];
+  if (F0 && F1) {
+    const [, kb] = mkCanvas();
+    kb.translate(bd.x, bd.y); kb.scale(bd.s, bd.s);
+    kb.fillStyle = '#fff'; G.props.bowlBelowLipPath(kb); kb.fill();
+    const BELOW = kb.getImageData(0, 0, W, H).data;
+    /* the outline, from props.js, at the SAME position and scale the game drew
+       it -- and NOT gated on `opaqueEnough`: a cross-fading vessel still has an
+       outline, and his jaw is either inside it or it is not. */
+    let sil = new Uint8Array(W * H);
+    for (let i = 0, q = 3; i < W * H; i++, q += 4) sil[i] = SIL[q] > 250 ? 1 : 0;
+    const sild = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        sild[i] = (sil[i]
+          || (x > 0 && sil[i - 1]) || (x < W - 1 && sil[i + 1])
+          || (y > 0 && sil[i - W]) || (y < H - 1 && sil[i + W])) ? 1 : 0;
+      }
+    }
+    for (let j = 0; j < W * H; j++) {
+      const i = j * 4;
+      if (eq(F1, F0, i)) continue;           /* his face never painted this */
+      if (!eq(A, F1, i)) continue;           /* something took it back */
+      if (!BELOW[i + 3]) continue;           /* above the lip: open air */
+      if (sil[j]) { faceBelowIn++; continue; }
+      faceOutRaw++;
+      if (sild[j]) continue;                 /* the vessel's own AA edge */
+      faceOut++;
+      const px = j % W, py = (j - px) / W;
+      if (px < fx0) fx0 = px; if (px > fx1) fx1 = px;
+      if (py < fy0) fy0 = py; if (py > fy1) fy1 = py;
+      if (fsamp.length < 4) {
+        fsamp.push({ x: x0 + px, y: y0 + py,
+                     behindHim: [F0[i], F0[i + 1], F0[i + 2]],
+                     hisFace: [F1[i], F1[i + 1], F1[i + 2]],
+                     final: [A[i], A[i + 1], A[i + 2]] });
+      }
+    }
+  }
+  out.faceProbed = !!(F0 && F1);
+  out.muzzleOutsideBelowLip = faceOut;
+  out.muzzleOutsideBelowLipUndilated = faceOutRaw;
+  /* THE NON-VACUOUSNESS COUNTERPART: face inside the vessel and below the lip.
+     It is his jaw actually down in the bowl, and if it is 0 on every frame he
+     never dipped in and assertion B proved nothing. */
+  out.faceInsideVesselBelowLip = faceBelowIn;
+  if (faceOut) {
+    out.muzzleOutsideBox = [x0 + fx0, y0 + fy0, fx1 - fx0 + 1, fy1 - fy0 + 1];
+    out.muzzleOutsideSamples = fsamp;
   }
 
   /* ---- REF: THE CORRECT COMPOSITE, BUILT INDEPENDENTLY ------------------
@@ -475,7 +607,14 @@ class Run:
         raise RuntimeError("phase never reached (last=%s)" % json.dumps(self.rows[-1]))
 
 
-async def boot(pg, base, breed, nogt=False):
+async def boot(pg, base, breed, nogt=False, narrow=False):
+    if narrow:
+        # THE CONTROL FOR ASSERTION B. Put the vessel back to its pre-§19.7
+        # width and the stoop back to its pre-§19.7 depth, and the gate must
+        # SEE the defect the human photographed. A gate whose number does not
+        # move between the defect and the fix is not measuring anything -- the
+        # same reason `--old` exists for assertion A.
+        await pg.add_init_script("globalThis.__ppSpread = 1.0;")
     if nogt:
         # THE FALLBACK PATH IN THE DEPTH SLOT, exercised rather than assumed.
         # Without getTransform the slot undoes the dog's translate+scale by
@@ -491,6 +630,10 @@ async def boot(pg, base, breed, nogt=False):
     await pg.evaluate("() => window.__pp.step(1/60, 90)")
     await pg.evaluate("""() => { window.__pp.setNeed('hunger', 0.05);
                                  window.__pp.setNeed('thirst', 0.05); }""")
+    if narrow:
+        await pg.evaluate("""() => { const B = window.__pp.BALANCE.care;
+            B.headDownShare = 0.77; B.headMaxShare = 0.82;
+            B.stage.scaleRange = [1.10, 1.95]; }""")
     await pg.evaluate("() => window.__pp.step(1/60, 30)")
 
 
@@ -550,7 +693,7 @@ MUST_COVER = ("a-placed-upright", "b-pouring", "c-approach", "d-eating",
 MIN_PER_PHASE = 15
 
 
-def judge(rows, marks, old):
+def judge(rows, marks, old, narrow=False):
     checked = [f for f in rows if f.get("maskPx")]
     bad = [f for f in checked if f.get("defect")]
     overlap = [f for f in checked if f.get("torsoInMask")]
@@ -581,6 +724,15 @@ def judge(rows, marks, old):
               "defect": rows[i].get("defect", 0)}
           for k, i in marks.items()}
     uncovered = [k for k in MUST_COVER if k in cp and not cp[k]["maskPx"]]
+    # ---- ASSERTION B (§19.7) -------------------------------------------
+    # Its own frame set: it needs the VESSEL'S OUTLINE and HIS FACE, neither of
+    # which cares whether the vessel is fully opaque, so it is asserted on every
+    # frame the face seam actually fired with a split vessel on screen -- a
+    # larger set than assertion A's, deliberately.
+    faced = [f for f in rows if f.get("faceProbed") and f.get("slotPaints")]
+    faceBad = [f for f in faced if f.get("muzzleOutsideBelowLip")]
+    dipped = [f for f in faced if f.get("faceInsideVesselBelowLip")]
+    worstFace = max(rows, key=lambda f: f.get("muzzleOutsideBelowLip", 0))
     res = {
         "frames": len(rows), "phases": phases,
         "framesChecked": len(checked),
@@ -599,6 +751,20 @@ def judge(rows, marks, old):
                                             for f in rows), default=0),
         "replayMismatchWorstFrac": max((f.get("replayMismatchFrac", 0)
                                         for f in checked), default=0),
+        # --- assertion B ---
+        "framesWithFaceSeamAndSplitVessel": len(faced),
+        "framesWhereHisFaceIsDownInsideTheVessel": len(dipped),
+        "framesWithMuzzleOutsideTheBowlBelowTheLip": len(faceBad),
+        "worstMuzzleOutsidePx": worstFace.get("muzzleOutsideBelowLip", 0),
+        "worstMuzzleOutsidePxUndilated": max(
+            (f.get("muzzleOutsideBelowLipUndilated", 0) for f in faced), default=0),
+        "worstMuzzleOutsidePhase": (worstFace.get("phase")
+                                    if worstFace.get("muzzleOutsideBelowLip") else None),
+        "worstMuzzleOutsideBox": worstFace.get("muzzleOutsideBox"),
+        "worstMuzzleOutsideSamples": worstFace.get("muzzleOutsideSamples"),
+        "deepestFaceInsideVesselPx": max((f.get("faceInsideVesselBelowLip", 0)
+                                          for f in faced), default=0),
+        # --- assertion A ---
         "worstDefectPx": worst.get("defect", 0),
         "worstDefectFracOfBowl": worst.get("defectFrac", 0),
         "worstDefectPhase": worst.get("phase") if worst.get("defect") else None,
@@ -613,7 +779,16 @@ def judge(rows, marks, old):
                              )(max(checked, key=lambda f: f.get("replayMismatchPx", 0)))
         if checked else None,
     }
-    if old:
+    if narrow:
+        # the control for assertion B: the gate must SEE §19.7's defect
+        res["pass"] = (len(faceBad) > 0
+                       and worstFace.get("muzzleOutsideBelowLip", 0) > 500)
+        res["meaning"] = ("PASS here means the gate CAN see the defect: the "
+                          "pre-§19.7 vessel shows his jaw outside the bowl "
+                          "below the near lip on %d of %d frames, worst %d px"
+                          % (len(faceBad), len(faced),
+                             worstFace.get("muzzleOutsideBelowLip", 0)))
+    elif old:
         # the control: the gate must SEE §19.2's defect, not merely fail to
         # find it in the fix
         res["pass"] = len(bad) > 0 and worst.get("defect", 0) > 200
@@ -627,7 +802,24 @@ def judge(rows, marks, old):
                        and res["replayMismatchWorstFrac"] <= MAX_REPLAY_FRAC
                        and len(checked) >= MIN_MASK_FRAMES
                        and len(overlap) >= MIN_OVERLAP_FRAMES
-                       and len(took) >= MIN_OVERLAP_FRAMES)
+                       and len(took) >= MIN_OVERLAP_FRAMES
+                       # assertion B, and its own non-vacuousness: he must
+                       # actually have put his face down inside the vessel on a
+                       # decent number of frames, or "no face outside it" is
+                       # satisfied by a dog who never came near it
+                       and not faceBad
+                       and len(faced) >= MIN_MASK_FRAMES
+                       and len(dipped) >= MIN_DIPPED_FRAMES)
+        res["meaningB"] = ("PASS means: on all %d frames where the vessel was "
+                           "split around him, NO pixel of his FACE -- skull, "
+                           "cheeks, muzzle, beard, nose, mouth, read at the "
+                           "renderer's own face seam so no ear is counted -- "
+                           "survived outside the vessel's outline below the "
+                           "near-lip line. Not vacuous: his face was down "
+                           "INSIDE the vessel below that line on %d of those "
+                           "frames, up to %d px at the deepest."
+                           % (len(faced), len(dipped),
+                              res["deepestFaceInsideVesselPx"]))
         res["meaning"] = ("PASS means: on all %d frames where an opaque bowl was "
                           "on screen -- every beat from placing it to sitting back "
                           "up -- NO pixel of his torso survived inside the bowl's "
@@ -646,6 +838,7 @@ async def main():
     old = "--old" in sys.argv
     dark = "--dark" in sys.argv
     nogt = "--nogt" in sys.argv
+    narrow = "--narrow" in sys.argv
     dpr = 3
     if "--dpr" in sys.argv:
         dpr = int(sys.argv[sys.argv.index("--dpr") + 1])
@@ -654,9 +847,10 @@ async def main():
     from playwright.async_api import async_playwright
 
     out, errs, ok = {}, [], True
-    print("bowl depth gate — %s order, dpr %d, %s%s" %
+    print("bowl depth gate — %s order, dpr %d, %s%s%s" %
           ("STAGE-8 (§19.2)" if old else "current", dpr, "dark" if dark else "light",
-           ", NO getTransform (fallback path)" if nogt else ""))
+           ", NO getTransform (fallback path)" if nogt else "",
+           ", PRE-§19.7 VESSEL (the control for assertion B)" if narrow else ""))
     async with async_playwright() as p:
         br = await p.chromium.launch()
         for breed in breeds:
@@ -669,15 +863,21 @@ async def main():
                   if m.type == "error" else None)
             pg.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
             for mode in ("feed", "water"):
-                await boot(pg, base, breed, nogt)
+                await boot(pg, base, breed, nogt, narrow)
                 rows, marks = await action(pg, mode, ERODE, old)
-                r = judge(rows, marks, old)
+                r = judge(rows, marks, old, narrow)
                 out["%s-%s" % (breed, mode)] = r
                 ok = ok and r["pass"]
                 print("\n%-10s %-5s %s  %d frames, phases %s"
                       % (breed, mode, "PASS" if r["pass"] else "FAIL",
                          r["frames"], ",".join(r["phases"])))
-                for k in ("framesChecked", "framesNotChecked_noBowlOnScreen",
+                for k in ("framesWithFaceSeamAndSplitVessel",
+                          "framesWhereHisFaceIsDownInsideTheVessel",
+                          "framesWithMuzzleOutsideTheBowlBelowTheLip",
+                          "worstMuzzleOutsidePx", "worstMuzzleOutsidePxUndilated",
+                          "worstMuzzleOutsidePhase", "worstMuzzleOutsideBox",
+                          "deepestFaceInsideVesselPx",
+                          "framesChecked", "framesNotChecked_noBowlOnScreen",
                           "framesNotChecked_bowlCrossFading",
                           "framesWhereHisBodyOverlapsTheBowl",
                           "framesWhereTheFarHalfTookThosePixelsBack",
@@ -700,7 +900,7 @@ async def main():
         await br.close()
     out["consoleErrors"] = errs
     out["allPass"] = ok and not errs
-    tag = "old" if old else ("fix-nogt" if nogt else "fix")
+    tag = "old" if old else ("narrow" if narrow else ("fix-nogt" if nogt else "fix"))
     with open(os.path.join(ROOT, "tools", "bowlpixels-%s.json" % tag), "w") as fh:
         json.dump(out, fh, indent=1)
     print("\nconsole errors:", errs if errs else "none")
