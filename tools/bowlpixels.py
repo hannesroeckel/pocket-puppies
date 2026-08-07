@@ -360,7 +360,7 @@ STEP_AND_READ = r"""(cfg) => {
      asserted, approach and finish included. Scoping to the frames where the
      defect is expected is how §19.5's blind spot happened. */
   const eq = (P, Q, i) => P[i] === Q[i] && P[i + 1] === Q[i + 1] && P[i + 2] === Q[i + 2];
-  let faceOut = 0, faceOutRaw = 0, faceBelowIn = 0;
+  let faceOut = 0, faceOutRaw = 0, faceBelowIn = 0, faceCovered = 0;
   let fx0 = 1e9, fy0 = 1e9, fx1 = -1e9, fy1 = -1e9;
   const fsamp = [];
   if (F0 && F1) {
@@ -385,8 +385,15 @@ STEP_AND_READ = r"""(cfg) => {
     for (let j = 0; j < W * H; j++) {
       const i = j * 4;
       if (eq(F1, F0, i)) continue;           /* his face never painted this */
-      if (!eq(A, F1, i)) continue;           /* something took it back */
       if (!BELOW[i + 3]) continue;           /* above the lip: open air */
+      if (!eq(A, F1, i)) {
+        /* something painted over it. Inside the outline that something is the
+           near wall doing its job -- HIS JAW IS DOWN IN THE BOWL AND THE BOWL
+           IS IN FRONT OF IT. This is the count that makes assertion B mean
+           anything: without it, a dog standing well clear of his dinner passes. */
+        if (sil[j]) faceCovered++;
+        continue;
+      }
       if (sil[j]) { faceBelowIn++; continue; }
       faceOutRaw++;
       if (sild[j]) continue;                 /* the vessel's own AA edge */
@@ -405,10 +412,17 @@ STEP_AND_READ = r"""(cfg) => {
   out.faceProbed = !!(F0 && F1);
   out.muzzleOutsideBelowLip = faceOut;
   out.muzzleOutsideBelowLipUndilated = faceOutRaw;
-  /* THE NON-VACUOUSNESS COUNTERPART: face inside the vessel and below the lip.
-     It is his jaw actually down in the bowl, and if it is 0 on every frame he
-     never dipped in and assertion B proved nothing. */
-  out.faceInsideVesselBelowLip = faceBelowIn;
+  /* THE NON-VACUOUSNESS COUNTERPART: face below the lip that the NEAR WALL
+     TOOK BACK. That is his jaw down inside the bowl with the vessel in front
+     of it -- the thing assertion B is a claim about. If it is 0 he never got
+     his face in and the zero above proves nothing.
+     `faceInsideVesselBelowLipUncovered` is the other failure mode, candidate
+     (b): his face below the lip, INSIDE the outline, and still visible --
+     i.e. the near wall's own coverage falling short of the vessel it is
+     re-painting. Reported, and expected to be a handful of antialiased edge
+     pixels or none. */
+  out.faceCoveredByTheNearWall = faceCovered;
+  out.faceInsideVesselBelowLipUncovered = faceBelowIn;
   if (faceOut) {
     out.muzzleOutsideBox = [x0 + fx0, y0 + fy0, fx1 - fx0 + 1, fy1 - fy0 + 1];
     out.muzzleOutsideSamples = fsamp;
@@ -731,7 +745,7 @@ def judge(rows, marks, old, narrow=False):
     # larger set than assertion A's, deliberately.
     faced = [f for f in rows if f.get("faceProbed") and f.get("slotPaints")]
     faceBad = [f for f in faced if f.get("muzzleOutsideBelowLip")]
-    dipped = [f for f in faced if f.get("faceInsideVesselBelowLip")]
+    dipped = [f for f in faced if f.get("faceCoveredByTheNearWall")]
     worstFace = max(rows, key=lambda f: f.get("muzzleOutsideBelowLip", 0))
     res = {
         "frames": len(rows), "phases": phases,
@@ -762,8 +776,10 @@ def judge(rows, marks, old, narrow=False):
                                     if worstFace.get("muzzleOutsideBelowLip") else None),
         "worstMuzzleOutsideBox": worstFace.get("muzzleOutsideBox"),
         "worstMuzzleOutsideSamples": worstFace.get("muzzleOutsideSamples"),
-        "deepestFaceInsideVesselPx": max((f.get("faceInsideVesselBelowLip", 0)
-                                          for f in faced), default=0),
+        "deepestFaceCoveredByTheNearWallPx": max(
+            (f.get("faceCoveredByTheNearWall", 0) for f in faced), default=0),
+        "worstFaceInsideVesselButUncoveredPx": max(
+            (f.get("faceInsideVesselBelowLipUncovered", 0) for f in faced), default=0),
         # --- assertion A ---
         "worstDefectPx": worst.get("defect", 0),
         "worstDefectFracOfBowl": worst.get("defectFrac", 0),
@@ -817,9 +833,10 @@ def judge(rows, marks, old, narrow=False):
                            "survived outside the vessel's outline below the "
                            "near-lip line. Not vacuous: his face was down "
                            "INSIDE the vessel below that line on %d of those "
-                           "frames, up to %d px at the deepest."
+                           "frames -- the near wall taking his jaw back -- "
+                           "up to %d px at the deepest."
                            % (len(faced), len(dipped),
-                              res["deepestFaceInsideVesselPx"]))
+                              res["deepestFaceCoveredByTheNearWallPx"]))
         res["meaning"] = ("PASS means: on all %d frames where an opaque bowl was "
                           "on screen -- every beat from placing it to sitting back "
                           "up -- NO pixel of his torso survived inside the bowl's "
@@ -876,7 +893,8 @@ async def main():
                           "framesWithMuzzleOutsideTheBowlBelowTheLip",
                           "worstMuzzleOutsidePx", "worstMuzzleOutsidePxUndilated",
                           "worstMuzzleOutsidePhase", "worstMuzzleOutsideBox",
-                          "deepestFaceInsideVesselPx",
+                          "deepestFaceCoveredByTheNearWallPx",
+                          "worstFaceInsideVesselButUncoveredPx",
                           "framesChecked", "framesNotChecked_noBowlOnScreen",
                           "framesNotChecked_bowlCrossFading",
                           "framesWhereHisBodyOverlapsTheBowl",

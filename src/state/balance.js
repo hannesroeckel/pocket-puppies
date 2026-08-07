@@ -412,7 +412,8 @@ export const BALANCE = {
        breed-independence sweep found a chest 25% shallower than the Shiba's
        where it left 0.8 virtual units of clearance at the bottom of a bite,
        and the Shiba only passed because it happened to have room to spare. A
-       bound that holds for the dog you tested is not a bound. */
+       bound that holds for the dog you tested is not a bound.
+
        §19.7 moved this DOWN WITH `headDownShare`, keeping the same 0.05 of
        room between them. The gap is the bob's budget, not an absolute
        position: left at 0.82 while the resting depth came up to 0.68, a bite
