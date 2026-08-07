@@ -1,26 +1,53 @@
 /* ==========================================================================
    ui/nav.js — the bottom navigation row.
 
-   Canvas-drawn pills with a real hit test, so scenes never need DOM. The
-   `items` list is data: stage 2..6 add entries and wire them to app.nav.go().
-   Buttons whose target scene isn't registered yet are drawn dimmed and
-   report `available:false` — the room scene toasts "coming soon".
+   FIVE PILLS, NOT EIGHT (stage 9, decision 3 in docs/DESIGN-REF.md).
 
-   ROUTED THROUGH ui/text.js IN STAGE 5, and it mattered more here than it
-   looks: stage 5 added a seventh pill (the ring), which cuts each one to about
-   47 virtual units. The old code drew labels with a hard `9.5px` and no width
-   handling at all, so a longer label than the ones that happen to be there
-   would simply overrun its pill. The helper shrinks to fit, and `over` checks
-   the ink against the pill the nav itself drew rather than adding a plate on
-   top of it.
+   Stage 6 ended with eight pills across 390 virtual units. That is 40.5 units
+   each, and the note it left admitted the problem while shipping it: 40.5 is
+   under the 44 tap-target guideline, and the mitigation was that the whole band
+   is a hit target so a thumb landing in a gap still presses the NEAREST pill.
+   Which is true, and is the wrong fix — it means a miss is silently resolved
+   into a neighbour, so the failure mode of a cramped nav is not "nothing
+   happened" but "the wrong screen opened". On a one-handed reach across the
+   bottom of a 390-wide phone, that is the worst of the two.
+
+   Five pills give 68.4 units each. The nearest-pill rule stays, because gaps
+   should still not fall through to the dog, but it is now slop rather than
+   structure.
+
+   WHAT MOVED, AND NOTHING BECAME UNREACHABLE:
+     Care  Play  Train  Walk  More
+   `More` opens a sheet holding Shop, Dogs (the kennel), the Ring and Settings.
+   Every one of those was one tap and is now two; none of them is a thing you
+   reach mid-interaction, and all four were already sheet-shaped surfaces. The
+   four kept on the bar are the four that ARE mid-interaction: feeding, playing,
+   training and going out.
+
+   `More` also stays reachable while he is out on a walk — see `navAction` in
+   scenes/room.js. That matters because renaming lives behind Settings, and the
+   away state is exactly when someone fiddles with settings.
+
+   TACTILE PRESS (ui/surface.js). Every pill is a real object with a 4-unit
+   bottom edge that compresses to 1 under a thumb. This replaced a globalAlpha
+   nudge from 0.40 to 0.52, which is a thing you can only notice if you already
+   know it is there.
+
+   NO SOFT SHADOW HERE, on purpose: five 32-unit blurs per frame is a real cost
+   for a shadow that would sit behind a control whose whole job is already to
+   look raised. See the note in ui/surface.js.
+
+   ROUTED THROUGH ui/text.js since stage 5 — the labels shrink to fit and their
+   contrast is checked against the pill the nav itself drew rather than against
+   a guess. Now on the ramp's `label-sm` (12/700/+0.05em), which is what makes a
+   short uppercase word read as a LABEL instead of as cramped body copy; the old
+   hard 9.5 was chosen to survive seven pills and no longer has to.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
-import { clamp, roundRect, TAU, rgba } from '../engine/draw.js';
+import { clamp, TAU } from '../engine/draw.js';
 import { drawText } from './text.js';
-
-/* the pill colour, so a label's contrast is checked against what is actually
-   behind it rather than against a guess */
-const PILL_BG = '#f4e6d0';
+import { INK, SURF, C, R, PRESS, type } from './tokens.js';
+import { tactile, createPresses, roundSub } from './surface.js';
 
 const N = BALANCE.ui.nav;
 const W = BALANCE.view.W;
@@ -49,18 +76,23 @@ const GLYPH = {
   play(c, x, y, r) {          // ball
     c.beginPath(); c.arc(x, y, r * 0.82, 0, TAU); c.fill();
     c.save(); c.beginPath(); c.arc(x, y, r * 0.82, 0, TAU); c.clip();
-    c.globalAlpha = 0.45; c.fillStyle = '#fff';
+    c.globalAlpha = 0.45; c.fillStyle = SURF.chrome;
     c.beginPath(); c.moveTo(x - r, y - r * 0.2);
     c.quadraticCurveTo(x, y - r * 0.72, x + r, y - r * 0.2);
     c.lineTo(x + r, y + r * 0.1); c.quadraticCurveTo(x, y - r * 0.4, x - r, y + r * 0.1);
     c.closePath(); c.fill(); c.restore();
   },
-  shop(c, x, y, r) {          // bag
-    roundRect(c, x - r * 0.7, y - r * 0.35, r * 1.4, r * 1.3, r * 0.25); c.fill();
-    c.lineWidth = r * 0.24;
-    c.beginPath(); c.arc(x, y - r * 0.35, r * 0.42, Math.PI, 0); c.stroke();
+  /* MORE: three dots. The platform convention for "there is more behind this",
+     and it deliberately does not try to depict the four things it holds — a
+     glyph that means shop-and-kennel-and-ring-and-settings is a glyph that
+     means nothing. */
+  more(c, x, y, r) {
+    for (let i = -1; i <= 1; i++) {
+      c.beginPath(); c.arc(x + i * r * 0.62, y, r * 0.21, 0, TAU); c.fill();
+    }
   },
-  dogs(c, x, y, r) {          // two heads, one behind the other: the kennel
+  /* kept: the kennel's two-heads glyph, now used by the More sheet's row */
+  dogs(c, x, y, r) {
     c.save();
     c.globalAlpha = 0.55;
     c.beginPath(); c.arc(x + r * 0.42, y - r * 0.10, r * 0.52, 0, TAU); c.fill();
@@ -71,20 +103,38 @@ const GLYPH = {
     c.beginPath(); c.ellipse(x - r * 0.72, y - r * 0.42, r * 0.22, r * 0.30, -0.38, 0, TAU); c.fill();
     c.beginPath(); c.ellipse(x + r * 0.04, y - r * 0.42, r * 0.22, r * 0.30, 0.38, 0, TAU); c.fill();
   },
-  settings(c, x, y, r) {      // heart-in-gear-ish: three dots
-    for (let i = -1; i <= 1; i++) { c.beginPath(); c.arc(x + i * r * 0.62, y, r * 0.20, 0, TAU); c.fill(); }
-  },
 };
 
+export { GLYPH };
+
 export function createNav(items, opts = {}) {
+  const presses = createPresses(opts.reduced);
+  let pressedId = '';
+
   const nav = {
     items,
     y: 0, h: N.h,
-    pressed: '',
+    /** the id of the surface currently open, drawn as the selected pill */
+    active: '',
+    get pressed() { return pressedId; },
+    /** kept as an assignable property: scenes/room.js sets `nav.pressed = id` */
+    set pressed(id) {
+      if (pressedId && pressedId !== id) presses.set(pressedId, false);
+      pressedId = id || '';
+      if (pressedId) presses.set(pressedId, true);
+      else presses.clear();
+    },
+    /** the tactile press needs a clock */
+    update(dt) { presses.update(dt); },
+
     /** call when the safe-area inset changes */
     layout(safeBottom) {
       nav.h = N.h;
-      nav.y = BALANCE.view.H - N.h - Math.max(6, safeBottom) - 6;
+      /* the tactile edge hangs BELOW the face, so the face has to move up by it
+         or the bottom edge eats into the home-bar clearance. The target device
+         reports 40px bottom; at h=60 this puts the edge's bottom at 798 with
+         the safe band ending at 804. */
+      nav.y = BALANCE.view.H - N.h - PRESS.edge - Math.max(6, safeBottom) - 6;
     },
     bounds(i) {
       const n = items.length;
@@ -98,9 +148,12 @@ export function createNav(items, opts = {}) {
      * otherwise fall through to the play surface, so a thumb landing between
      * two buttons pokes the room instead of pressing anything. Inside the
      * band, the nearest pill wins.
+     *
+     * The band now includes the tactile edge plus a little slop above, so the
+     * bottom 4 units of a pill are pressable rather than decorative.
      */
     hit(x, y) {
-      if (y < nav.y || y > nav.y + nav.h) return null;
+      if (y < nav.y - 4 || y > nav.y + nav.h + PRESS.edge + 2) return null;
       let best = null, bd = Infinity;
       for (let i = 0; i < items.length; i++) {
         const b = nav.bounds(i);
@@ -111,35 +164,34 @@ export function createNav(items, opts = {}) {
     },
     draw(g) {
       const c = g.ctx;
-      c.save();
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const b = nav.bounds(i);
         const dim = it.available === false;
-        const down = nav.pressed === it.id;
-        c.globalAlpha = down ? 0.52 : (dim ? 0.30 : 0.40);
-        c.fillStyle = '#fff8ea';
-        roundRect(c, b.x, b.y, b.w, b.h, N.r); c.fill();
-        c.globalAlpha = dim ? 0.14 : 0.22;
-        c.strokeStyle = '#7c4a2f'; c.lineWidth = 1.2;
-        roundRect(c, b.x, b.y, b.w, b.h, N.r); c.stroke();
-        c.globalAlpha = dim ? 0.52 : 0.92;
-        const cx = b.x + b.w / 2, cy = b.y + b.h * 0.40;
-        c.fillStyle = '#6b3a24'; c.strokeStyle = '#6b3a24';
+        const p = presses.at(it.id);
+        const on = nav.active && nav.active === it.id;
+        /* the SELECTED pill, from the mock's `secondary-container`. Real
+           information: it says which surface is open, which an eight-pill bar
+           had no room to say. */
+        const face = on ? SURF.chipWarm : C.surfaceContainer;
+        const f = tactile(c, {
+          x: b.x, y: b.y, w: b.w, h: b.h, r: R.md, p, face,
+          fade: dim ? 0.55 : 1,
+        });
+        /* the glyph, offset by the press so it sinks WITH the face */
+        c.save();
+        c.globalAlpha = dim ? 0.5 : 0.95;
+        const gi = on ? INK.onWarm : INK.glyph;
+        c.fillStyle = gi; c.strokeStyle = gi;
         const glyph = GLYPH[it.icon || it.id];
-        if (glyph) glyph(c, cx, cy, N.iconR);
-      }
-      c.globalAlpha = 1;
-      c.restore();
-      /* the labels, after the pills, so `over` is true of what is behind them */
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i];
-        const b = nav.bounds(i);
-        const dim = it.available === false;
+        if (glyph) glyph(c, b.x + b.w / 2, b.y + f.dy + b.h * 0.40, N.iconR);
+        c.restore();
+        /* the label, after the pill, so `over` is true of what is behind it */
         drawText(g, it.label.toUpperCase(), {
-          x: b.x + b.w / 2, y: b.y + b.h * 0.80, anchor: 'free',
-          size: N.label, weight: 700, ink: '#5d3018', over: PILL_BG,
-          maxWidth: b.w - 6, fade: dim ? 0.55 : 1,
+          ...type('labelSm'),
+          x: b.x + b.w / 2, y: b.y + f.dy + b.h * 0.78, anchor: 'free',
+          ink: on ? INK.onWarm : INK.body, over: face,
+          maxWidth: b.w - 8, fade: dim ? 0.55 : 1,
         });
       }
     },

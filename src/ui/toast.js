@@ -20,6 +20,7 @@
 import BALANCE from '../state/balance.js';
 import { clamp, smooth } from '../engine/draw.js';
 import { drawText } from './text.js';
+import { type } from './tokens.js';
 
 const U = BALANCE.ui.toast;
 
@@ -65,11 +66,16 @@ export function createToasts() {
         const a = u < U.fade ? smooth(u / U.fade)
           : (u > 1 - U.fade ? smooth((1 - u) / U.fade) : 1);
         drawText(g, it.text, {
+          /* ON THE RAMP (stage 9): `label-md`, 14/20/600, at weight 700. The
+             hardcoded 13.5 was fine and arbitrary; this is the same size the
+             sheet rows use, which is the point of having a ramp — a toast and a
+             row label are the same rank of thing and should not differ by half a
+             pixel for no reason. `U.size` stays in balance.js as the override
+             hook it always was. */
+          ...type('labelMd', { weight: 700 }),
           x: BALANCE.view.W / 2,
           y: baseY - i * U.step - (1 - a) * 6,
           anchor: 'free',
-          size: U.size,
-          weight: 700,
           padX: U.padX,
           padY: U.padY,
           fade: clamp(a, 0, 1),

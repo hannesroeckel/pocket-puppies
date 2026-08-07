@@ -23,6 +23,11 @@ import BALANCE from '../state/balance.js';
 import { clamp, smooth, roundRect } from '../engine/draw.js';
 import { drawText, plateAlpha } from './text.js';
 import { capitalise } from '../state/game.js';
+/* `alpha` comes in as `tint`: this module has used `let alpha` for the overlay
+   fade since stage 1, and importing a function under that name shadowed it
+   silently — the module still parsed and threw `alpha is not a function` only
+   when the naming beat actually drew, which is the first screen of the game. */
+import { INK as TOK, C, type, alpha as tint } from './tokens.js';
 
 const NA = BALANCE.ui.naming;
 const VW = BALANCE.view.W;
@@ -42,9 +47,21 @@ const LINE_Y = {
    against the worst possible background — pure black or pure white showing
    through. The scrim is drawn at that alpha, so it is the guarantee and no
    pill is needed over the one moment in the game that must have no chrome. */
-const INK = '#fff3d8';
+const INK = TOK.onDark;
+/* THE SCRIM IS DELIBERATELY NOT `deep-bark`, AND THIS IS THE ONE DOCUMENTED
+   EXCEPTION TO "no chrome names its own colour" (ui/tokens.js rule 1).
+   `deep-bark` (#2A1C14) is the deepest SURFACE shadow — the colour a card casts.
+   This is not a surface: it is a full-screen vignette whose job is to take the
+   room down far enough that a single cream line is the only thing in the world,
+   and it has to go deeper than any surface token is allowed to. It also carries
+   the beat's entire contrast guarantee, because `SCRIM_A` is solved against it
+   and no plate is drawn over the one moment that must have no chrome at all.
+   Swapping it for a lighter token would silently raise the solved alpha and make
+   this beat darker to compensate — a worse result reached by a tidier route. */
 const SCRIM = '#1a0d06';
 const SCRIM_A = plateAlpha(INK, SCRIM);
+/* the warm highlight: the caret, and the name once she has typed it */
+const WARM = C.secondaryContainer;
 
 export function createNaming(opts = {}) {
   /* NO HARDCODED PRONOUN. "Her new name" was wrong on screen for a male gift
@@ -69,15 +86,27 @@ export function createNaming(opts = {}) {
   /* the copy. Second person, present tense, no exclamation marks — the beat
      carries itself and punctuation shouting over it makes it cheaper. */
   function script() {
-    const she = game.dog.sex === 'm' ? 'He' : 'She';
-    const her = game.dog.sex === 'm' ? 'him' : 'her';
+    /* SUBJECT AND OBJECT ARE DIFFERENT WORDS, and the rename line needs the
+       SUBJECT. This beat had one local holding the object pronoun and used it
+       for both lines, which is right for "what will you call HIM" and wrong for
+       "what should HE be called" — so renaming an already-named dog asked
+       **"What should him be called?"**, and "What should her be called?" for a
+       female. Rendered and read; no gate covers grammar.
+
+       Taken from `game.pron` rather than a local ternary, which is what
+       state/game.js asks every caller to do: the pronoun table is one place and
+       a ternary at each site is how the two forms drifted apart here. */
+    const P = game.pron;
+    const they = P.they;                        // he  / she  — the SUBJECT
+    const them = P.them;                        // him / her  — the OBJECT
+    const They = capitalise(they);
     if (mode === 'rename') {
-      return [{ text: game.isNamed ? 'What should ' + her + ' be called?' : 'What will you call ' + her + '?', ask: true }];
+      return [{ text: game.isNamed ? 'What should ' + they + ' be called?' : 'What will you call ' + them + '?', ask: true }];
     }
     return [
       { text: 'Someone came for you.', hold: NA.beats[0] },
-      { text: she + "'s yours.", hold: NA.beats[1] },
-      { text: 'What will you call ' + her + '?', ask: true },
+      { text: They + "'s yours.", hold: NA.beats[1] },
+      { text: 'What will you call ' + them + '?', ask: true },
     ];
   }
 
@@ -99,9 +128,9 @@ export function createNaming(opts = {}) {
     input.setAttribute('aria-label', 'Name your puppy');
     input.value = mode === 'rename' && game.isNamed ? game.dog.name : '';
     /* bare: no box, no fill, just a line to write on */
-    input.style.cssText = 'background:transparent;border:0;border-bottom:1.5px solid rgba(255,236,205,.42);'
-      + 'outline:none;text-align:center;color:#fff3d8;caret-color:#ffd9a0;'
-      + 'font:600 28px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+    input.style.cssText = `background:transparent;border:0;border-bottom:1.5px solid ${tint(INK, 0.42)};`
+      + `outline:none;text-align:center;color:${INK};caret-color:${WARM};`
+      + `font:${type('headlineMd').weight} ${type('headlineMd').size}px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;`
       + 'width:230px;padding:6px 4px 8px;letter-spacing:.01em;'
       + '-webkit-user-select:text;user-select:text;';
     const submit = () => {
@@ -258,12 +287,43 @@ export function createNaming(opts = {}) {
        and the guarantee is measured rather than hoped for. Held flat across
        the whole copy band (down to y=352) and only then released. */
     const tb = c.createLinearGradient(0, 0, 0, 440);
-    tb.addColorStop(0, `rgba(26,13,6,${(Math.min(0.82, SCRIM_A + 0.10) * a).toFixed(3)})`);
-    tb.addColorStop(0.45, `rgba(26,13,6,${(Math.min(0.80, SCRIM_A + 0.08) * a).toFixed(3)})`);
-    tb.addColorStop(0.80, `rgba(26,13,6,${((SCRIM_A + 0.02) * a).toFixed(3)})`);
-    tb.addColorStop(1, 'rgba(26,13,6,0)');
+    /* derived from SCRIM rather than re-typing it four times: the band and the
+       vignette have to be the same colour or the seam shows */
+    tb.addColorStop(0, tint(SCRIM, Math.min(0.82, SCRIM_A + 0.10) * a));
+    tb.addColorStop(0.45, tint(SCRIM, Math.min(0.80, SCRIM_A + 0.08) * a));
+    tb.addColorStop(0.80, tint(SCRIM, (SCRIM_A + 0.02) * a));
+    tb.addColorStop(1, tint(SCRIM, 0));
     c.fillStyle = tb;
     c.fillRect(0, 0, VW, 440);
+
+    /* AND THE BOTTOM BAND, FOR THE SAME REASON AND BY THE SAME METHOD.
+       The band above guarantees the copy down to y=440. `not yet` lives at
+       `LINE_Y.skip` = VH-84 = 760, which is nowhere near it, so it inherited
+       only the radial's ~0.44 over the rug — and the rug is STRIPED, so the
+       word straddled a teal stripe and a cream one. Measured off the render:
+       1.95:1. Half of it read and half of it vanished, which is worse than
+       uniformly faint because it looks like a rendering artefact rather than
+       like something you are meant to be able to press.
+
+       It is a real tap target (see `pointer`), so it does not get to be
+       decorative-faint — the note on the drawText call below already said so
+       and raised its alpha from 0.42 to 0.72, which moved it from invisible to
+       merely illegible, because alpha was never the variable that mattered.
+
+       Same remedy as the top, and deliberately NOT a pill: hold `SCRIM_A` —
+       the alpha ui/text.js SOLVES for this ink to clear 4.5:1 against the worst
+       background — flat across the skip line's own band. Nothing here is
+       hand-tuned; it is the same solved constant the top band uses.
+
+       It starts at 660, below the rug's far edge and well below his paws
+       (~y 540-570), so the pool of light he sits in is untouched. The beat's
+       whole point is that she can watch him while she decides. */
+    const bb = c.createLinearGradient(0, 660, 0, 748);
+    bb.addColorStop(0, tint(SCRIM, 0));
+    bb.addColorStop(0.62, tint(SCRIM, (SCRIM_A + 0.02) * a));
+    bb.addColorStop(1, tint(SCRIM, Math.min(0.80, SCRIM_A + 0.06) * a));
+    c.fillStyle = bb;
+    c.fillRect(0, 660, VW, VH - 660);
     c.restore();
 
     c.save();
@@ -280,12 +340,14 @@ export function createNaming(opts = {}) {
       const sc = 1 + (1 - smooth(u)) * 0.10;
       c.restore();
       drawText(g, revealName, {
-        x: VW / 2, y: LINE_Y.reveal, size: 34 * sc, weight: 700,
+        ...type('headlineLg'), size: type('headlineLg').size * sc,
+        x: VW / 2, y: LINE_Y.reveal,
         ink: INK, plate: 'none', maxWidth: VW - 64,
         fade: a * smooth(clamp(t / 0.45, 0, 1)),
       });
       drawText(g, mode === 'rename' ? `${capitalise(pron().their)} new name` : 'Hello, ' + revealName, {
-        x: VW / 2, y: LINE_Y.revealSub, size: 13.5, weight: 600,
+        ...type('labelMd'),
+        x: VW / 2, y: LINE_Y.revealSub,
         ink: INK, plate: 'none', maxWidth: VW - 64,
         fade: a * smooth(clamp((t - 0.5) / 0.6, 0, 1)),
       });
@@ -307,7 +369,7 @@ export function createNaming(opts = {}) {
        game that must have none. */
     drawText(g, line.text, {
       x: VW / 2, y: line.ask ? LINE_Y.ask : LINE_Y.line,
-      size: 21, weight: 500, ink: '#fff3d8',
+      ...type('titleMd', { weight: 500 }), ink: INK,
       plate: 'none', fade: a * fade * 0.96,
       maxWidth: VW - 56,
     });
@@ -320,15 +382,17 @@ export function createNaming(opts = {}) {
       const typed = input && input.value ? input.value.trim() : '';
       c.restore();
       drawText(g, typed ? 'Press return' : 'Type a name', {
-        x: VW / 2, y: LINE_Y.cue, size: 12.5, weight: 700,
-        ink: typed ? '#ffe0a8' : INK, plate: 'none',
+        ...type('labelSm', { weight: 700, track: 0.04 }),
+        x: VW / 2, y: LINE_Y.cue,
+        ink: typed ? WARM : INK, plate: 'none',
         fade: a * fade * (typed ? 1 : 0.62),
       });
       /* "not yet" is a real tap target (see `pointer`), so it is not allowed to
          be decorative-faint — it was at 0.42 and reading it required knowing it
          was there. It stays the quietest thing on screen and stays legible. */
       drawText(g, 'not yet', {
-        x: VW / 2, y: LINE_Y.skip, size: 12, weight: 600,
+        ...type('labelSm', { weight: 600, track: 0 }),
+      x: VW / 2, y: LINE_Y.skip,
         ink: INK, plate: 'none', fade: a * fade * 0.72,
       });
       return;
@@ -338,7 +402,8 @@ export function createNaming(opts = {}) {
        IS decorative: it repeats an affordance the whole screen already has (any
        tap advances), so it is the one place a low alpha is honest. */
     drawText(g, 'tap', {
-      x: VW / 2, y: VH - 118, size: 11.5, weight: 600,
+      ...type('labelSm', { weight: 600, track: 0 }),
+      x: VW / 2, y: VH - 118,
       ink: INK, plate: 'none',
       fade: a * fade * 0.34 * (0.6 + 0.4 * Math.sin(t * 2.1)),
     });

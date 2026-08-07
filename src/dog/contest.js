@@ -71,6 +71,10 @@ import {
   freeMul,
 } from '../state/contest.js';
 import { drawText, drawStack, drawPlate, safeBand, measure } from '../ui/text.js';
+/* CHROME ONLY — the ring's own art (ribbons, rosettes, the judge's board) is
+   scene art and stays in `C` below. This is the one primary action. */
+import { INK, SURF, PRESS } from '../ui/tokens.js';
+import { primaryAction } from '../ui/surface.js';
 
 const K = BALANCE.contest;
 const R = K.ring;
@@ -1055,19 +1059,22 @@ export function createContest(rig, opts = {}) {
     /* THE BUTTON, INSIDE THE PANEL. When the gate is shut it is not greyed out
        and dead — it carries the fix, so there is always exactly one obvious
        thing to press. */
+    /* THE PRIMARY ACTION (stage 9). Was `C.ribbon` terracotta with a hand-rolled
+       3px offset rect for a shadow — which was a tactile edge drawn by someone
+       who had not been told there was a name for it. It is now the same
+       `primaryAction()` object as the install card's "Got it" and the map's
+       "Set off", so the biggest button on all three surfaces is one thing.
+       Drawn at rest: the entry panel tracks no press state, and inventing one
+       inside the contest module is not worth reaching into it for. */
     const E = enterBox();
-    const bg = can ? C.ribbon : C.teal;
     const label = can ? COPY.enter() : COPY.gateGo(P, gate ? gate.reason : '');
-    c.save();
-    c.globalAlpha = a;
-    c.fillStyle = 'rgba(104,58,32,0.14)';
-    roundRect(c, E.x - E.w / 2, E.y - E.h / 2 + 3 + (1 - a) * 18, E.w, E.h, E.r); c.fill();
-    c.fillStyle = bg;
-    roundRect(c, E.x - E.w / 2, E.y - E.h / 2 + (1 - a) * 18, E.w, E.h, E.r); c.fill();
-    c.restore();
+    const EB = primaryAction(c, {
+      x: E.x - E.w / 2, y: E.y - E.h / 2 + (1 - a) * 18 - PRESS.edge / 2,
+      w: E.w, h: E.h, r: E.r, fade: a,
+    });
     drawText(g, label, {
-      x: E.x, y: E.y + (1 - a) * 18, size: 15, weight: 800,
-      ink: '#fff6e4', over: bg, maxWidth: E.w - 22, fade: a,
+      x: E.x, y: EB.y + EB.h / 2, size: 15, weight: 800,
+      ink: INK.onStrong, over: SURF.chipStrong, maxWidth: E.w - 22, fade: a,
     });
   }
 

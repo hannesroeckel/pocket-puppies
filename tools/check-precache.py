@@ -16,8 +16,12 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # on disk and NOT part of the shipped game: dev spikes, art review, the
-# generator for the icons, and this checker itself
-EXCLUDE_DIRS = {"review", "tools", ".git", "docs"}
+# generator for the icons, and this checker itself.
+# `refs` is the reference art (turnaround sheets, walk cycles). It is gitignored
+# — see .gitignore — so it is not even in the repo GitHub Pages serves, and
+# precaching it would put megabytes of PNG a player never sees into the install
+# AND fail that all-or-nothing install on any clone that doesn't have it.
+EXCLUDE_DIRS = {"review", "tools", ".git", "docs", "refs"}
 EXCLUDE_FILES = {"spike-a-2d.html", "spike-b-pixel.html", "spike-c-3d.html", "sw.js"}
 
 sw = (ROOT / "sw.js").read_text(encoding="utf-8")

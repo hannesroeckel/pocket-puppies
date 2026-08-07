@@ -59,9 +59,37 @@ const T = BALANCE.ui.text;
 const VW = BALANCE.view.W;
 const VH = BALANCE.view.H;
 
-/** the one font stack. It was written out 32 times before this line existed. */
+/** the one font stack. It was written out 32 times before this line existed.
+    STILL THE SYSTEM STACK, on purpose — decision 2 in docs/DESIGN-REF.md. The
+    supplied design specified Plus Jakarta Sans; we took its RAMP (sizes,
+    weights, line-heights, letter-spacing, via BALANCE.ui.tokens.type) and left
+    the family alone. A webfont here would be bytes to precache, a request that
+    can fail, and a flash of unstyled text on the one screen that has to feel
+    calm. The ramp is what carried the design; the family was never the part
+    doing the work. */
 export const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 export const font = (size, weight = 600) => `${weight} ${size}px ${FONT}`;
+
+/* ---- letter-spacing ----------------------------------------------------
+   The ramp's `track` values (+0.05em on the small uppercase labels, −0.02em on
+   the display size) are the difference between a 12px all-caps label reading as
+   a LABEL and reading as cramped body copy. Canvas2D got `ctx.letterSpacing`
+   only in Safari 17.4, and the target is an iPhone of unknown vintage, so it is
+   FEATURE-DETECTED and a miss degrades to no tracking — which is cosmetic, and
+   safe because `measureText` and `fillText` then agree with each other either
+   way. Nothing about the layout depends on the tracking landing.
+
+   Always set, never left dirty: the property is context state, so writing
+   '0px' for untracked copy is what stops one label's tracking leaking into the
+   next string measured. */
+let LS = null;
+function tracking(c, size, track) {
+  if (LS === null) LS = (typeof c.letterSpacing === 'string');
+  if (!LS) return;
+  c.letterSpacing = track ? (track * size).toFixed(3) + 'px' : '0px';
+}
+/** whether the platform honours tracking at all — reported by the audit hook */
+export const hasTracking = () => LS;
 
 /* ==========================================================================
    colour + contrast (WCAG 2.1 relative luminance)
@@ -241,11 +269,12 @@ export function anchorY(view, y, anchor, half = 0) {
    measuring
    ========================================================================== */
 const MEASURE = new Map();
-function widthOf(c, str, size, weight) {
-  const key = weight + '|' + size + '|' + str;
+function widthOf(c, str, size, weight, track) {
+  const key = weight + '|' + size + '|' + (track || 0) + '|' + str;
   const hit = MEASURE.get(key);
   if (hit !== undefined) return hit;
   c.font = font(size, weight);
+  tracking(c, size, track);
   const w = c.measureText(str).width;
   if (MEASURE.size > 400) MEASURE.clear();
   MEASURE.set(key, w);
@@ -253,19 +282,19 @@ function widthOf(c, str, size, weight) {
 }
 
 /** shrink-to-fit, then ellipsise. Returns { str, size, w } */
-function fit(c, str, size, weight, maxW) {
+function fit(c, str, size, weight, maxW, track) {
   let s = size;
-  let w = widthOf(c, str, s, weight);
+  let w = widthOf(c, str, s, weight, track);
   while (w > maxW && s > T.minSize) {
     s = Math.max(T.minSize, s - 0.5);
-    w = widthOf(c, str, s, weight);
+    w = widthOf(c, str, s, weight, track);
   }
   if (w <= maxW) return { str, size: s, w };
   /* still too wide at the floor: trim with an ellipsis rather than clip */
   let out = str;
-  while (out.length > 1 && widthOf(c, out + '…', s, weight) > maxW) out = out.slice(0, -1);
+  while (out.length > 1 && widthOf(c, out + '…', s, weight, track) > maxW) out = out.slice(0, -1);
   out += '…';
-  return { str: out, size: s, w: widthOf(c, out, s, weight) };
+  return { str: out, size: s, w: widthOf(c, out, s, weight, track) };
 }
 
 /**
@@ -278,10 +307,15 @@ export function measure(g, str, o = {}) {
   const size = o.size || T.size;
   const weight = o.weight || T.weight;
   const align = o.align || 'center';
+  const track = o.track || 0;
+  /* the RAMP's own leading. A step carries its line-height (12/16, 48/56), so
+     one global 1.32 is no longer the answer for every size — but it stays the
+     default, so every caller that predates the ramp lays out identically. */
+  const lineScale = o.lineScale || T.lineScale;
   const band = safeBand(view);
   const maxW = Math.min(o.maxWidth || (band.right - band.left), band.right - band.left);
-  const f = fit(c, String(str), size, weight, maxW);
-  const h = f.size * T.lineScale;
+  const f = fit(c, String(str), size, weight, maxW, track);
+  const h = f.size * lineScale;
   let x = o.x === undefined ? VW / 2 : o.x;
   /* keep the BOX inside the band, not just the anchor point */
   if (align === 'center') x = clamp(x, band.left + f.w / 2, band.right - f.w / 2);
@@ -289,7 +323,7 @@ export function measure(g, str, o = {}) {
   else x = clamp(x, band.left + f.w, band.right);
   const y = anchorY(view, o.y === undefined ? 0 : o.y, o.anchor || 'free', h / 2 + T.padY);
   const x0 = align === 'center' ? x - f.w / 2 : (align === 'left' ? x : x - f.w);
-  return { str: f.str, size: f.size, w: f.w, h, x, y, align, weight, x0, y0: y - h / 2 };
+  return { str: f.str, size: f.size, w: f.w, h, x, y, align, weight, track, x0, y0: y - h / 2 };
 }
 
 /* ==========================================================================
@@ -355,6 +389,7 @@ export function drawText(g, str, o = {}) {
   c.globalAlpha = fade;
   c.fillStyle = ink;
   c.font = font(m.size, m.weight);
+  tracking(c, m.size, m.track);
   c.fillText(m.str, m.x, m.y);
   c.restore();
   return m;
@@ -414,8 +449,10 @@ export function drawStack(g, lines, o = {}) {
   const ms = rows.map((l) => {
     const size = l.size || o.size || T.size;
     const weight = l.weight || o.weight || T.weight;
-    const f = fit(c, String(l.text), size, weight, maxW);
-    return { ...f, weight, ink: l.ink || o.ink || T.ink, h: f.size * T.lineScale };
+    const track = l.track === undefined ? (o.track || 0) : l.track;
+    const lineScale = l.lineScale || o.lineScale || T.lineScale;
+    const f = fit(c, String(l.text), size, weight, maxW, track);
+    return { ...f, weight, track, ink: l.ink || o.ink || T.ink, h: f.size * lineScale };
   });
   const totalH = ms.reduce((s, m) => s + m.h, 0) + gap * (ms.length - 1);
   const w = ms.reduce((s, m) => Math.max(s, m.w), 0);
@@ -452,6 +489,7 @@ export function drawStack(g, lines, o = {}) {
     c.globalAlpha = fade * (m.alpha === undefined ? 1 : m.alpha);
     c.fillStyle = o.over ? inkFor(m.ink, o.over, target) : m.ink;
     c.font = font(m.size, m.weight);
+    tracking(c, m.size, m.track);
     c.fillText(m.str, x, y + m.h / 2);
     y += m.h + gap;
   }
