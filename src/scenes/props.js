@@ -75,14 +75,71 @@ export const BOWL_TOP = -17.5;
    pixels are the ones 'all' would have produced. The one thing it must skip
    is the contact shadow, which is translucent and would double-darken.
    ---------------------------------------------------------------------- */
-const RIM_RX = 30, RIM_CY = -8, RIM_RY = 9.5;
-const WELL_RX = 24.5, WELL_CY = -7, WELL_RY = 7;
+/* ---- HOW WIDE THE VESSEL IS, AND WHY IT IS NOT 1 (§19.7) --------------
+   A DOG'S BOWL IS WIDER THAN THE DOG'S FACE. This one was not, and that is
+   the fourth defect the human found on his phone: "the chin of the dog goes
+   through the bowl and shows out underneath it as well".
+
+   The vessel's DEPTH is not free. `solveEatGeometry` pins its base to the
+   floor and its food surface to his muzzle, so the drawn distance between
+   those two is whatever this dog's stoop makes it — about 36-43 virtual
+   units — whatever numbers are written here. Its WIDTH is free, and it is
+   the only thing that is: SPREAD multiplies every x in the drawing and
+   nothing else, so it cannot move the base off the floor, cannot change the
+   solved scale, and cannot change the food surface's height. That is the
+   whole reason the fix is on this axis.
+
+   Measured, at the deepest drink frame, in the vessel's own units
+   (`C:\tmp\ppchin\deep.py`): his face reaches out to |x| = 52 (Shiba), 49
+   (Cockapoo) and 41 (Schnoodle) below the near lip, against a vessel that
+   stopped at 30. Below the lip line it therefore came out past the rim on
+   both sides with nothing to hide behind — not drawn in front of the near
+   wall, but outside the region the near wall can ever cover. Widening is the
+   only answer to that; a bigger 'front' layer cannot cover ground the vessel
+   does not stand on.
+
+   Sized by rendering, not by arithmetic. Swept at 1.0 / 1.25 / 1.40 / 1.45 /
+   1.55 / 1.75 / 2.10 with the new gate reading every frame and the crop
+   looked at each time: 1.75 reaches zero on its own but the vessel stops
+   reading as a bowl and starts reading as a canoe, and it buries his front
+   paws. 1.55 with the foot below, and with the smaller stoop §19.7 also
+   makes, is clear on all three breeds and still sits inside his paws.
+   See ARCHITECTURE §19.7.
+   ---------------------------------------------------------------------- */
+const SPREAD = (typeof globalThis !== 'undefined' && +globalThis.__ppSpread) || 1.55;
+const RIM_RX = 30 * SPREAD, RIM_CY = -8, RIM_RY = 9.5;
+const WELL_RX = 24.5 * SPREAD, WELL_CY = -7, WELL_RY = 7;
+/** every authored x in the vessel's art goes through here */
+const SX = (x) => x * SPREAD;
+
+/* ---- THE VESSEL HAS A FOOT, AND THAT IS HALF THE FIX (§19.7) ----------
+   The wall used to run in one curve from each rim tip to a single lowest
+   POINT at x = 0 — the silhouette of a funnel, not of a bowl. Two things
+   followed from it, and both were visible:
+
+     * at the rim tips the vessel had ZERO height, so the near wall had
+       nothing to occlude with exactly where his cheeks crossed it. Widening
+       alone left two sharp magenta slivers in the gate's mask, at the tips,
+       on every breed — the tips move outwards but they stay points.
+     * widened, a pointed lens stops reading as a bowl and starts reading as
+       a canoe.
+
+   A bowl of revolution standing on a floor has a BASE OF SOME WIDTH, and its
+   silhouette between the rim and that base is a wall of real height at every
+   x it covers. That is what this draws now, and `BOWL_BASE` still means what
+   it meant: the underside ellipse's lowest point, the pixel that touches the
+   floor, unmoved at 18.
+   ---------------------------------------------------------------------- */
+const FOOT_RX = RIM_RX * 0.54, FOOT_RY = 3.2;
+const FOOT_CY = BOWL_BASE - FOOT_RY;
 
 /** the outer vessel wall below the rim plate — the bowl's silhouette */
 function bowlBodyPath(c) {
   c.moveTo(-RIM_RX, RIM_CY);
-  c.bezierCurveTo(-28, 10, -16, 18, 0, BOWL_BASE);
-  c.bezierCurveTo(16, 18, 28, 10, RIM_RX, RIM_CY);
+  c.bezierCurveTo(-RIM_RX * 0.96, 3, -FOOT_RX * 1.34, 12.4, -FOOT_RX, FOOT_CY);
+  /* the underside, through its lowest point at BOWL_BASE */
+  c.ellipse(0, FOOT_CY, FOOT_RX, FOOT_RY, 0, Math.PI, 0, true);
+  c.bezierCurveTo(FOOT_RX * 1.34, 12.4, RIM_RX * 0.96, 3, RIM_RX, RIM_CY);
 }
 
 /**
@@ -170,9 +227,12 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer 
 
   /* the contact shadow is translucent, so the front pass must not lay a
      second copy of it over the back pass's */
-  if (!front) { c.fillStyle = PC.shadow; ell(c, 2, 6, 34, 10); c.fill(); }
+  if (!front) {
+    /* the contact shadow hugs the FOOT now, not the old pointed underside */
+    c.fillStyle = PC.shadow; ell(c, SX(2), BOWL_BASE - 1.5, FOOT_RX * 1.30, 5.0); c.fill();
+  }
 
-  const g = c.createLinearGradient(-30, -14, 30, 14);
+  const g = c.createLinearGradient(SX(-30), -14, SX(30), 14);
   g.addColorStop(0, water ? PC.tealL : PC.clayL);
   g.addColorStop(0.5, water ? PC.teal : PC.clay);
   g.addColorStop(1, water ? PC.tealD : PC.clayD);
@@ -189,7 +249,7 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer 
      edge, so it skips them */
   if (f > 0.01 && !front) {
     c.save();
-    ell(c, 0, -7, 24.5, 7); c.clip();
+    ell(c, 0, WELL_CY, WELL_RX, WELL_RY); c.clip();
     if (water) {
       /* the surface sits higher as the bowl fills, and wobbles */
       const surf = lerp(1.5, -7.5, f);
@@ -198,19 +258,19 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer 
       wg.addColorStop(0, PC.waterL); wg.addColorStop(0.5, PC.water); wg.addColorStop(1, PC.waterD);
       c.fillStyle = wg;
       c.beginPath();
-      c.moveTo(-26, surf + wob);
-      c.bezierCurveTo(-9, surf - 1.6 - wob, 9, surf + 1.6 + wob, 26, surf - wob);
-      c.lineTo(26, 12); c.lineTo(-26, 12); c.closePath(); c.fill();
+      c.moveTo(SX(-26), surf + wob);
+      c.bezierCurveTo(SX(-9), surf - 1.6 - wob, SX(9), surf + 1.6 + wob, SX(26), surf - wob);
+      c.lineTo(SX(26), 12); c.lineTo(SX(-26), 12); c.closePath(); c.fill();
       /* specular band + a ring or two from the last disturbance */
       c.fillStyle = 'rgba(255,255,255,0.55)';
-      ell(c, -8, surf + 0.6, 8 * (0.7 + f * 0.5), 1.7, -0.12); c.fill();
-      ell(c, 9, surf + 2.2, 4.6, 1.2, 0.16); c.fill();
+      ell(c, SX(-8), surf + 0.6, SX(8) * (0.7 + f * 0.5), 1.7, -0.12); c.fill();
+      ell(c, SX(9), surf + 2.2, SX(4.6), 1.2, 0.16); c.fill();
       if (ripple > 0.02) {
         c.strokeStyle = `rgba(255,255,255,${(0.5 * ripple).toFixed(3)})`;
         c.lineWidth = 1.1;
         for (let i = 0; i < 2; i++) {
           const rr = 5 + (1 - ripple) * 15 + i * 7;
-          c.beginPath(); c.ellipse(0, surf + 2, rr, rr * 0.30, 0, 0, TAU); c.stroke();
+          c.beginPath(); c.ellipse(0, surf + 2, SX(rr), rr * 0.30, 0, 0, TAU); c.stroke();
         }
       }
     } else {
@@ -222,9 +282,9 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer 
          well either way, and it can no longer end up over his nose, because
          this whole block is now painted before he is. */
       const n = Math.round(f * KIBBLE.length);
-      const wide = 1.12 + f * 0.10;
+      const wide = SPREAD * (1.12 + f * 0.10);
       c.fillStyle = PC.kibbleD;
-      ell(c, 0, lerp(2, -8, f), 23.4 * (0.60 + f * 0.40), 6.4 * (0.5 + f * 0.5)); c.fill();
+      ell(c, 0, lerp(2, -8, f), SX(23.4) * (0.60 + f * 0.40), 6.4 * (0.5 + f * 0.5)); c.fill();
       for (let i = 0; i < n; i++) {
         const k = KIBBLE[i];
         c.fillStyle = PC.kibble;
@@ -256,7 +316,7 @@ export function drawBowl(c, bx, by, s, kind, fill = 0, t = 0, ripple = 0, layer 
     c.stroke();
     c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1.1;
     c.beginPath();
-    c.ellipse(0, RIM_CY + 0.6, RIM_RX - 1, RIM_RY - 1, 0, Math.PI * 0.12, Math.PI * 0.88);
+    c.ellipse(0, RIM_CY + 0.6, RIM_RX - SX(1), RIM_RY - 1, 0, Math.PI * 0.12, Math.PI * 0.88);
     c.stroke();
   }
   c.restore();

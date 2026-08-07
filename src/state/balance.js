@@ -294,7 +294,15 @@ export const BALANCE = {
          Tuned by looking at five candidates; 2 was the first guess and made a
          bowl so shallow it sat under his chin like a saucer. */
       dipInto: 16,
-      scaleRange: [1.10, 1.95], // a solved scale outside this is a bug, clamped
+      /* a solved scale outside this is a bug, clamped — and the clamp is
+         reported as a FAILURE, never used as a safety net (see care.js).
+         The ceiling moved 1.95 -> 2.20 with §19.7's smaller stoop: a head that
+         folds 0.68 of its room instead of 0.77 leaves a LARGER gap between the
+         food surface and the floor, and the vessel has to span it, so the
+         honest solve now lands at 1.75 (Shiba) to 2.05 (Schnoodle). The band
+         is a bug detector, not a design limit; leaving it at 1.95 would have
+         clamped the gift puppy's own bowl and lifted its base off the floor. */
+      scaleRange: [1.10, 2.20],
       targetR: 34, snap: 44,
       bowlScale: 0.86,
     },
@@ -370,7 +378,30 @@ export const BALANCE = {
        per-bite bob is added on top, so assertion B holds on every frame for
        any proportions. Stage 7's `headDown: 52` was 0.88 of the Shiba's room
        and would have been over 1.0 on a deeper-chested dog. */
-    headDownShare: 0.77,
+    /* 0.77 -> 0.68 (§19.7). HIS FACE MAY NOT BE DRAWN BELOW THE FLOOR HE IS
+       STANDING ON — and at 0.77 the Schnoodle's beard was, by 8.4 virtual
+       units, measured at the deepest drink frame. Nothing about the VESSEL can
+       answer that: `solveEatGeometry` pins the base to `rig.floorV`, so the
+       bowl's lowest drawn pixel IS the floor, and anything of him below that
+       line has no bowl to be inside of, at any width. That is the "and shows
+       out underneath it as well" half of the report, and it is a POSE fault,
+       not a bowl fault.
+
+       Lifting the head is self-correcting rather than compensating: the solve
+       re-derives the vessel against the new muzzle height, so the food surface
+       still meets his nose at exactly `dipInto` and the bowl simply gets
+       taller to span the larger gap to the floor. He reads as no less
+       committed to the bowl — the RELATIONSHIP is invariant — he is just not
+       folded so far that his chin goes through the floor.
+
+       0.68 was chosen by measuring, not by arithmetic: a static model of the
+       beard's reach (its authored `at` + path, times headHH) under-predicts
+       the drawn overhang by ~19 virtual units, because the drink bob and
+       `headPitch` swing it down after the solve has finished. Swept at 0.77 /
+       0.70 / 0.63 with the new gate reading every frame; 0.70 left 96 px and
+       0.63 was clear with a much larger bowl, so 0.68 takes the margin at the
+       cheaper end. ARCHITECTURE §19.7. */
+    headDownShare: 0.68,
     /* THE HARD CEILING, and it is enforced where the value is USED, not where
        it is solved. `dog/care.js applyBowl` clamps `headDrop + bite * bobDepth`
        to `headRoom * headMaxShare` on every frame, so no bite, no lick and no
@@ -382,7 +413,13 @@ export const BALANCE = {
        where it left 0.8 virtual units of clearance at the bottom of a bite,
        and the Shiba only passed because it happened to have room to spare. A
        bound that holds for the dog you tested is not a bound. */
-    headMaxShare: 0.82,
+       §19.7 moved this DOWN WITH `headDownShare`, keeping the same 0.05 of
+       room between them. The gap is the bob's budget, not an absolute
+       position: left at 0.82 while the resting depth came up to 0.68, a bite
+       or a lap could still have dipped 0.14 of his head room past the resting
+       pose and put the beard back through the floor on exactly the frames
+       nobody screenshots. */
+    headMaxShare: 0.73,
     /* HOW BIG A BITE ACTUALLY GETS. `applyBowl` dips the head by
        `bite * bobDepth` where `bite` is a KICKED spring clamped to this, so
        the deepest frame of a bite is 1.4x the nominal bob — and the ceiling
