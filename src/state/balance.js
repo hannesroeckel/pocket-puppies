@@ -1296,8 +1296,19 @@ export const BALANCE = {
     unlocks: [
       { id: 'collarRed', kind: 'wear', at: 90, name: 'A red collar',
         note: 'For looking after him from the start' },
+      /* `swatch` is THE COLOUR OF THE ACTUAL OBJECT, and it exists because the
+         kennel drew this row's mark from its KIND. Kind 'decor' meant a green
+         dot — beside the words "A soft blue rug". The wear rows in the same
+         column already show the real thing's colour (`collarGlyph` reads
+         `ui.wear`, which is also what dog/draw.js paints), so one column was
+         carrying two different colour meanings and the clash was legible: a red
+         crescent that means "this collar is red" sitting directly above a green
+         dot that does not mean "this rug is green".
+         This value is `RUG.blue.a` from scenes/room.js — the colour she will
+         actually see on the floor when it lands. Optional: 'stock' has no single
+         real colour ("the good treats"), so it keeps its category brown. */
       { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug',
-        note: 'The room warms up a little' },
+        swatch: '#6f93a8', note: 'The room warms up a little' },
       { id: 'cockapoo', kind: 'breed', at: 400, name: 'A Cockapoo puppy',
         note: 'Someone new, once he is properly settled' },
       { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats',

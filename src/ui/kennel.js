@@ -514,7 +514,13 @@ export function createKennel(opts = {}) {
         } else {
           c.save();
           c.globalAlpha = e.got ? 0.9 : 0.30;
-          c.fillStyle = e.kind === 'breed' ? '#c9563f' : (e.kind === 'stock' ? '#8a5a2c' : '#7ba36a');
+          /* the object's own colour when it has one (`swatch`), the category's
+             colour when it does not. See the note on `unlocks` in balance.js:
+             the wear rows beside these show the real item's colour, so a dot
+             here that meant "decor" rather than "blue" read as a wrong swatch
+             rather than as a category. Breed rows are filtered out of this list
+             above, so only 'decor' and 'stock' ever reach here. */
+          c.fillStyle = e.swatch || (e.kind === 'stock' ? '#8a5a2c' : '#7ba36a');
           c.beginPath(); c.arc(r.x + 22, r.y + f.dy + r.h / 2, 6.2, 0, TAU); c.fill();
           c.restore();
         }
