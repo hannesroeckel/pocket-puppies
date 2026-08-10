@@ -1492,12 +1492,6 @@ export function createRoomScene() {
       /* the original ran on the real clock, so needs move while she watches */
       decayLive(game, dt);
 
-      /* NOTHING THE PLAYER CAN TOUCH MAY SIT UNDER THE NAV — asserted here,
-         every frame, after last frame's positions and before this frame's
-         rewrite them. Six or seven rect tests; it does not show up in the
-         budget. See the note in `enter` and the header of ui/reach.js. */
-      reach.tick();
-
       /* ---- state machines, before the pose they drive ---- */
       reunion.update(dt);
       care.update(dt, game.mood);
@@ -1505,6 +1499,20 @@ export function createRoomScene() {
       train.update(dt, game.mood);
       walk.update(dt, game.mood);
       contest.update(dt, game.mood);
+
+      /* NOTHING THE PLAYER CAN TOUCH MAY SIT UNDER THE NAV — asserted here,
+         every frame, AFTER the state machines have written this frame's prop
+         positions and before anything draws them. The pose pipeline below moves
+         the dog, never a prop, so this is the last word on where things are.
+
+         It was above this block first, which audited LAST frame's positions and
+         so reported one violation every time the safe-area inset changed — the
+         ball genuinely was under the bar for the single frame between the inset
+         arriving and the toy's own clamp catching up. Auditing the frame that is
+         about to be drawn makes the count mean what it says.
+
+         Six or seven rect tests. See the note in `enter` and ui/reach.js. */
+      reach.tick();
 
       /* --- the pose pipeline, in order ---
          base -> idle -> pet -> care -> train -> toy -> reunion -> resolve
