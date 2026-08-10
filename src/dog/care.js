@@ -35,6 +35,28 @@ import {
   BOWL_BASE, BOWL_WELL,
 } from '../scenes/props.js';
 import { resolveDims, stance, plantedSoleLocal } from './rig.js';
+/* THE REACHABLE PLAY AREA — the bottom of what a thumb can touch (ui/reach.js).
+   This file reads it for ONE thing: reporting its props to the per-frame
+   assertion. It does not clamp anything, and the paragraph below is why.
+
+   NOTE CAREFULLY WHERE THE BOUND APPLIES, BECAUSE THE FIRST ATTEMPT AT THIS
+   BROKE FEEDING. `scenes/room.js` neither draws the nav nor hit-tests it while a
+   care surface is open (`care.modal`), and it offers the pointer to `care` before
+   `nav`. So INSIDE a care action there is no bar to be swallowed by, and the
+   floor is the only line that matters — which is a good thing, because the bowl's
+   drop target is `rig.floorV - BOWL_BASE * scale` and on a device reporting a
+   large inset that target sits BELOW the reach line. Clamping the drag to the
+   reach line made the target unreachable and the food bowl could not be put
+   down at all: `placed: false`, feeding dead. Caught by the per-frame assertion
+   plus the drive-every-state gate, at inset 80.
+
+   So: the drag ranges and the resting chase are the care surface's own business,
+   and the ONE thing here the player sees with the bar on screen — the two
+   resting bowls the ROOM draws from `BALANCE.care.stage` — is clamped, in
+   scenes/room.js where it is drawn. The probe below reports every care prop with
+   `live: false` and the audit counts those separately, so the exemption is a
+   number in a report rather than a claim in a comment. */
+import reach from '../ui/reach.js';
 
 const C = BALANCE.care;
 const ST = C.stage;
@@ -223,7 +245,13 @@ export function createCare(rig, opts = {}) {
   let finishedNeed = false;
 
   /* ---- props --------------------------------------------------------- */
-  const bowl = { x: ST.bowlHome[0], y: ST.bowlHome[1], tx: 0, ty: 0, held: false, placed: false, kind: 'food' };
+  /* the grab half-extents, shared by the hit test and the reachable-area clamp */
+  const BOWL_RY = ST.grabR / ST.grabAspect;
+  const POUR_RY = ST.pourGrabR;
+  const bowl = {
+    x: ST.bowlHome[0], y: ST.bowlHome[1],
+    tx: 0, ty: 0, held: false, placed: false, kind: 'food',
+  };
   const pourer = { x: 0, y: 0, held: false, over: 0, shown: false };
   let fill = 0;               // 0..1 bowl contents
   let served = 0;             // how much was poured in total this session
@@ -457,11 +485,12 @@ export function createCare(rig, opts = {}) {
     if (mode === 'feed' || mode === 'water') {
       if (ev.type === 'down') {
         /* the pourer is on top, so test it first */
-        if (pourer.shown && Math.hypot(ev.x - pourer.x, ev.y - pourer.y) < 46) {
+        if (pourer.shown && Math.hypot(ev.x - pourer.x, ev.y - pourer.y) < ST.pourGrabR) {
           pourer.held = true;
           return true;
         }
-        if (!bowl.placed && Math.hypot(ev.x - bowl.x, (ev.y - bowl.y) * 1.7) < 44) {
+        if (!bowl.placed
+          && Math.hypot(ev.x - bowl.x, (ev.y - bowl.y) * ST.grabAspect) < ST.grabR) {
           bowl.held = true;
           sound('bowl-lift');
           return true;
@@ -470,14 +499,18 @@ export function createCare(rig, opts = {}) {
         return phase === 'place' || phase === 'pour';
       }
       if (ev.type === 'move') {
+        /* THE CARE SURFACE'S OWN RANGES, not the reachable play area's. See
+           the note at the top of this file: there is no nav here to be
+           swallowed by, and the bowl's drop target is below the reach line on a
+           large inset, so clamping this range is what broke placing the bowl. */
         if (pourer.held) {
-          pourer.x = clamp(ev.x, 26, 364);
-          pourer.y = clamp(ev.y, 300, 812);
+          pourer.x = clamp(ev.x, ST.pourDragX[0], ST.pourDragX[1]);
+          pourer.y = clamp(ev.y, ST.pourDragTop, ST.pourDragBottom);
           return true;
         }
         if (bowl.held) {
-          bowl.x = clamp(ev.x, 34, 356);
-          bowl.y = clamp(ev.y, 600, 816);
+          bowl.x = clamp(ev.x, ST.bowlDragX[0], ST.bowlDragX[1]);
+          bowl.y = clamp(ev.y, ST.bowlDragTop, ST.bowlDragBottom);
           return true;
         }
         return false;
@@ -1669,6 +1702,49 @@ export function createCare(rig, opts = {}) {
     start, stop, update, apply, pointer, drawBehind, drawMid, drawFront, drawOver,
     /** is the bowl currently drawn in two pieces around him? (verification) */
     get bowlSplit() { return bowlIsSplit(); },
+    /**
+     * WHAT THE PER-FRAME REACHABLE-AREA ASSERTION SEES (ui/reach.js).
+     *
+     * Both grabbable props, always — even when no care action is running, so
+     * the resting bowls the ROOM draws are covered too, and those are drawn
+     * with the nav on screen.
+     *
+     * `live` is the honest part. A prop is only stealable if the bar is both
+     * drawn and hit-tested over it, and `scenes/room.js` gives a care surface
+     * the pointer before the nav and hides the nav while `modal` is true. So
+     * during a care action nothing here is live; the placed bowl in particular
+     * is reported (`state: 'placed'`) but never live, because its base is
+     * pinned to `rig.floorV` and must stay there.
+     */
+    reachProbe() {
+      const modal = !!mode;
+      const out = [
+        /* BOTH BOWLS AT THEIR HOME POSITIONS, always — `scenes/room.js` draws
+           these two straight from BALANCE whenever no care action is running,
+           which is when the nav IS on screen, so they need covering even though
+           the room never hit-tests them. */
+        { id: 'bowl-home', state: 'room', x: ST.bowlHome[0],
+          y: reach.clampY(ST.bowlHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
+        { id: 'water-home', state: 'room', x: ST.waterHome[0],
+          y: reach.clampY(ST.waterHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
+        /* and the one the drag owns, wherever it has it. NEVER `live`: while a
+           care action is open the nav is not drawn and not hit-tested, and while
+           one is not, `scenes/room.js` has no bowl branch in its `down` path at
+           all — this object is neither drawn nor touchable outside care. Saying
+           `live: true` here would put a claim in the report that the code does
+           not support, which is the failure mode the old bowl invariant had. */
+        { id: 'bowl', state: bowl.placed ? 'placed' : (bowl.held ? 'held' : (modal ? 'loose' : 'idle')),
+          x: bowl.x, y: bowl.y, rx: ST.grabR, ry: BOWL_RY, live: false },
+      ];
+      if (pourer.shown) {
+        out.push({
+          id: 'pourer', state: pourer.held ? 'held' : 'shown',
+          x: pourer.x, y: pourer.y, rx: ST.pourGrabR, ry: POUR_RY,
+          live: false,
+        });
+      }
+      return out;
+    },
     /** activity soils the coat — dirt never comes from the clock alone */
     soil(amount) { game.soil(amount, rng); },
     resetStroke() { lastL = null; },

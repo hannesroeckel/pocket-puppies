@@ -53,6 +53,9 @@ import { blend, dominant, describeRemaining, FIND_BY_ID } from '../state/walks.j
 import { createRouteMap } from '../ui/routemap.js';
 import { drawText, drawStack, safeBand, font } from '../ui/text.js';
 import { drawLeash, drawCollar, drawFind, drawPawPrint, WC } from '../scenes/props.js';
+/* the reachable play area: what he carries home lands inside it, and so does
+   the one control this beat has. See ui/reach.js. */
+import reach from '../ui/reach.js';
 
 const W = BALANCE.walk;
 const P4 = W.prep;
@@ -573,7 +576,7 @@ export function createWalk(rig, opts = {}) {
           dropped.push({
             id: f.id,
             x: HM.dropTo[0] + rng.range(-HM.dropSpread, HM.dropSpread) + dropped.length * 4,
-            y: HM.dropTo[1] + rng.range(-6, 6),
+            y: reach.clampY(HM.dropTo[1] + rng.range(-6, 6), HM.dropR),
             life: 0, s: 1,
           });
           while (dropped.length > 6) dropped.shift();
@@ -937,9 +940,29 @@ export function createWalk(rig, opts = {}) {
     map.draw(g);
   }
 
+  /**
+   * "BRING HIM HOME", INSIDE THE REACHABLE PLAY AREA.
+   *
+   * Authored at y 744 to sit BELOW his empty spot — at 690 the button covered
+   * the dent in the rug, which is the one thing the absence beat is about. But
+   * the nav is drawn and hit-tested during `away` (that is deliberate: `More`,
+   * and therefore renaming, has to stay available while he is out), and
+   * `scenes/room.js` offers a touch to `nav.hit()` BEFORE `walk.pointer()`. At
+   * y 744 with h 46 the button spans 721..767 and the bar's hit rect starts at
+   * 730, so 37 of its 46 units pressed TRAIN or WALK instead. Tapping "Bring
+   * him home" opened Training.
+   *
+   * One function, called by the draw AND the hit test, so the button that is
+   * drawn is the button that is pressed.
+   */
+  function bringHomeBox() {
+    const B = AW.bringHome;
+    return { x: B.x, y: reach.clampY(B.y, B.h / 2), w: B.w, h: B.h, r: B.r };
+  }
+
   function drawAwayPanel(g) {
     const c = g.ctx;
-    const B = AW.bringHome;
+    const B = bringHomeBox();
     /* THE PAW TRAIL. Decoration that happens to show progress; the words
        beside it are what actually says how long. */
     /* CREAM, not brown: the brown print colour was invisible on a darkened
@@ -1042,7 +1065,7 @@ export function createWalk(rig, opts = {}) {
     if (map.isOpen) return map.pointer(ev);
 
     if (away) {
-      const B = AW.bringHome;
+      const B = bringHomeBox();
       if (ev.type === 'down') {
         if (Math.abs(ev.x - B.x) <= B.w / 2 && Math.abs(ev.y - B.y) <= B.h / 2) {
           const early = !game.walkProgress().done;
@@ -1140,6 +1163,31 @@ export function createWalk(rig, opts = {}) {
     },
     /** verification hook: wind the fizz straight up without waggling anything */
     setFizz(v) { fizz = clamp(+v || 0, 0, 1); sp.fizz.set(fizz); return fizz; },
+
+    /**
+     * WHAT THE PER-FRAME REACHABLE-AREA ASSERTION SEES (ui/reach.js).
+     *
+     * The one control the absence beat has — LIVE while he is away, because
+     * that is precisely when the nav is drawn over it and gets the touch first —
+     * and everything he carried home. The finds have no hit test of their own,
+     * so they are reported `live: false`; the bound still applies to them
+     * because being half behind a pill is a defect even when it is only a
+     * visual one, and the payoff of a whole walk is the wrong thing to hide.
+     */
+    reachProbe() {
+      const B = bringHomeBox();
+      const out = [{
+        id: 'bringHome', state: away ? 'away' : 'off',
+        x: B.x, y: B.y, rx: B.w / 2, ry: B.h / 2, live: !!away,
+      }];
+      for (let i = 0; i < dropped.length; i++) {
+        out.push({
+          id: 'find', state: dropped[i].id,
+          x: dropped[i].x, y: dropped[i].y, rx: HM.dropR, ry: HM.dropR, live: false,
+        });
+      }
+      return out;
+    },
 
     get debug() {
       return {

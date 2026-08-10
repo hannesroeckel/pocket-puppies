@@ -69,7 +69,7 @@ Notes:
 - The mis-association cue legend already exists and is separate — it shows what he *thinks* a
   word means. Don't merge the two; they answer different questions.
 
-## 1c. The ball can land behind the nav bar and become unreachable 🐞 BUG — fix first
+## 1c. The ball can land behind the nav bar and become unreachable ✅ FIXED on `fix/reachable-area` (cache 8.7.1)
 
 > "sometimes when flicking the ball it is behind the navigation buttons which doesn't allow
 > the player to reach it again"
@@ -98,6 +98,21 @@ hit area may ever intersect the nav's rect, on any frame, at any safe-area inset
 
 Note the nav is being restructured from 8 pills to ~5 on `feature/design-pass`, which changes
 its height — another reason the bound must be derived rather than typed in.
+
+> **Fixed.** `src/ui/reach.js` publishes one reachable play area, its bottom derived from the
+> nav's real hit rect (itself derived from `BALANCE.ui.nav` + `env(safe-area-inset-bottom)`)
+> minus `BALANCE.ui.reach.margin`. `ui/nav.js` imports its own geometry from there, so the bar
+> and the bound cannot drift apart. Every interactive prop is authored as an offset from
+> `rig.floorV` and passed through `reach.clampY()`; a per-frame assertion (`reach.tick()`)
+> reports any prop whose hit area intersects the bar. **Zero live violations at insets 0, 20, 40
+> and 80, in every prop state.** Reproduced the flinch case and proved the ball is pickable
+> afterwards with a real pointer. Full write-up, including three further defects found on the
+> way and five things left imperfect, in ARCHITECTURE 20.
+>
+> Two things in the report above were understated: the ball's **home** was already 61% behind
+> the bar on first launch (its centre pressed MORE), and the **successful** fetch drop at
+> `y = 792` was worse than the flinch drop at 82%. "Bring him home" during a walk was also
+> losing 37 of its 46 units to the bar, so tapping it opened Training; that is fixed too.
 
 ## 2. More to buy in the shop
 

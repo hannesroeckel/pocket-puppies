@@ -2351,3 +2351,134 @@ down inside the vessel, near rim crossing in front of it, mouth and food
 visible behind the rim, both front paws whole and beside it. Unchanged — which
 is what the model predicts, because the head's relationship to both halves of
 the bowl never moved. Only the torso's did.
+
+
+---
+
+## 20. The reachable play area (`fix/reachable-area`) — as built
+
+**The bug he found on his own phone, and the shape of it.**
+
+> "sometimes when flicking the ball it is behind the navigation buttons which doesn't allow
+> the player to reach it again"
+
+The reliable way to trigger it was to **hit him with the ball**. He flinches, and `hitReaction()`
+deliberately drops the ball at her feet so he does not cheerfully fetch the thing that just hit
+him — at a hardcoded `toy.y = 782`. On the target iPhone the nav's hit rect starts at y **730**,
+and `scenes/room.js` offers a `down` to `nav.hit()` **before** `toy.pointer()`, so a touch on the
+ball pressed **TRAIN**. Nothing could recover it: the unprompted retrieval only fired below
+`y < 660` and `reset(true)` has no callers. **The price of an accidental hit was losing the toy
+permanently** — from a dog whose whole design says he must never resent her.
+
+Three more, found while reproducing it and not in the report:
+
+- `T.home` = `[330, 736]`. **61% of the ball's grab ellipse was behind the bar on first launch**
+  and its centre pressed **MORE**. Rendered: the ball was a sliver poking above the MORE pill.
+- `drop()`'s **successful** fetch, `toy.y = 792`, was the worst of the three at **82%**.
+- `BALANCE.ui.away.bringHome` at y 744, h 46 spans 721..767 against a hit rect starting at 730,
+  and `walk.away` is dispatched *after* `nav.hit`. **37 of its 46 units opened Training or Walk.**
+  Tapping "Bring him home" opened Training.
+
+### 20.1 Why a number was never going to fix it
+
+The nav's top edge is not a constant. It is derived from `env(safe-area-inset-bottom)`, so it is
+y **768** on a phone with no notch and **734** on the target iPhone — a 34-unit range — and stage
+9 moved it again by taking the bar from eight pills to five and `h` from 58 to 60. Three hardcoded
+ball positions were being compared, by nobody, against a line that moves with the device *and*
+with the design.
+
+This is 18.2's lesson in a second place. `rig.floorV` fixed it for the floor by publishing one
+line everything resolves against; **`src/ui/reach.js` does the same for the bottom of what a thumb
+can touch.**
+
+### 20.2 Two lines, deliberately not one
+
+| | `rig.floorV` | `reach.bottom` |
+|---|---|---|
+| question | where things **stand** | where a thumb **stops** |
+| space | room, fake perspective | view |
+| varies with | breed (719.8-723.1) | device inset (+/-34) |
+| role | an **anchor** to author against | a **bound**, nothing else |
+
+They cannot be merged, and the reason is the interesting part: **on the target phone the bound is
+above the floor.** `reach.bottom` is 722, `rig.floorV` is 719.8-723.1, and once a prop's hit
+radius comes off that, *nothing can sit on the floor toward the viewer and still be touchable*.
+The foreground below the reach line belongs to the nav. So the sharing is a **contract** rather
+than a merge: props are authored as offsets from `rig.floorV` and every one is passed through
+`reach.clampY()` before it is written. Where there is room the authored design is byte-for-byte
+what it was; where there is not, the bound wins.
+
+`ui/nav.js` imports `navFaceTop()` and `navRect()` from `ui/reach.js` rather than keeping its own
+copy, and `nav.hit()` tests the same rect the props are kept out of. That is the part that makes
+this hold rather than merely fix today's numbers.
+
+### 20.3 The per-frame assertion
+
+Every module owning something touchable registers a probe (`reach.watch`), and `reach.tick()` —
+called in `room.update` **after** the state machines have written this frame's positions and
+before anything draws them — runs the lot and accumulates the worst overlap per prop-and-state.
+It **never logs and never throws**: a console error in her hands is worse than the defect it would
+report. `window.__pp.reach.report()` is what the gate reads; `snapshot()` is every prop's rect this
+frame whether or not it offends.
+
+`liveHits` counts props the nav can **actually** steal. `anyHits` also counts props on surfaces
+where the nav is absent — the placed bowl, floor-anchored by four consecutive bowl fixes, is the
+honest exemption and is reported as a number rather than asserted away in a comment.
+
+### 20.4 What the assertion caught that the eye did not
+
+1. `createToy` ran during `scene.enter` and captured `restY('home')` against the **boot-time**
+   bound. A real phone can deliver the inset later (rotation, Safari chrome settling), so at inset
+   40 the ball sat 26 units inside the bar until something dropped it. The same defect one layer
+   up. The clamp is now re-asserted every frame in the states where the toy owns its position.
+2. Clamping the **care** props' drag range to the reach line **killed feeding at inset 80**: the
+   bowl's drop target is `rig.floorV - BOWL_BASE*scale`, which sits *below* the reach line there,
+   so the target could not be reached and `placed` stayed false. Care hides the nav and takes the
+   pointer before it, so the care ranges are its own business; only the two **resting** bowls the
+   room draws are clamped.
+3. `abandoned = toy.y < 660` was a *fourth* absolute coordinate — it meant "76 units above the
+   then-hardcoded home of 736". With home derived, a ball at his feet at inset 80 read as abandoned
+   and he fetched it unprompted on a loop. Now `BALANCE.toy.awayAbove`, relative to the home slot.
+
+And one the assertion could not catch, which only rendering found: with the slots lifted above
+`rig.y - 8`, `room.js` sorted a ball dropped at his feet **behind** him, and at `rig.x + 44` it
+vanished into his silhouette. Reachable and invisible. The sort line is now `toy.restLine`.
+
+### 20.5 What was measured
+
+| gate | result |
+|---|---|
+| reach gate, insets **0 / 20 / 40 / 80**, every prop state (`C:\tmp\pp11\reachgate.py`) | ~2,900 audited frames each. **`liveHits` 0 at every inset.** Zero page errors, zero console warnings, zero external requests, zero 4xx. |
+| flinch reproduction | before: ball at (222, **782**), 82% of its grab ellipse inside the bar, tapping its centre opened **TRAIN**, ball invisible in the render. After: (222, **694**), `reachClear` 0.00, a real pointer at its centre **picks it up** (`heldOnTap: true`, `navActive: ""`). |
+| dragging it under the bar on purpose | a drag to y=843 lands at 694 and is still pickable, at every inset. |
+| the throw, unregressed | `fly -> chase -> back -> settle` all reached at every inset; lands up-screen at (314, 470); tease -> **refuse** still fires. |
+| bowls, `C:\tmp\pp8\bowl3.py` (cloned to run against this tree), 3 breeds x feed+water, **at inset 0 and again at inset 40** | all of A-G **PASS**, ~975-1,024 frames each. `standToEatShift` **0.0**; `muzIntoBowl` **18.0-18.8**; base on the live drawn sole **-0.588 .. +0.012** against a 1.5 tolerance; `scale == rawScale`; wash and brush unregressed. Identical numbers at both insets. |
+| frame cost, real loop, inset 40 verified | DPR 2: median 2.4-3.1 ms, p95 3.7-4.4, max 4.9. DPR 3: median 2.2-2.6 ms, p95 3.3-4.1, max 4.2. Budget 16.7 ms. |
+| cost of the assertion itself | `reach.tick()` **0.68-1.68 microseconds** per call over 20,000 calls with 3 probes - about 0.01% of a frame. |
+| `prefers-reduced-motion` / dark mode | boot clean, `reach.bottom` 722, `liveHits` 0, ball at (330, 694). |
+| v1-v6 saves | all six migrate to v6 through the real `load()` path, keep "Mochi" and her affection, and **the ball is pickable on every one**. |
+| `tools/check-precache.py` | OK, 52 entries, matching the tree. Cache **8.7.1**. |
+
+### 20.6 Left imperfect, stated plainly
+
+- **The four resting slots collapse to one depth on a notched phone.** `feet` (+70), `flinch`
+  (+60), `own` (+26) and `home` (+14) are offsets below `rig.floorV`; at inset 40 the bound binds
+  and all four land at 693.84. The x offsets still carry "she gave it to you" versus "she kept it";
+  the y nuance is gone. It is not recoverable — the foreground below the reach line is the nav's.
+- **The placed bowl overlaps the nav's rect above about inset 61.** Its base is pinned to
+  `rig.floorV` and must stay there (four bowl fixes). Care neither draws nor hit-tests the nav, so
+  nothing is stealable; it is reported as `anyHits`, never `liveHits`. No shipping phone reports
+  an inset near 61.
+- **The dog's own paw and belly petting zones still overlap the bar** by about six units at their
+  bottom edge, and `pet.down` is dispatched after `nav.hit`. He is not a prop, he cannot be lost,
+  and his placement is the room's whole composition. Measured, not clamped, and deliberately not
+  registered as a probe — a `live` flag that fails on the dog would make the gate mean less.
+- **"Bring him home" moved from y 744 to 699**, which is the lowest legal position for it, and it
+  now sits over the lower part of the dent in the rug — a thing `BALANCE.ui.away`'s own comment
+  says it was moved *down* to avoid. There is no y that both clears the bar and misses the dent.
+  At 744 it also visibly overlapped the pill row, so 699 is better on both counts.
+- **Dropped walk finds land clear of the bar (y 702) but are still drawn in `walk.drawBack`**, i.e.
+  behind the dog, and they land at x 196+/-34 which is inside his silhouette. Whether one is
+  visible depends on the glyph (a stick pokes out; a feather does not). **Pre-existing** — at the
+  old y 726 they were behind him *and* half under the bar — and deliberately not changed here,
+  because reordering the walk's draw passes late would put the carry arc at risk.

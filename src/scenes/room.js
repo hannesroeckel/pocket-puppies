@@ -37,6 +37,9 @@ import { createShop } from '../ui/shop.js';
 import { createKennel } from '../ui/kennel.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
+/* THE REACHABLE PLAY AREA: the bound every interactive prop is clamped to, and
+   the per-frame assertion that says so. See ui/reach.js. */
+import reach from '../ui/reach.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
 import { decayLive, describeGap } from '../state/time.js';
 
@@ -317,9 +320,17 @@ export function createRoomScene() {
   let sheetKind = '';           // 'care' | 'settings'
   let hintBeforeWalk = '';      // the hint line, parked while he is out
 
+  /* WHERE HIS EYES WANDER WHEN NOBODY IS DOING ANYTHING.
+     The ball's entry was a SIXTH hardcoded copy of the ball's position — (330,
+     730), which was already 6 units off the 736 it was meant to name and would
+     now be 40 off, so he would idly stare at a patch of rug where the ball used
+     to be. It is a live getter onto the real toy instead. `rng.pick()` hands the
+     whole object back and the caller reads `.x`/`.y` off it, so a getter is all
+     this took. */
   const POI = [
     { x: 66, y: 608, w: 1.3 },    // food bowl
-    { x: 330, y: 730, w: 1.4 },   // ball
+    { get x() { return toy ? toy.toy.x : 330; },
+      get y() { return toy ? toy.toy.y : 700; }, w: 1.4 },   // the ball, live
     { x: 283, y: 212, w: 1.2 },   // window
     { x: 96, y: 786, w: 0.9 },    // bone
     { x: 126, y: 230, w: 0.8 },   // shelf plant
@@ -1340,6 +1351,29 @@ export function createRoomScene() {
         reduced: app.reduced,
       });
 
+      /* ---- THE PER-FRAME REACHABLE-AREA ASSERTION ----------------------
+         Every module that owns something the player can touch hands over a
+         probe, and `reach.tick()` (in `update`, below) runs the lot once a
+         frame. It never logs and never throws — a console error in her hands is
+         worse than the defect it would report — it accumulates the worst
+         overlap per prop-and-state into counters `window.__pp.reach.report()`
+         reads.
+
+         WHY THIS AND NOT A ONE-OFF CHECK: the ball's positions were wrong for
+         two stages and every numeric gate the project ran passed, because no
+         gate knew the two numbers were related. A prop that drifts under the bar
+         in some state nobody thought to screenshot now shows up as a count.
+
+         The DOG is deliberately not registered. The bottom of his paw and belly
+         petting zones do overlap the bar by about six units, but he is not a
+         prop, he cannot be lost, and his placement is the room's whole
+         composition — see docs/FEEDBACK-QUEUE.md. Measured, not clamped. */
+      reach.resetProbes();
+      reach.resetAudit();
+      reach.watch('toy', () => toy.reachProbe());
+      reach.watch('care', () => care.reachProbe());
+      reach.watch('walk', () => walk.reachProbe());
+
       scene.resize(app);
 
       /* settle one frame so the zones exist before the first touch */
@@ -1465,6 +1499,20 @@ export function createRoomScene() {
       train.update(dt, game.mood);
       walk.update(dt, game.mood);
       contest.update(dt, game.mood);
+
+      /* NOTHING THE PLAYER CAN TOUCH MAY SIT UNDER THE NAV — asserted here,
+         every frame, AFTER the state machines have written this frame's prop
+         positions and before anything draws them. The pose pipeline below moves
+         the dog, never a prop, so this is the last word on where things are.
+
+         It was above this block first, which audited LAST frame's positions and
+         so reported one violation every time the safe-area inset changed — the
+         ball genuinely was under the bar for the single frame between the inset
+         arriving and the toy's own clamp catching up. Auditing the frame that is
+         about to be drawn makes the count mean what it says.
+
+         Six or seven rect tests. See the note in `enter` and ui/reach.js. */
+      reach.tick();
 
       /* --- the pose pipeline, in order ---
          base -> idle -> pet -> care -> train -> toy -> reunion -> resolve
@@ -1624,12 +1672,29 @@ export function createRoomScene() {
       /* The resting bowls, hidden while a care action has picked one up. Both
          sit clear of the dog's silhouette — a bowl tucked behind her body is a
          bowl she can never be seen to drag. */
+      /* THROUGH THE REACHABLE PLAY AREA, like everything else the player can
+         see and touch. These two are drawn while the nav IS on screen, so the
+         bound applies even though the room never hit-tests them; at every inset
+         a phone reports it is a no-op and they do not move. `bowlGrabRy()` is
+         care.js's own grab half-height, so the number the drawing respects and
+         the number the drag respects are the same number. */
       const SG = BALANCE.care.stage;
-      if (care.mode !== 'feed') drawBowl(c, SG.bowlHome[0], SG.bowlHome[1], SG.bowlScale, 'food', 0, time);
-      if (care.mode !== 'water') drawBowl(c, SG.waterHome[0], SG.waterHome[1], SG.bowlScale * 0.78, 'water', 0.5, time);
+      const bry = SG.grabR / SG.grabAspect;
+      if (care.mode !== 'feed') {
+        drawBowl(c, SG.bowlHome[0], reach.clampY(SG.bowlHome[1], bry), SG.bowlScale, 'food', 0, time);
+      }
+      if (care.mode !== 'water') {
+        drawBowl(c, SG.waterHome[0], reach.clampY(SG.waterHome[1], bry), SG.bowlScale * 0.78, 'water', 0.5, time);
+      }
 
-      /* the toy, in front of or behind her depending on its depth */
-      const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
+      /* THE TOY, IN FRONT OF HIM OR BEHIND HIM. The line is the ball's own
+         resting depth (`toy.restLine`), not the rig origin: `rig.y - 8` was 698,
+         which sat below every resting slot only while the ball's home was a
+         hardcoded 736. With the slots derived from the reachable play area they
+         rose above it, and a ball dropped at his feet after a flinch was sorted
+         BEHIND him and vanished into his silhouette. See `restLine` in
+         dog/toy.js. */
+      const toyBehind = toy.toy.y < toy.restLine - 2 || toy.depth > 0.02;
       if (toyBehind) toy.draw(g);
 
       /* THE CARE PROPS THAT GO UNDER ALL OF HIM: the brushed-out fur pile,

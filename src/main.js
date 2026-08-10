@@ -22,6 +22,10 @@ import { resolveDims, stance, headRoom } from './dog/rig.js';
 import { solveEatGeometry } from './dog/care.js';
 import { BOWL_BASE, BOWL_WELL } from './scenes/props.js';
 import { BREED_IDS, getBreed } from './dog/breeds.js';
+/* THE REACHABLE PLAY AREA. `resize()` below is the only place in the tree that
+   reads `env(safe-area-inset-*)`, so it is the only place that can resolve the
+   bottom of what a thumb can touch — see the header of ui/reach.js. */
+import reach from './ui/reach.js';
 
 const V = BALANCE.view;
 
@@ -75,6 +79,13 @@ function resize() {
   view.bleedX = view.offX / view.vs + 3;
   view.bleedY = view.offY / view.vs + 3;
   readSafeArea();
+  /* THE ONE PLACE THE PLAY AREA IS RESOLVED, immediately after the one place
+     the insets are read, and BEFORE any scene resizes — so the nav's own
+     `layout()` and every prop's clamp are answering to the same inset on the
+     same frame. `view.safe` is in CSS pixels and everything downstream is in
+     virtual units, which is what `/ view.vs` is doing here and is the one
+     conversion this bound needs to get right. */
+  reach.set(view.safe.bottom / view.vs);
 }
 
 /* ---- reduced motion --------------------------------------------------- */
@@ -373,6 +384,11 @@ async function boot() {
   window.__pp = {
     version: 9,
     app, loop, view, saver, BALANCE, pwa,
+    /* THE REACHABLE PLAY AREA, and its per-frame assertion. `reach.report()` is
+       what the gate reads; `reach.snapshot()` is every prop's rect this frame
+       whether or not it offends, which is what you look at when the count is
+       zero and you want to know whether it is zero for the right reason. */
+    reach,
     /* what ?breed= resolved to; `bad` is a rejected id (getBreed would have
        silently fallen back to a Shiba and hidden the typo) */
     query: qs, breeds: BREED_IDS,

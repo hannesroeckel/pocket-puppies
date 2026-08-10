@@ -46,8 +46,13 @@
 import BALANCE from '../state/balance.js';
 import { clamp, TAU } from '../engine/draw.js';
 import { drawText } from './text.js';
-import { INK, SURF, C, R, PRESS, type } from './tokens.js';
+/* `PRESS` is gone from this file's imports: the bar's vertical arithmetic —
+   which was the only thing that needed `PRESS.edge` here — now lives in
+   ui/reach.js alongside the play-area bound it defines. */
+import { INK, SURF, C, R, type } from './tokens.js';
 import { tactile, createPresses, roundSub } from './surface.js';
+/* THE BAR'S OWN GEOMETRY, shared with the reachable play area it defines */
+import { navFaceTop, navRect } from './reach.js';
 
 const N = BALANCE.ui.nav;
 const W = BALANCE.view.W;
@@ -110,6 +115,9 @@ export { GLYPH };
 export function createNav(items, opts = {}) {
   const presses = createPresses(opts.reduced);
   let pressedId = '';
+  /* the inset this bar was last laid out against, so `rect` can answer without
+     being handed it again */
+  let lastSafe = 0;
 
   const nav = {
     items,
@@ -130,12 +138,22 @@ export function createNav(items, opts = {}) {
     /** call when the safe-area inset changes */
     layout(safeBottom) {
       nav.h = N.h;
-      /* the tactile edge hangs BELOW the face, so the face has to move up by it
-         or the bottom edge eats into the home-bar clearance. The target device
-         reports 40px bottom; at h=60 this puts the edge's bottom at 798 with
-         the safe band ending at 804. */
-      nav.y = BALANCE.view.H - N.h - PRESS.edge - Math.max(6, safeBottom) - 6;
+      /* THE BAR'S GEOMETRY NOW LIVES IN ui/reach.js, not here. It used to be
+         this one expression, and the reachable-area defect is what that cost:
+         the ball's resting positions were absolute numbers being compared, by
+         nobody, against a line only this function knew how to compute. The bar
+         and the bottom of the play area are now two returns from the same pair
+         of functions over the same inset, so they cannot drift apart.
+
+         (Unchanged arithmetic: the tactile edge hangs BELOW the face, so the
+         face moves up by it or the bottom edge eats into the home-bar
+         clearance. The target device reports 40px bottom; at h=60 this puts the
+         edge's bottom at 798 with the safe band ending at 804.) */
+      lastSafe = Number.isFinite(+safeBottom) ? +safeBottom : 0;
+      nav.y = navFaceTop(lastSafe);
     },
+    /** the rect that actually steals touches — see `hit()`. One definition. */
+    get rect() { return navRect(lastSafe); },
     bounds(i) {
       const n = items.length;
       const pad = N.pad;
@@ -153,7 +171,11 @@ export function createNav(items, opts = {}) {
      * bottom 4 units of a pill are pressable rather than decorative.
      */
     hit(x, y) {
-      if (y < nav.y - 4 || y > nav.y + nav.h + PRESS.edge + 2) return null;
+      /* the band, from the one definition — `navRect()` is what ui/reach.js
+         clamps every interactive prop against, so the rect that steals a touch
+         and the rect the props are kept out of are literally the same rect */
+      const r = navRect(lastSafe);
+      if (y < r.y || y > r.y + r.h) return null;
       let best = null, bd = Infinity;
       for (let i = 0; i < items.length; i++) {
         const b = nav.bounds(i);
