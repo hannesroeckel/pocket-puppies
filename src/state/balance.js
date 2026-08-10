@@ -2185,7 +2185,8 @@ export const BALANCE = {
        `label` is GONE as a tunable: the label is now the type ramp's `label-sm`
        step (12/16/700, +0.05em) via ui/tokens.js `type('labelSm')`. The old hard
        9.5 existed to survive seven pills. `r` is superseded by tokens.radius.md
-       and kept only so an old save's layout maths cannot shift. */
+       and kept only so an old save's layout maths cannot shift.
+
        `minInset`, `gapBelow`, `hitUp` and `hitDown` were four magic numbers
        inside ui/nav.js's `layout()` and `hit()`, which is exactly how the
        reachability defect below survived: a bar whose geometry lives nowhere is
