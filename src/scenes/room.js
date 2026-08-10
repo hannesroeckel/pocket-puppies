@@ -1679,8 +1679,14 @@ export function createRoomScene() {
         drawBowl(c, SG.waterHome[0], reach.clampY(SG.waterHome[1], bry), SG.bowlScale * 0.78, 'water', 0.5, time);
       }
 
-      /* the toy, in front of or behind her depending on its depth */
-      const toyBehind = toy.toy.y < rig.y - 8 || toy.depth > 0.02;
+      /* THE TOY, IN FRONT OF HIM OR BEHIND HIM. The line is the ball's own
+         resting depth (`toy.restLine`), not the rig origin: `rig.y - 8` was 698,
+         which sat below every resting slot only while the ball's home was a
+         hardcoded 736. With the slots derived from the reachable play area they
+         rose above it, and a ball dropped at his feet after a flinch was sorted
+         BEHIND him and vanished into his silhouette. See `restLine` in
+         dog/toy.js. */
+      const toyBehind = toy.toy.y < toy.restLine - 2 || toy.depth > 0.02;
       if (toyBehind) toy.draw(g);
 
       /* THE CARE PROPS THAT GO UNDER ALL OF HIM: the brushed-out fur pile,

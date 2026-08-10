@@ -648,6 +648,27 @@ export function createToy(rig, opts = {}) {
     get busy() { return state === 'chase' || state === 'chew' || state === 'back' || state === 'fly'; },
     get held() { return toy.held; },
     get depth() { return sp.toyDog.x; },
+    /**
+     * THE DEPTH-SORT LINE: the shallowest y a ball at rest can have.
+     *
+     * `scenes/room.js` decides whether to draw the ball in front of him or
+     * behind him, and it used to compare against `rig.y - 8` — the rig origin,
+     * 698. That happened to be below every resting slot while home was a
+     * hardcoded 736, so a resting ball was always in front. Once the reachable
+     * play area lifted the slots to 693.84 the test flipped, and a ball dropped
+     * at his feet after a flinch was drawn BEHIND him — at x = rig.x + 44 that
+     * put it entirely inside his silhouette. Reachable, and invisible, which for
+     * a ball she has just been told about is barely better than gone.
+     *
+     * So the sort line is now the rest slots themselves: a ball at rest is at
+     * his feet and in front, and anything above that is further into the room
+     * and behind. Derived, so it cannot come apart from them again.
+     */
+    get restLine() {
+      let m = Infinity;
+      for (const k in T.rest) m = Math.min(m, restY(k));
+      return m;
+    },
     update(dt, mood) { update(dt, mood); for (const k in sp) sp[k].step(dt); },
     apply, pointer, draw,
     /** stage 5's disc game reuses this: throw programmatically */
