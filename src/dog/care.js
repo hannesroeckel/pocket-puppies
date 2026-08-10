@@ -35,18 +35,27 @@ import {
   BOWL_BASE, BOWL_WELL,
 } from '../scenes/props.js';
 import { resolveDims, stance, plantedSoleLocal } from './rig.js';
-/* THE REACHABLE PLAY AREA — the bottom of what a thumb can touch. The bowl and
-   the pourer are grabbable props, so their resting spots and their drag ranges
-   answer to it, exactly as the ball's do. See ui/reach.js.
+/* THE REACHABLE PLAY AREA — the bottom of what a thumb can touch (ui/reach.js).
+   This file reads it for ONE thing: reporting its props to the per-frame
+   assertion. It does not clamp anything, and the paragraph below is why.
 
-   NOTE WHAT DOES *NOT*: the PLACED bowl. Its base stands on `rig.floorV` and
-   that is the whole point of four consecutive bowl fixes — the muzzle-inside-
-   vessel read is a consequence of the base being on the floor, and lifting it
-   to satisfy a bound would undo them. It is also not draggable once placed, and
-   `scenes/room.js` neither draws nor hit-tests the nav while a care surface is
-   open, so there is no touch for the bar to steal. The reach probe below
-   reports it with `live: false` and the audit counts it separately, so the
-   exemption is a number in the report rather than a claim in a comment. */
+   NOTE CAREFULLY WHERE THE BOUND APPLIES, BECAUSE THE FIRST ATTEMPT AT THIS
+   BROKE FEEDING. `scenes/room.js` neither draws the nav nor hit-tests it while a
+   care surface is open (`care.modal`), and it offers the pointer to `care` before
+   `nav`. So INSIDE a care action there is no bar to be swallowed by, and the
+   floor is the only line that matters — which is a good thing, because the bowl's
+   drop target is `rig.floorV - BOWL_BASE * scale` and on a device reporting a
+   large inset that target sits BELOW the reach line. Clamping the drag to the
+   reach line made the target unreachable and the food bowl could not be put
+   down at all: `placed: false`, feeding dead. Caught by the per-frame assertion
+   plus the drive-every-state gate, at inset 80.
+
+   So: the drag ranges and the resting chase are the care surface's own business,
+   and the ONE thing here the player sees with the bar on screen — the two
+   resting bowls the ROOM draws from `BALANCE.care.stage` — is clamped, in
+   scenes/room.js where it is drawn. The probe below reports every care prop with
+   `live: false` and the audit counts those separately, so the exemption is a
+   number in a report rather than a claim in a comment. */
 import reach from '../ui/reach.js';
 
 const C = BALANCE.care;
@@ -240,7 +249,7 @@ export function createCare(rig, opts = {}) {
   const BOWL_RY = ST.grabR / ST.grabAspect;
   const POUR_RY = ST.pourGrabR;
   const bowl = {
-    x: ST.bowlHome[0], y: reach.clampY(ST.bowlHome[1], BOWL_RY),
+    x: ST.bowlHome[0], y: ST.bowlHome[1],
     tx: 0, ty: 0, held: false, placed: false, kind: 'food',
   };
   const pourer = { x: 0, y: 0, held: false, over: 0, shown: false };
@@ -391,17 +400,13 @@ export function createCare(rig, opts = {}) {
       bowl.kind = kind === 'feed' ? 'food' : 'water';
       const home = kind === 'feed' ? ST.bowlHome : ST.waterHome;
       bowl.x = home[0];
-      /* AUTHORED, THEN BOUNDED. 626 and 610 clear the bar comfortably on every
-         inset a phone actually reports, so this is a no-op today and the bowls
-         do not move a pixel. It is here because the next inset, or the next nav
-         height, is exactly how the ball ended up under the bar. */
-      bowl.y = reach.clampY(home[1], BOWL_RY);
+      bowl.y = home[1];
       bowl.held = false; bowl.placed = false;
       fill = 0;
       sp.fill.set(0); sp.prop.set(0); sp.tip.set(0);
       pourer.shown = false; pourer.held = false; pourer.over = 0;
       const ph = kind === 'feed' ? C.feed.sackHome : C.water.jugHome;
-      pourer.x = ph[0]; pourer.y = reach.clampY(ph[1], POUR_RY);
+      pourer.x = ph[0]; pourer.y = ph[1];
       goPhase('place');
       setHint(kind === 'feed' ? `Slide ${HIS()} bowl over` : `Slide ${HIS()} water bowl over`);
     } else if (kind === 'wash') {
@@ -494,17 +499,18 @@ export function createCare(rig, opts = {}) {
         return phase === 'place' || phase === 'pour';
       }
       if (ev.type === 'move') {
-        /* the TOP of each range is its own business — a bowl belongs on the
-           floor and a jug is held above it, and neither has anything to do with
-           the nav. Only the BOTTOM comes from the reachable play area. */
+        /* THE CARE SURFACE'S OWN RANGES, not the reachable play area's. See
+           the note at the top of this file: there is no nav here to be
+           swallowed by, and the bowl's drop target is below the reach line on a
+           large inset, so clamping this range is what broke placing the bowl. */
         if (pourer.held) {
           pourer.x = clamp(ev.x, ST.pourDragX[0], ST.pourDragX[1]);
-          pourer.y = Math.max(ST.pourDragTop, reach.clampY(ev.y, POUR_RY));
+          pourer.y = clamp(ev.y, ST.pourDragTop, ST.pourDragBottom);
           return true;
         }
         if (bowl.held) {
           bowl.x = clamp(ev.x, ST.bowlDragX[0], ST.bowlDragX[1]);
-          bowl.y = Math.max(ST.bowlDragTop, reach.clampY(ev.y, BOWL_RY));
+          bowl.y = clamp(ev.y, ST.bowlDragTop, ST.bowlDragBottom);
           return true;
         }
         return false;
@@ -708,14 +714,12 @@ export function createCare(rig, opts = {}) {
       } else if (!bowl.held && !bowl.placed) {
         const home = mode === 'feed' ? ST.bowlHome : ST.waterHome;
         bowl.x = approach(bowl.x, home[0], 9, dt);
-        /* springing back to a home the clamp has not seen would walk the bowl
-           straight back under the bar one frame at a time */
-        bowl.y = approach(bowl.y, reach.clampY(home[1], BOWL_RY), 9, dt);
+        bowl.y = approach(bowl.y, home[1], 9, dt);
       }
       if (pourer.shown && !pourer.held) {
         const home = mode === 'feed' ? C.feed.sackHome : C.water.jugHome;
         pourer.x = approach(pourer.x, home[0], 7, dt);
-        pourer.y = approach(pourer.y, reach.clampY(home[1], POUR_RY), 7, dt);
+        pourer.y = approach(pourer.y, home[1], 7, dt);
       }
       resolveBowlDraw();
     }

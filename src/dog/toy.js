@@ -273,6 +273,24 @@ export function createToy(rig, opts = {}) {
   function update(dt, mood) {
     clock += dt;
     stT += dt;
+
+    /* THE BOUND IS LIVE, SO THE CLAMP HAS TO BE TOO.
+       Found by this file's own per-frame assertion: `createToy` runs during
+       `scene.enter`, and on a real phone the safe-area inset can arrive AFTER
+       that — a rotation, a keyboard, or simply Safari settling its chrome. The
+       constructor's `restY('home')` was therefore a snapshot of the bound as it
+       was at boot, and at inset 40 the ball sat 26 units inside the bar for as
+       long as nobody dropped it. Which is the whole defect again, one layer up:
+       a position captured once against a line that moves.
+
+       So it is re-asserted every frame, in the states where the toy owns its own
+       position. Not while HELD (the drag clamps as it goes), not in the MOUTH
+       (it rides the muzzle), and not in FLIGHT (the arc is recomputed from a
+       start that was already clamped, and it only ever travels up-screen). */
+    if (!toy.held && !toy.inMouth && state !== 'fly') {
+      const y = reach.clampY(toy.y, GRAB_RY);
+      if (y !== toy.y) { toy.floor += y - toy.y; toy.y = y; }
+    }
     if (hitCd > 0) hitCd -= dt;
     if (refuseT > 0) refuseT -= dt;
     toy.spin += dt * (state === 'fly' ? T.fly.spin * (0.4 + flyPower) : 0);
@@ -368,7 +386,14 @@ export function createToy(rig, opts = {}) {
          (or it just landed and nobody did anything), she goes and gets it on
          her own after a while and drops it at her feet — which is exactly the
          research's "drops a toy at your feet" bid for attention. */
-      const abandoned = toy.y < 660;
+      /* "OUT THERE" IS RELATIVE TO WHERE IT RESTS, not an absolute y.
+         This was `toy.y < 660`, chosen when home was a hardcoded 736 — i.e. it
+         meant "76 units up-screen from its resting spot". Once home is derived
+         the two drifted apart, and the gate caught it at inset 80: with home
+         clamped to 653.84 a ball lying AT HER FEET counted as abandoned, so she
+         fetched it unprompted for ever. `awayAbove` is that same 76 units, said
+         once, relative to the slot it was always relative to. */
+      const abandoned = toy.y < restY('home') - T.awayAbove;
       if (abandoned) {
         outIn -= dt;
         if (outIn <= 0) startChase(false);

@@ -311,13 +311,17 @@ export const BALANCE = {
          off the nav. `grabAspect` 1.7 makes the bowl's grab wide and shallow,
          which is right for a shallow object seen from slightly above.
 
-         The vertical ends of both drag ranges are GONE as numbers: they were
-         600..816 and 300..812, and 816 is 16 units past the bottom of the nav's
-         hit rect. The range is the reachable play area now. What is left here is
-         the horizontal extent, which the nav does not constrain because the bar
-         spans the full width. */
-      grabR: 44, grabAspect: 1.7, bowlDragX: [34, 356], bowlDragTop: 600,
-      pourGrabR: 46, pourDragX: [26, 364], pourDragTop: 300,
+         The drag ranges are UNCHANGED numbers (600..816, 300..812) that used to
+         be inline. They are deliberately NOT the reachable play area: a care
+         action hides the nav and gets the pointer before it, and the bowl's drop
+         target is `rig.floorV - BOWL_BASE * scale`, which on a large inset sits
+         BELOW the reach line. Clamping this range to it made the target
+         unreachable and killed feeding outright — see the note at the top of
+         dog/care.js. The reachable play area governs the two RESTING bowls the
+         room draws, which are the only ones the player sees with the bar up. */
+      grabR: 44, grabAspect: 1.7,
+      bowlDragX: [34, 356], bowlDragTop: 600, bowlDragBottom: 816,
+      pourGrabR: 46, pourDragX: [26, 364], pourDragTop: 300, pourDragBottom: 812,
     },
     /* the dog's gaze follows a dragged prop — this is most of why it feels
        physical rather than like a menu */
@@ -599,6 +603,13 @@ export const BALANCE = {
     /* if she doesn't get it back, the dog eventually fetches it unasked —
        which is also one of the research's named bids for attention */
     unaskedAfter: [5.0, 10.0],
+    /* HOW FAR UP-SCREEN COUNTS AS "OUT THERE" — measured from the ball's home
+       slot, not from an absolute y. This was `toy.y < 660` inside dog/toy.js,
+       which meant 76 units above the then-hardcoded home of 736. Once home
+       became derived the two parted company and a ball lying at her feet read as
+       abandoned, so she fetched it unprompted on a loop. Same 76 units, said
+       once, relative to the thing it was always relative to. */
+    awayAbove: 76,
     /* CRUELTY: a toy thrown AT her gets an immediate physical reaction and
        no persistent penalty. She must never resent her. */
     hit: { r: 46, flinch: 1.0, retreat: 7.0, cd: 1.2 },
