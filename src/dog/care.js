@@ -35,6 +35,19 @@ import {
   BOWL_BASE, BOWL_WELL,
 } from '../scenes/props.js';
 import { resolveDims, stance, plantedSoleLocal } from './rig.js';
+/* THE REACHABLE PLAY AREA — the bottom of what a thumb can touch. The bowl and
+   the pourer are grabbable props, so their resting spots and their drag ranges
+   answer to it, exactly as the ball's do. See ui/reach.js.
+
+   NOTE WHAT DOES *NOT*: the PLACED bowl. Its base stands on `rig.floorV` and
+   that is the whole point of four consecutive bowl fixes — the muzzle-inside-
+   vessel read is a consequence of the base being on the floor, and lifting it
+   to satisfy a bound would undo them. It is also not draggable once placed, and
+   `scenes/room.js` neither draws nor hit-tests the nav while a care surface is
+   open, so there is no touch for the bar to steal. The reach probe below
+   reports it with `live: false` and the audit counts it separately, so the
+   exemption is a number in the report rather than a claim in a comment. */
+import reach from '../ui/reach.js';
 
 const C = BALANCE.care;
 const ST = C.stage;
@@ -223,7 +236,13 @@ export function createCare(rig, opts = {}) {
   let finishedNeed = false;
 
   /* ---- props --------------------------------------------------------- */
-  const bowl = { x: ST.bowlHome[0], y: ST.bowlHome[1], tx: 0, ty: 0, held: false, placed: false, kind: 'food' };
+  /* the grab half-extents, shared by the hit test and the reachable-area clamp */
+  const BOWL_RY = ST.grabR / ST.grabAspect;
+  const POUR_RY = ST.pourGrabR;
+  const bowl = {
+    x: ST.bowlHome[0], y: reach.clampY(ST.bowlHome[1], BOWL_RY),
+    tx: 0, ty: 0, held: false, placed: false, kind: 'food',
+  };
   const pourer = { x: 0, y: 0, held: false, over: 0, shown: false };
   let fill = 0;               // 0..1 bowl contents
   let served = 0;             // how much was poured in total this session
@@ -372,13 +391,17 @@ export function createCare(rig, opts = {}) {
       bowl.kind = kind === 'feed' ? 'food' : 'water';
       const home = kind === 'feed' ? ST.bowlHome : ST.waterHome;
       bowl.x = home[0];
-      bowl.y = home[1];
+      /* AUTHORED, THEN BOUNDED. 626 and 610 clear the bar comfortably on every
+         inset a phone actually reports, so this is a no-op today and the bowls
+         do not move a pixel. It is here because the next inset, or the next nav
+         height, is exactly how the ball ended up under the bar. */
+      bowl.y = reach.clampY(home[1], BOWL_RY);
       bowl.held = false; bowl.placed = false;
       fill = 0;
       sp.fill.set(0); sp.prop.set(0); sp.tip.set(0);
       pourer.shown = false; pourer.held = false; pourer.over = 0;
       const ph = kind === 'feed' ? C.feed.sackHome : C.water.jugHome;
-      pourer.x = ph[0]; pourer.y = ph[1];
+      pourer.x = ph[0]; pourer.y = reach.clampY(ph[1], POUR_RY);
       goPhase('place');
       setHint(kind === 'feed' ? `Slide ${HIS()} bowl over` : `Slide ${HIS()} water bowl over`);
     } else if (kind === 'wash') {
@@ -457,11 +480,12 @@ export function createCare(rig, opts = {}) {
     if (mode === 'feed' || mode === 'water') {
       if (ev.type === 'down') {
         /* the pourer is on top, so test it first */
-        if (pourer.shown && Math.hypot(ev.x - pourer.x, ev.y - pourer.y) < 46) {
+        if (pourer.shown && Math.hypot(ev.x - pourer.x, ev.y - pourer.y) < ST.pourGrabR) {
           pourer.held = true;
           return true;
         }
-        if (!bowl.placed && Math.hypot(ev.x - bowl.x, (ev.y - bowl.y) * 1.7) < 44) {
+        if (!bowl.placed
+          && Math.hypot(ev.x - bowl.x, (ev.y - bowl.y) * ST.grabAspect) < ST.grabR) {
           bowl.held = true;
           sound('bowl-lift');
           return true;
@@ -470,14 +494,17 @@ export function createCare(rig, opts = {}) {
         return phase === 'place' || phase === 'pour';
       }
       if (ev.type === 'move') {
+        /* the TOP of each range is its own business — a bowl belongs on the
+           floor and a jug is held above it, and neither has anything to do with
+           the nav. Only the BOTTOM comes from the reachable play area. */
         if (pourer.held) {
-          pourer.x = clamp(ev.x, 26, 364);
-          pourer.y = clamp(ev.y, 300, 812);
+          pourer.x = clamp(ev.x, ST.pourDragX[0], ST.pourDragX[1]);
+          pourer.y = Math.max(ST.pourDragTop, reach.clampY(ev.y, POUR_RY));
           return true;
         }
         if (bowl.held) {
-          bowl.x = clamp(ev.x, 34, 356);
-          bowl.y = clamp(ev.y, 600, 816);
+          bowl.x = clamp(ev.x, ST.bowlDragX[0], ST.bowlDragX[1]);
+          bowl.y = Math.max(ST.bowlDragTop, reach.clampY(ev.y, BOWL_RY));
           return true;
         }
         return false;
@@ -681,12 +708,14 @@ export function createCare(rig, opts = {}) {
       } else if (!bowl.held && !bowl.placed) {
         const home = mode === 'feed' ? ST.bowlHome : ST.waterHome;
         bowl.x = approach(bowl.x, home[0], 9, dt);
-        bowl.y = approach(bowl.y, home[1], 9, dt);
+        /* springing back to a home the clamp has not seen would walk the bowl
+           straight back under the bar one frame at a time */
+        bowl.y = approach(bowl.y, reach.clampY(home[1], BOWL_RY), 9, dt);
       }
       if (pourer.shown && !pourer.held) {
         const home = mode === 'feed' ? C.feed.sackHome : C.water.jugHome;
         pourer.x = approach(pourer.x, home[0], 7, dt);
-        pourer.y = approach(pourer.y, home[1], 7, dt);
+        pourer.y = approach(pourer.y, reach.clampY(home[1], POUR_RY), 7, dt);
       }
       resolveBowlDraw();
     }
@@ -1669,6 +1698,45 @@ export function createCare(rig, opts = {}) {
     start, stop, update, apply, pointer, drawBehind, drawMid, drawFront, drawOver,
     /** is the bowl currently drawn in two pieces around him? (verification) */
     get bowlSplit() { return bowlIsSplit(); },
+    /**
+     * WHAT THE PER-FRAME REACHABLE-AREA ASSERTION SEES (ui/reach.js).
+     *
+     * Both grabbable props, always — even when no care action is running, so
+     * the resting bowls the ROOM draws are covered too, and those are drawn
+     * with the nav on screen.
+     *
+     * `live` is the honest part. A prop is only stealable if the bar is both
+     * drawn and hit-tested over it, and `scenes/room.js` gives a care surface
+     * the pointer before the nav and hides the nav while `modal` is true. So
+     * during a care action nothing here is live; the placed bowl in particular
+     * is reported (`state: 'placed'`) but never live, because its base is
+     * pinned to `rig.floorV` and must stay there.
+     */
+    reachProbe() {
+      const modal = !!mode;
+      const out = [
+        /* BOTH BOWLS AT THEIR HOME POSITIONS, always — `scenes/room.js` draws
+           these two straight from BALANCE whenever no care action is running,
+           which is when the nav IS on screen, so they need covering even though
+           the room never hit-tests them. */
+        { id: 'bowl-home', state: 'room', x: ST.bowlHome[0],
+          y: reach.clampY(ST.bowlHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
+        { id: 'water-home', state: 'room', x: ST.waterHome[0],
+          y: reach.clampY(ST.waterHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
+        /* and the live one, wherever the drag has it */
+        { id: 'bowl', state: bowl.placed ? 'placed' : (bowl.held ? 'held' : (modal ? 'loose' : 'idle')),
+          x: bowl.x, y: bowl.y, rx: ST.grabR, ry: BOWL_RY,
+          live: !modal && !bowl.placed },
+      ];
+      if (pourer.shown) {
+        out.push({
+          id: 'pourer', state: pourer.held ? 'held' : 'shown',
+          x: pourer.x, y: pourer.y, rx: ST.pourGrabR, ry: POUR_RY,
+          live: false,
+        });
+      }
+      return out;
+    },
     /** activity soils the coat — dirt never comes from the clock alone */
     soil(amount) { game.soil(amount, rng); },
     resetStroke() { lastL = null; },

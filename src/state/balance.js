@@ -305,6 +305,19 @@ export const BALANCE = {
       scaleRange: [1.10, 2.20],
       targetR: 34, snap: 44,
       bowlScale: 0.86,
+      /* THE GRAB ELLIPSES, AND THE DRAG RANGES. Six magic numbers inside
+         care.js's `pointer()` until the reachable-play-area work (ui/reach.js)
+         needed to know how tall each prop's touch area is in order to keep it
+         off the nav. `grabAspect` 1.7 makes the bowl's grab wide and shallow,
+         which is right for a shallow object seen from slightly above.
+
+         The vertical ends of both drag ranges are GONE as numbers: they were
+         600..816 and 300..812, and 816 is 16 units past the bottom of the nav's
+         hit rect. The range is the reachable play area now. What is left here is
+         the horizontal extent, which the nav does not constrain because the bar
+         spans the full width. */
+      grabR: 44, grabAspect: 1.7, bowlDragX: [34, 356], bowlDragTop: 600,
+      pourGrabR: 46, pourDragX: [26, 364], pourDragTop: 300,
     },
     /* the dog's gaze follows a dragged prop — this is most of why it feels
        physical rather than like a menu */
@@ -536,8 +549,39 @@ export const BALANCE = {
      vending machine.
      ------------------------------------------------------------------- */
   toy: {
-    home: [330, 736],
+    /* WHERE THE BALL COMES TO REST, AS OFFSETS BELOW THE ROOM'S FLOOR LINE.
+       These were absolute y values — 736 at home, 792 at her feet, 748 when she
+       kept it, 782 after a flinch — and not one of them knew the nav existed.
+       On the target iPhone the bar's hit rect starts at y 730, so the flinch
+       drop sat 48 units inside it, `scenes/room.js` gave the touch to the bar
+       before the toy, and the ball was gone for good: auto-retrieval only fires
+       below y 660 and nothing ever calls `reset(true)`. Losing the ball was the
+       price of accidentally hitting him with it.
+
+       Now every one of them is `rig.floorV + offset` passed through
+       `reach.clampY()` (ui/reach.js). The offsets below reproduce the old
+       absolute numbers to within 0.25 on all three breeds, so on a device with
+       room the composition is unchanged; on the target phone the reach line
+       binds and they compress against it, which is correct — the foreground
+       below that line belongs to the nav, not to the player.
+
+         home    the resting spot on the rug, front right
+         feet    she gave it up: at her feet, nearest the viewer
+         own     she kept it: near herself, a little further back
+         flinch  dropped where she flinched, and left there for a while */
+    homeX: 330,
+    rest: { home: 14, feet: 70, own: 26, flinch: 60 },
     r: 16,
+    /* THE GRAB ELLIPSE, which is not the drawn ball: `r * grab.r` wide and
+       `r * grab.r / grab.aspect` tall, so 35.2 x 28.16 around a 16-unit ball.
+       Here rather than inline in dog/toy.js because the reachable-area clamp
+       has to know the HIT half-height — the 12-unit difference between the two
+       is the difference between a ball whose bottom third is under the bar and
+       one that clears it. */
+    grab: { r: 2.2, aspect: 1.25 },
+    /* how far a held ball may be dragged sideways; its vertical range is the
+       reachable play area itself, so there is no number for it here */
+    dragX: [30, 360],
     /* the flick */
     flick: { minUp: 210, maxUp: 1500, lateralRatio: 0.85, sampleWindow: 0.11 },
     /* flight: y travels toward the vanishing point and scale shrinks */
@@ -700,8 +744,15 @@ export const BALANCE = {
          it, which is what a dog carrying something actually looks like. */
       carryAt: [2, 26],               // rig-local offset from the muzzle
       carryScale: 1.35,
+      /* WHERE IT LANDS. 726 straddled the nav's top edge on the target phone:
+         a find carried home from the woods came to rest with its lower half
+         behind the CARE and PLAY pills, which is a poor look for the payoff of
+         a whole walk. Now `dropTo[1]` is what it always was and the landing is
+         put through `reach.clampY()` with `dropR` as the half-height, so the
+         thing he was proud of is entirely on screen. */
       dropTo: [196, 726],             // where it lands, virtual space
       dropSpread: 34,
+      dropR: 20,                      // a find's drawn half-height AT dropScale
       dropScale: 1.25,
       dropArc: 44,
       /* the proud look up at the camera: a bid, and it should read as one */
@@ -2135,7 +2186,36 @@ export const BALANCE = {
        step (12/16/700, +0.05em) via ui/tokens.js `type('labelSm')`. The old hard
        9.5 existed to survive seven pills. `r` is superseded by tokens.radius.md
        and kept only so an old save's layout maths cannot shift. */
-    nav: { h: 60, gap: 6, pad: 12, r: 15, iconR: 12 },
+       `minInset`, `gapBelow`, `hitUp` and `hitDown` were four magic numbers
+       inside ui/nav.js's `layout()` and `hit()`, which is exactly how the
+       reachability defect below survived: a bar whose geometry lives nowhere is
+       a bar nothing can be laid out AROUND. They are now read by ui/reach.js,
+       which is the one place that computes both the bar's rect and the bottom
+       of the reachable play area, so the two cannot drift apart.
+         minInset  the inset assumed on a device that reports none
+         gapBelow  clearance left under the tactile edge
+         hitUp     slop ABOVE the face that still counts as a press
+         hitDown   slop below the edge, likewise */
+    nav: { h: 60, gap: 6, pad: 12, r: 15, iconR: 12,
+           minInset: 6, gapBelow: 6, hitUp: 4, hitDown: 2 },
+
+    /* ---- THE REACHABLE PLAY AREA (ui/reach.js) -------------------------
+       The bottom of what a thumb can touch. DERIVED from the nav's hit rect —
+       itself derived from `nav` above plus `env(safe-area-inset-bottom)` — and
+       then pulled up by `margin`. Every interactive prop is clamped to it.
+
+       Why this block is three numbers and not a coordinate: the ball's resting
+       positions used to be absolute (736 / 782 / 792), the bar's top edge moves
+       34 units between a notched phone and a flat one, and stage 9 moved it
+       again by going from eight pills to five. Nothing compared the two, so on
+       the target iPhone a ball dropped after a flinch landed 48 units inside
+       the bar and a touch on it pressed TRAIN. See the header of ui/reach.js.
+
+       `margin` is the finger clearance between a prop's hit area and the bar's
+       — 8 virtual units, which is 8 CSS px at this width. `top` is the other
+       end of the same band and is the value the ball's drag clamp already
+       used, kept so nothing above the fold moved. */
+    reach: { margin: 8, top: 200 },
 
     /* WHAT A COLLAR LOOKS LIKE. Here rather than in either place that draws
        one, because BOTH draw one: `dog/draw.js` puts it on his neck and

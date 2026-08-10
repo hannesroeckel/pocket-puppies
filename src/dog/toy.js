@@ -23,9 +23,19 @@ import { makeSprings, approach } from '../engine/spring.js';
 import { TAU, clamp, lerp, smooth, hump, easeOut3, ell } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
 import { drawBall } from '../scenes/props.js';
+/* THE REACHABLE PLAY AREA. Every resting position below is authored as an
+   offset from the room's floor line and then clamped to this — see the header
+   of ui/reach.js for the defect that made it necessary. */
+import reach from '../ui/reach.js';
 
 const T = BALANCE.toy;
 const N = BALANCE.needs;
+
+/* the grab ellipse's half-extents. `rx` is what `pointer()` tests against and
+   `ry` is what the reachable-area clamp has to respect: a ball clamped by its
+   drawn radius still has the bottom third of its TOUCH area under the bar. */
+const GRAB_RX = T.r * T.grab.r;
+const GRAB_RY = GRAB_RX / T.grab.aspect;
 
 export function createToy(rig, opts = {}) {
   const game = opts.game;
@@ -39,10 +49,30 @@ export function createToy(rig, opts = {}) {
   const s = rig.springs;
   const sp = makeSprings(['toyDog', 'flinch'], reduced);
 
+  /**
+   * WHERE A RESTING BALL GOES, for each of the four named slots.
+   *
+   * Authored as an offset from `rig.floorV` — the room's one floor line, the
+   * same number the bowl and his planted paws resolve against — and then passed
+   * through `reach.clampY()`, which is the bottom of what a thumb can touch.
+   * The floor is the ANCHOR and the reach line is the BOUND; on the target
+   * iPhone the bound is 28 units above the floor, so it binds and the four
+   * slots compress against it. That is the correct answer rather than a
+   * regrettable one: below that line the nav owns the pixels AND the touches.
+   *
+   * A function rather than four constants because the bound moves with the
+   * device — a rotation or an inset change has to be picked up on the next
+   * frame, not baked in at construction.
+   */
+  function restY(slot) {
+    const floor = Number.isFinite(rig.floorV) ? rig.floorV : BALANCE.view.H - 120;
+    return reach.clampY(floor + T.rest[slot], GRAB_RY);
+  }
+
   /* ---- toy ----------------------------------------------------------- */
   const toy = {
-    x: T.home[0], y: T.home[1],
-    scale: 1, spin: 0, floor: T.home[1] + 15,
+    x: T.homeX, y: restY('home'),
+    scale: 1, spin: 0, floor: restY('home') + 15,
     held: false, inMouth: false, visible: true,
   };
   let state = 'idle';           // idle|held|fly|out|chase|arrive|chew|back|settle|refuse
@@ -70,7 +100,13 @@ export function createToy(rig, opts = {}) {
   function reset(toHome) {
     state = 'idle'; stT = 0; outcome = ''; unasked = false;
     toy.inMouth = false; toy.visible = true; toy.scale = 1;
-    if (toHome) { toy.x = T.home[0]; toy.y = T.home[1]; }
+    if (toHome) { toy.x = T.homeX; toy.y = restY('home'); }
+    /* WHEREVER IT IS, IT HAS TO BE REACHABLE. `reset(false)` is the path a
+       fake-out drop and a cancelled drag both take, and it used to leave the
+       ball at whatever y the pointer last had — which on the target phone could
+       be under the bar. Clamping here rather than only at the call sites means
+       the invariant holds for a caller that has not been written yet. */
+    toy.y = reach.clampY(toy.y, GRAB_RY);
     toy.floor = toy.y + 15;
     /* restart the "she'll go and get it herself" countdown; without this a
        toy that ends up up-screen is chased on the very next frame */
@@ -171,9 +207,21 @@ export function createToy(rig, opts = {}) {
     sound('yelp');
     /* The ball drops at her feet, and she LEAVES IT THERE for a while. Without
        this she trots straight off to fetch the thing that just hit her, which
-       cancels the flinch and reads as if nothing happened. */
+       cancels the flinch and reads as if nothing happened.
+
+       THIS IS THE SOFT-LOCK THE HUMAN FOUND ON HIS OWN PHONE. The drop was a
+       hardcoded `782`, which is 48 units inside the bar's hit rect on the target
+       iPhone; `scenes/room.js` offers the touch to the bar before the toy, so
+       tapping the ball pressed TRAIN. And nothing could recover it — the
+       unprompted retrieval only fires below y 660 and `reset(true)` has no
+       callers — so the price of an accidental hit was losing the ball for good.
+       A dog who must never resent her was punishing her instead.
+
+       Now it is the `flinch` slot: the floor line plus an authored offset,
+       clamped to the reachable play area. She still leaves it alone; the
+       difference is that it is still there when she goes to pick it up. */
     toy.x = clamp(rig.x + (toy.x > rig.x ? 44 : -44), 40, 350);
-    toy.y = 782;
+    toy.y = restY('flinch');
     toy.floor = toy.y + 15;
     toy.scale = 1;
     outIn = T.unaskedAfter[1] + 5;
@@ -239,7 +287,12 @@ export function createToy(rig, opts = {}) {
          scale shrinks, which is what sells "away from the viewer" */
       toy.y = lerp(flyFrom.y, flyTo.y, e) - hump(u) * T.fly.arc * (0.4 + flyPower);
       toy.scale = lerp(1, lerp(0.86, T.fly.minScale, flyPower), e);
-      toy.floor = lerp(T.home[1] + 15, flyTo.y + 12, e);
+      /* the shadow recedes with it. This read `T.home[1] + 15` — the ball's
+         home floor — as a stand-in for "the near floor", which was wrong
+         whenever the throw started anywhere else and is a fifth copy of a
+         coordinate now that home is derived. The release point's own floor is
+         both correct and self-anchoring. */
+      toy.floor = lerp(flyFrom.y + 15, flyTo.y + 12, e);
       /* she watches it the whole way */
       rig.lookAtVirtual(toy.x, toy.y);
       if (u >= 1) {
@@ -327,9 +380,16 @@ export function createToy(rig, opts = {}) {
   function drop() {
     const fetched = outcome === 'fetch';
     if (toy.inMouth) {
-      /* AT HER FEET if she's giving it up; near herself if she isn't */
+      /* AT HER FEET if she's giving it up; near herself if she isn't.
+         Both were absolute (792 / 748) and both were inside the bar's hit rect
+         on the target phone — the SUCCESSFUL fetch was the worst of the two, at
+         792 with 82% of its grab ellipse under the bar. The x offsets are what
+         actually carry "she gave it to you" versus "she kept it"; the y slots
+         now hang off the floor line and are clamped, so where the reach line
+         binds they read as the same depth, which is a loss of nuance rather
+         than a loss of the ball. */
       toy.x = fetched ? rig.x + rng.range(-22, 22) : rig.x + rng.range(-58, -30);
-      toy.y = fetched ? 792 : 748;
+      toy.y = restY(fetched ? 'feet' : 'own');
       toy.floor = toy.y + 15;
       toy.scale = 1;
       toy.inMouth = false;
@@ -489,16 +549,23 @@ export function createToy(rig, opts = {}) {
     if (state === 'chase' || state === 'chew' || state === 'back' || state === 'fly') return false;
     if (ev.type === 'down') {
       if (!toy.visible) return false;
-      const r = T.r * 2.2;
-      if (Math.hypot(ev.x - toy.x, (ev.y - toy.y) * 1.25) < r) {
+      /* the same two numbers the reachable-area clamp uses, so the area that is
+         tested and the area that is kept clear of the bar are one ellipse */
+      const r = GRAB_RX;
+      if (Math.hypot(ev.x - toy.x, (ev.y - toy.y) * T.grab.aspect) < r) {
         grab(ev.x, ev.y);
         return true;
       }
       return false;
     }
     if (ev.type === 'move' && toy.held) {
-      toy.x = clamp(ev.x, 30, 360);
-      toy.y = clamp(ev.y, 200, 820);
+      toy.x = clamp(ev.x, T.dragX[0], T.dragX[1]);
+      /* THE HAND CANNOT PUT IT SOMEWHERE THE HAND CANNOT GET IT BACK FROM.
+         This was `clamp(ev.y, 200, 820)` — 820 is 20 units past the bottom of
+         the bar's hit rect, so a player could park the ball under the bar
+         deliberately and never retrieve it. The vertical range IS the reachable
+         play area now, both ends of it. */
+      toy.y = reach.clampY(ev.y, GRAB_RY);
       toy.floor = Math.max(toy.y + 15, 700);
       trail.push({ x: ev.x, y: ev.y, t: clock });
       while (trail.length > 12) trail.shift();
@@ -561,7 +628,10 @@ export function createToy(rig, opts = {}) {
     /** stage 5's disc game reuses this: throw programmatically */
     throwUp(power = 0.6) {
       toy.x = rig.x + rng.range(-20, 20);
-      toy.y = 760;
+      /* was a hardcoded 760, which is inside the bar's hit rect on the target
+         phone: a programmatic throw that got interrupted would have left the
+         ball unreachable. It starts at her feet, like a thrown ball does. */
+      toy.y = restY('feet');
       trail.length = 0;
       trail.push({ x: toy.x, y: toy.y + 120, t: clock - 0.05 });
       trail.push({ x: toy.x, y: toy.y, t: clock });
@@ -577,10 +647,33 @@ export function createToy(rig, opts = {}) {
       return true;
     },
     reset,
+    /**
+     * WHAT THE PER-FRAME ASSERTION SEES (ui/reach.js). The grab ellipse, its
+     * state, and whether the nav can actually steal a touch on it right now —
+     * `live` is false while she is carrying it or it is in the air, because
+     * `pointer()` refuses those states outright and an unreachable ball nobody
+     * is allowed to touch is not a defect.
+     */
+    reachProbe() {
+      return {
+        id: 'toy', state: toy.held ? 'held' : state,
+        x: toy.x, y: toy.y, rx: GRAB_RX, ry: GRAB_RY,
+        live: toy.visible && !toy.inMouth
+          && state !== 'fly' && state !== 'chase' && state !== 'chew' && state !== 'back',
+      };
+    },
     get debug() {
       return {
         state, outcome, unasked, held: toy.held,
         at: [Math.round(toy.x), Math.round(toy.y)], scale: +toy.scale.toFixed(3),
+        /* the grab ellipse and how much room it has left above the bar. A
+           negative `clear` is the defect, per frame, as one number. */
+        grab: [GRAB_RX, +GRAB_RY.toFixed(2)],
+        reachClear: +(reach.bottom - (toy.y + GRAB_RY)).toFixed(2),
+        restSlots: {
+          home: +restY('home').toFixed(2), feet: +restY('feet').toFixed(2),
+          own: +restY('own').toFixed(2), flinch: +restY('flinch').toFixed(2),
+        },
         depth: +sp.toyDog.x.toFixed(3), inMouth: toy.inMouth,
         rigS: +rig.s.toFixed(3), rigSy: +(rig.sy || 1).toFixed(3), rigY: Math.round(rig.y),
         teases: teases.length, flinch: +sp.flinch.x.toFixed(2),

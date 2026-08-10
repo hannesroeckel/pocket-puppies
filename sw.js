@@ -107,8 +107,20 @@
    below it. The vessel's own art changed (SPREAD, and a foot instead of a
    point) and the eating stoop changed with it, so a phone holding 8.5.0 would
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
-   went out, so this is 8.6.0 and never anything at or below it. */
-const VERSION = '8.6.0';
+   went out, so this is 8.6.0 and never anything at or below it.
+
+   8.7.1: THE REACHABLE PLAY AREA (ui/reach.js). A ball dropped after he was hit
+   with it landed at a hardcoded y 782, which is inside the nav's hit rect on the
+   target iPhone, so the touch went to the bar and the ball could never be picked
+   up again — the punishment for an accidental hit was losing the toy for good.
+   The ball's home was already 61% behind the bar on first launch. Every
+   interactive prop is now clamped to a bound derived from the bar's real
+   geometry and `env(safe-area-inset-bottom)`, and a per-frame assertion says so.
+   A phone holding 8.6.0 has the unreachable ball, so this must go out as a new
+   cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
+   is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
+   as always. */
+const VERSION = '8.7.1';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -161,6 +173,10 @@ const PRECACHE = [
   './src/ui/meter.js',
   './src/ui/naming.js',
   './src/ui/nav.js',
+  /* the reachable play area. Imported by main, the room, the nav, the toy, care
+     and the walk — forgetting it would 404 the whole game offline, not one
+     feature, which is why `tools/check-precache.py` exists. */
+  './src/ui/reach.js',
   './src/ui/routemap.js',
   './src/ui/sheet.js',
   /* stage 6. Two new modules mean two new lines here, and forgetting them is
