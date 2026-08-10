@@ -1727,10 +1727,14 @@ export function createCare(rig, opts = {}) {
           y: reach.clampY(ST.bowlHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
         { id: 'water-home', state: 'room', x: ST.waterHome[0],
           y: reach.clampY(ST.waterHome[1], BOWL_RY), rx: ST.grabR, ry: BOWL_RY, live: false },
-        /* and the live one, wherever the drag has it */
+        /* and the one the drag owns, wherever it has it. NEVER `live`: while a
+           care action is open the nav is not drawn and not hit-tested, and while
+           one is not, `scenes/room.js` has no bowl branch in its `down` path at
+           all — this object is neither drawn nor touchable outside care. Saying
+           `live: true` here would put a claim in the report that the code does
+           not support, which is the failure mode the old bowl invariant had. */
         { id: 'bowl', state: bowl.placed ? 'placed' : (bowl.held ? 'held' : (modal ? 'loose' : 'idle')),
-          x: bowl.x, y: bowl.y, rx: ST.grabR, ry: BOWL_RY,
-          live: !modal && !bowl.placed },
+          x: bowl.x, y: bowl.y, rx: ST.grabR, ry: BOWL_RY, live: false },
       ];
       if (pourer.shown) {
         out.push({
