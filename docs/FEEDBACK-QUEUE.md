@@ -166,3 +166,63 @@ position), and de-duplicate the Play hint/toast pair down to one message.
 
 Reported by the stage agent as deliberately out of scope, since deduplicating touches
 toy/hint sequencing rather than a token.
+
+---
+
+# Second round of feedback — 2026-08-07
+
+## 6. Walk finds partly work, but the room becomes a junkyard ⚠️ and needs storage
+
+> "It would be great if the items the dog collects during a walk were also ones that one could
+> then use afterwards. Currently, they are only being collected in the room without being able
+> to use them. and when the room fills up it just gets messy. we also need a storage for these
+> items that hides them from the room if wanted."
+
+**Partly already true, which is why it reads as inconsistent.** `state/game.js` ~947 does route a
+find with a `toy` field into `inventory.toys` *and* makes it the toy on the rug, and `dog/toy.js`
+~519 plays whatever he carried home. So the four **toy** finds (stick, pinecone, tennis, squeaky)
+genuinely are usable.
+
+Everything else is not. `walks.found` is a dated log and `unlocks.items` the authoritative set,
+but a flower, a feather, a buttercup or a photo of a dog he met has **no use and no home** — it
+just accumulates on the floor. So some finds are real and some are litter, with nothing telling
+her which.
+
+**Two things to build:**
+1. **A place to keep them.** A storage/collection surface — a shelf, a box, a little album — that
+   holds finds and lets her choose what is out on display. The room should be *hers to arrange*,
+   not a floor that silently fills. Bear in mind decor is care-point-earned, not bought (rule in
+   §2 above); found items are a third category and should not become a coin shop by accident.
+2. **A use, or an honest purpose, for every find.** The project rule already applies here — stage
+   6 cut two unlock rows for being inert, on the principle that *an earned reward that does
+   nothing is worse than one never promised*. So either a find is playable (toys), wearable,
+   displayable, sellable for coins, or it is a **keepsake with a stated purpose** (an album of
+   dogs he met is a lovely thing; an anonymous flower on the rug is not).
+
+Also worth checking: whether finds ever stop spawning once she owns them, or whether she gets
+the same buttercup forever.
+
+## 7. The other dog does not get hungry while she is away from it 🐞 AND I MISJUDGED THIS
+
+> "when switching between dog, it seems like one just picks up where one left the dog, although
+> it should be hungry and thirsty after a certain time, which it is not"
+
+**He is right, and I called this a feature earlier.** When he asked what happens on adopting a
+second dog, I checked `applyElapsed` → `addNeed` → `dog()` and reported that only the *active*
+dog decays, framing it as consistent with "he never resents her". That conflated two different
+things:
+
+- **Needs** (hunger, thirst, cleanliness, energy) are *physical and recoverable* — they should
+  pass with time for **every** dog, and a bowl of food fixes them in seconds. Freezing them makes
+  the second dog a doll rather than an animal.
+- **The bond** (affection, trust) is *emotional and not recoverable* — that is what the ratcheting
+  floor protects, and it must stay protected for both dogs.
+
+So the principle was never "nothing changes while she is away"; it was "the relationship is never
+taken away from her". Needs decaying is not punishment.
+
+**Fix:** decay needs for **all** dogs in `applyElapsed`, not just the active one, keeping the
+existing 36h cap so a fortnight away is no worse than a day and a half. Leave affection floors
+alone. Pairs directly with item 4 (per-dog `lastSeenAt`) — do them together, since both stem from
+the same root: **the save tracks time once globally when it needs to track it per dog.**
+
