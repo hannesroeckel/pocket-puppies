@@ -1957,6 +1957,10 @@ export function createRoomScene() {
       };
     },
     get rig() { return rig; },
+    /* the renderer itself, for `tools/bowlpixels.py`'s face seam (§19.7): the
+       muzzle assertion has to know which pixels his FACE painted, and only the
+       renderer knows where the face ends and the ears begin */
+    get dog() { return dog; },
     get pet() { return pet; },
     get idle() { return idle; },
     get care() { return care; },

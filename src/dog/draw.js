@@ -2250,6 +2250,24 @@ export function createDogRenderer(rig) {
     } else if (farIsLeft) drawEar(c, -1, P.yaw, s.earBack.x, s.earL.x, earScale);
     else drawEar(c, 1, P.yaw, s.earBack.x, s.earR.x, earScale);
 
+    /* ---- THE FACE SEAM (§19.7) ------------------------------------------
+       Everything from here to the matching call below is HIS FACE: the skull,
+       the cheeks, the muzzle, the beard and moustache, the nose and the mouth.
+       The ears are outside it, on both sides, because they are drawn on both
+       sides.
+
+       A probe, not a fix, and the reason it exists is a measurement that could
+       not otherwise be made. §19.7's defect is "his chin shows outside the
+       bowl", and the only way to read that off the screen is to know which
+       pixels his CHIN painted. Taken across the whole head group instead, the
+       answer is dominated by a Cockapoo's ear curtains — which hang past the
+       jaw and beside the bowl entirely legitimately, and which no bowl should
+       ever be asked to cover. Sampled here, the two are separated by the
+       renderer itself rather than by a harness guessing at a bounding box.
+
+       `probe` is null in the game and this costs one branch a frame. */
+    if (probe) probe('face-in', g);
+
     /* pseudo-3D silhouette skew + pitch foreshortening */
     const yawSkew = P.yaw * R.parallax.skew * rig.mo.parallax;
     const warp = (x, y) => [
@@ -2299,6 +2317,9 @@ export function createDogRenderer(rig) {
       lateMouth = null;
     }
 
+    /* ---- the other end of THE FACE SEAM (§19.7) ---- */
+    if (probe) probe('face-out', g);
+
     if (!earsBehind) {
       if (farIsLeft) drawEar(c, 1, P.yaw, s.earBack.x, s.earR.x, earScale);
       else drawEar(c, -1, P.yaw, s.earBack.x, s.earL.x, earScale);
@@ -2308,7 +2329,15 @@ export function createDogRenderer(rig) {
     c.restore();  /* dog */
   }
 
-  return { draw, get grads() { return G; } };
+  /* THE FACE SEAM's hook. Set by `tools/bowlpixels.py` and nothing else; null
+     in the game. See the two `probe(...)` calls in the head group above. */
+  let probe = null;
+  return {
+    draw,
+    get grads() { return G; },
+    get probe() { return probe; },
+    set probe(fn) { probe = typeof fn === 'function' ? fn : null; },
+  };
 }
 
 export default createDogRenderer;
