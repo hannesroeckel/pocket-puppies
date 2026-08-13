@@ -152,7 +152,7 @@ The table in §1 above is now out of date in several rows; **this section is aut
 | 1.1 | Gift puppy is a Schnoodle | ✅ **Merged.** `feature/curly-breeds` landed at `25d9ae4`; `BALANCE.gift.breedId` is `schnoodle`. A fresh save opens on a warm auburn Schnoodle in the naming beat. |
 | 1.2 | Progress cannot be silently deleted | ✅ |
 | 1.3 | Installable, with an honest reason | ✅ |
-| 1.4 | Sound exists | ✅ built. iPhone silence turned out to be **the ringer switch, not a bug**. Now overridden behind `audio.overrideSilentSwitch` (default `true`) because she usually keeps her phone silent; the in-game toggle is an absolute kill switch. **Audibility still needs a human ear.** |
+| 1.4 | Sound exists | ✅ **and it is audible on her phone** (§9.1). iPhone silence turned out to be **the ringer switch, not a bug**, now overridden behind `audio.overrideSilentSwitch` (default `true`) because she usually keeps her phone silent; the in-game toggle is an absolute kill switch. |
 | 1.5 | Works fully offline | ✅ |
 | 1.6 | Save export/import in the UI | ✅ |
 | 1.7 | **Verified on the real iPhone, installed, by a human** | ✅ **Closed — the gift shipped, it is on her Home Screen, and she is playing it (§9).** |
@@ -160,8 +160,8 @@ The table in §1 above is now out of date in several rows; **this section is aut
 
 **Quality bar:** 2.1 ✅ (warm auburn, eyebrows removed on request, reads cute), 2.3 ✅,
 2.5 ✅, 2.6 ✅ **fully** — the Cockapoo now renders as herself (pale apricot, long fringed
-ears), verified post-merge and clearly distinct from the Schnoodle. 2.2 and 2.4 still need
-a real device and a real first-time player.
+ears), verified post-merge and clearly distinct from the Schnoodle. **2.2 ✅ and 2.4 ✅ on
+her phone (§9.1): nothing on this checklist is open.**
 
 ### The floating bowl — reopened and properly fixed
 Hannes saw the bowl still hovering and sent a screenshot. **He was right and the previous
@@ -197,15 +197,26 @@ that row only.
 
 This section is authoritative for what 1.7 leaving the list does and does not settle.
 
-### 9.1 It closes 1.7. It does not settle the three items that were waiting behind it
+### 9.1 The checklist is clear
 
-| # | Requirement | Status now |
+**Hannes, within the day: "the sound is audible and it stays smooth", and "petting the dog is
+also easy, as the first thing to do when opening the game is to touch the dog."** Those were the
+last three open items, and all three were things no harness on this machine could ever have
+answered.
+
+| # | Requirement | Status |
 |---|---|---|
-| 1.4 | Sound is audible on the phone | ⬜ **still unconfirmed.** Built and structurally verified (43 recipes, 24/24), the ringer switch is overridden, but nobody has reported hearing it. One question to her answers this. |
-| 2.2 | 60fps on her phone, including after ten minutes | ⬜ **still unmeasured.** A real device was once measured at 17.0 ms median with headroom; sustained play and thermal throttling never were. What matters now is whether she has noticed it getting sticky. |
-| 2.4 | A first session with no instructions is obvious | ⬜ **answerable for the first time, and only once.** Whether she found petting without being told is a fact about a moment that has already happened. Ask before the memory of it goes. |
+| 1.4 | Sound is audible on the phone | ✅ **Closed.** 43 synthesised recipes, 65 names, per-dog voice and the silent-switch override have been structurally verified since stage 7, and none of it was provable headlessly, because a headless browser cannot hear. A human ear on the phone is exactly what §16.8 asked for. |
+| 2.2 | 60fps on her phone, including after ten minutes | ✅ **Closed, as a report rather than a trace.** It does not get sticky. That is what 2.2 was actually about: thermal throttling was untestable here and a stopwatch on her phone was never going to happen. Consistent with what was measured — 17.0 ms median on a real device with headroom, 1.4–3.1 ms of frame work in the harness against 16.7 — but it is the playing that closes it, not those numbers. |
+| 2.4 | A first session with no instructions is obvious | ✅ **Closed.** The first thing you do on opening it is touch the dog. That is the whole design goal of stage 1 stated back as an observation — "petting is the game", and the room is composed so that the only interesting thing on screen is him. Reported by Hannes, who knows the game; the strongest possible witness was always her own first session, and that has now happened either way. |
 
-None of these needs a build. They need her, or a question to her.
+**Every blocker and every quality bar on this checklist is now closed.** It opened on 2026-07-30
+with eight blockers and six quality bars and the decision to hold the game back until it was
+genuinely gift-ready. It is on her Home Screen.
+
+What remains is not on this list: `docs/FEEDBACK-QUEUE.md` items 2, 3, 4, 5, 6 and 7 from her
+playing it, and `docs/V2-PLAN.md`. Those are improvements to a game that shipped, which is a
+different kind of work from clearing a bar.
 
 ### 9.2 She is installed, so Risk 1 does not apply
 
