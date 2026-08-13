@@ -155,7 +155,7 @@ The table in §1 above is now out of date in several rows; **this section is aut
 | 1.4 | Sound exists | ✅ built. iPhone silence turned out to be **the ringer switch, not a bug**. Now overridden behind `audio.overrideSilentSwitch` (default `true`) because she usually keeps her phone silent; the in-game toggle is an absolute kill switch. **Audibility still needs a human ear.** |
 | 1.5 | Works fully offline | ✅ |
 | 1.6 | Save export/import in the UI | ✅ |
-| 1.7 | **Verified on the real iPhone, installed, by a human** | ⬜ **The last blocker, and it is Hannes's to close.** |
+| 1.7 | **Verified on the real iPhone, installed, by a human** | ✅ **Closed — the gift shipped, it is on her Home Screen, and she is playing it (§9).** |
 | 1.8 | No unreadable text | ✅ verified independently — zero `fillText` outside `ui/text.js`; the only two remaining matches are comments describing the old code. |
 
 **Quality bar:** 2.1 ✅ (warm auburn, eyebrows removed on request, reads cute), 2.3 ✅,
@@ -185,3 +185,61 @@ all three breeds** — which is the check that actually works.
 Twice now a confident numeric gate has passed while the screen was visibly wrong. Numbers
 verify what you pointed them at; only looking verifies what she'll see. Every visual claim in
 this project needs a render someone actually viewed.
+
+---
+
+## 9. The gift has shipped — 2026-08-13
+
+**Hannes reports the game is gifted and running on her phone in Safari.** So blocker **1.7 is
+closed**: it asked for the real target iPhone, installed, exercised by a human, and the strongest
+possible version of that has happened — a real player has it. Section 8's table is superseded on
+that row only.
+
+This section is authoritative for what 1.7 leaving the list does and does not settle.
+
+### 9.1 It closes 1.7. It does not settle the three items that were waiting behind it
+
+| # | Requirement | Status now |
+|---|---|---|
+| 1.4 | Sound is audible on the phone | ⬜ **still unconfirmed.** Built and structurally verified (43 recipes, 24/24), the ringer switch is overridden, but nobody has reported hearing it. One question to her answers this. |
+| 2.2 | 60fps on her phone, including after ten minutes | ⬜ **still unmeasured.** A real device was once measured at 17.0 ms median with headroom; sustained play and thermal throttling never were. What matters now is whether she has noticed it getting sticky. |
+| 2.4 | A first session with no instructions is obvious | ⬜ **answerable for the first time, and only once.** Whether she found petting without being told is a fact about a moment that has already happened. Ask before the memory of it goes. |
+
+None of these needs a build. They need her, or a question to her.
+
+### 9.2 She is installed, so Risk 1 does not apply
+
+**Confirmed with Hannes: it is on the Home Screen, not in a Safari tab.** That is the answer the
+whole storage argument was waiting on.
+
+`docs/PLATFORM-RISKS.md` Risk 1 — ITP deleting `localStorage`, `IndexedDB` and the service worker
+registration together after 7 days of Safari use without first-party interaction — **exempts
+installed Home-Screen web apps.** So the highest-severity risk in the project, the one blockers
+1.2 and 1.3 were built against and the one the honest install card exists to talk her into, is
+retired in practice. A fortnight away from the game now costs a hungry, grubby, delighted dog and
+nothing else, which is exactly what the design promised.
+
+Two consequences worth having written down:
+
+1. **The offline promise is real for her, not just in a harness.** An installed app with a
+   registered service worker holding a complete precache is the configuration §16.7 measured:
+   network killed, reloaded, boots and plays, zero requests. The tunnel, the plane and her
+   parents' house are covered.
+2. **Export is now a backup, not a rescue path.** It stops being the thing standing between her
+   and a silent wipe, and becomes what it should be: the way off this host, and the answer if the
+   app is ever deleted from the Home Screen — which takes its storage with it, exemption or no.
+   Still worth doing once, and no longer urgent.
+
+Nothing here needs building. It needed asking.
+
+### 9.3 Deploying is now a live act
+
+`git push` is the deploy (ARCHITECTURE §1), and there is a real player on the other end of it. The
+service worker's rules were built for exactly this and hold: one generation per cache, install is
+all-or-nothing, the swap happens only while the app is hidden and only after the save is flushed,
+and the update path has never wiped a save in 15/15 checks. **But the cache version must move on
+every deploy** — a phone holding `pp-cache-v8.7.1` serves 8.7.1 for ever otherwise.
+
+`feature/training-clarity` is committed and **not pushed**. It carries cache 8.8.0 and a new
+precached module, so landing it is a real update to a game someone is playing, and it is Hannes's
+call when that happens.
