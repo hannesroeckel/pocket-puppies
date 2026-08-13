@@ -602,10 +602,21 @@ async function boot() {
       const G = BALANCE.train.guide;
       let pts = [];
       let taps = 0, hold = 0;
-      if (trick === 'sit' || trick === 'lieDown') {
+      if (trick === 'sit') {
         for (let i = 0; i <= 12; i++) {
           pts.push(toV(head.x, head.y - head.hy * 0.5 + (head.hy * 1.15) * (i / 12)));
         }
+      } else if (trick === 'lieDown') {
+        /* THE L, AND THE HARNESS HAS TO DRAW IT TOO. This used to be the sit's
+           stroke verbatim, because the two tricks shared a gesture and the
+           posture told them apart — so every gate that taught a lie-down was
+           really teaching whatever the dog's posture said. The lie-down has its
+           own shape now (`headSweep`), and a harness that still drew the old
+           one would teach a sit and report it as a lie-down. */
+        const top = head.y - head.hy * 0.5;
+        const corner = top + head.hy * 1.3;
+        for (let i = 0; i <= 10; i++) pts.push(toV(head.x, top + (corner - top) * (i / 10)));
+        for (let i = 1; i <= 8; i++) pts.push(toV(head.x - 60 * (i / 8), corner));
       } else if (trick === 'beg') {
         for (let i = 0; i <= 12; i++) {
           const u = i / 12;

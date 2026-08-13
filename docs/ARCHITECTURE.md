@@ -2482,3 +2482,160 @@ vanished into his silhouette. Reachable and invisible. The sort line is now `toy
   visible depends on the glyph (a stick pokes out; a feather does not). **Pre-existing** — at the
   old y 726 they were behind him *and* half under the bar — and deliberately not changed here,
   because reordering the walk's draw passes late would put the carry arc at risk.
+
+---
+
+## 21. Training clarity (`feature/training-clarity`) — as built
+
+Queue items 1 and 1b, which are one defect seen from two sides: **the training screen never
+said what it contained.** Sit and lie down were the same gesture told apart by hidden state, and
+the eight teaching prompts only ever surfaced as a ghost figure that cycled round after three
+seconds of stillness. He did the gesture and could not tell what he was teaching.
+
+Cache **8.8.0** — `src/ui/tricklist.js` is a new module and `scenes/room.js` imports it
+unconditionally, so a phone that took this generation without it in `PRECACHE` would resolve the
+import online and get a blank screen on a plane. `py tools/check-precache.py` expects 53.
+
+### 21.1 The lie-down is its own shape now
+
+| | guide | what she draws |
+|---|---|---|
+| `sit` | `headDown` | down over the top of the head, and stop |
+| `lieDown` | `headSweep` | down over the head, then **out to one side** — an L |
+
+**And the posture disambiguation is deleted, which was the point.** `headDown` means sit from any
+posture; if he is not standing it returns `need: 'stand'` rather than quietly meaning a different
+trick. `headSweep` means lie down from any posture, and `chainFor` sits him on the way, because a
+chain is him getting into position and not a lock. `teachable()` therefore offers the lie-down
+from a stand — the one deliberate widening; nothing else moved.
+
+`GUIDE_NEEDS` (`dog/train.js`) is the new single answer to *what the gesture needs*, which is not
+what the trick needs: `sit` wants a stand, `rollOver` and `playDead` want him already on the
+floor, and the other five are readable from anywhere. `classifyGuide` returns its `need` from
+that table and the trick list reads the same table, so the list and the recogniser cannot come to
+different answers about what she can teach this second. That drift *is* the defect this section
+is about, one level up.
+
+### 21.2 Two failed detectors, because the path's points are not kept
+
+`cap` stores displacement and travel, not a point list, so "find the corner of the L" has to be
+done incrementally. Both first attempts failed, and the way they failed is the useful part:
+
+1. **Elbow = the first point `fall` units below the start.** On a real stroke that is near the TOP
+   of the descent, so the rest of the fall counted against the flat leg: a clean 69-down-60-across
+   L measured `fall 13.8, drop 55.3, flat 60` and was rejected for 60 < 55.3 x 1.15.
+2. **Elbow = the deepest point, frozen once the hand moved sideways from it.** The flat leg runs at
+   *constant depth*, so every segment of it tied the deepest point and dragged the elbow along
+   underneath the finger. The sideways distance from it was always zero; the corner never latched.
+
+So the corner is not measured. **The shape is: it started over his head, it fell, and it finished
+out to the side** — `fall 13`, `flat 17`, and `outShare 0.5`, which is what keeps a sloppy sit out.
+Measured: a sit drawn with up to **34 units of sideways drift over a 69-unit fall is still read as
+a sit**, which is more tolerance than a player will ever use.
+
+### 21.3 The trick list
+
+`ui/tricklist.js`, opened by a pill in the training chrome, closed by Done, by the backdrop, or by
+anything that leaves training (derived from `train.modal`, not called from each of those sites).
+Four lines per row, and a fifth when it applies:
+
+    name          "Lie down"
+    what he does  "He folds onto his front, head still up"    <- TRICKS[id].does(P), NEW
+    how to ask    "Stroke down over the head, then out to one side"
+    how well      "learning"   <- BALANCE.train.words.level, the SAME five the legend uses
+    why not now   "He needs to be lying down first"   <- only while the posture is wrong
+
+**No bars and no counts.** "0/8 learned" would turn a thing she does with him into a completion
+list. Nothing is greyed out either: a trick he could do two seconds from now is not locked, so the
+row's face stays lit and the reason sits underneath it in a quieter ink.
+
+`train.lessons()` is the new interface — deliberately **not** `repertoire()`, which hides
+everything he has never done because a judge may only ask for what he knows. Answering both
+questions from one call would have quietly widened what a trial can ask for.
+
+`does` is a function of `game.pron` (it cannot be said without a pronoun); `hint` stays a plain
+string (an instruction to her never names him). The roster self-check now fails at load if a trick
+ships without either, on the same principle as the `BALANCE.train.roster` check: a trick with
+nothing to say in the list is one she can never find out about.
+
+### 21.4 Three defects found by rendering it, not by measuring it
+
+Every one of these passed the gate before it was looked at.
+
+1. **The untaught rows said "He has not tried this one yet" instead of what he does.** On first
+   open all eight rows said that and not one said what a trick *was* — the original defect wearing
+   a new coat. The right-hand word already carries "new".
+2. **The hint line lagged the ghost by a whole cycle** (`if (!hint || hintT > T.hintCycle)`), so
+   the lie-down's L was drawn under *"Stroke down over the top of the head"*. Two lessons that look
+   alike is the defect; saying the wrong one out loud is the same defect with more confidence. The
+   words follow the figure now.
+3. **The L was drawn across his muzzle and read as a cross on his face.** The corner moved below
+   the chin so the flat leg crosses the cream of his chest, where a dotted line can be seen. Both
+   versions measure identically; only one of them can be read.
+
+And one the gate found: **the ghost hint switched itself off permanently** the first time she
+taught him anything. It tested `!perf`, and `perf` is left in place — done — for the result to be
+read off it. So the one piece of discoverability the screen had was gone for the rest of the
+session after the first lesson, which is half of why the roster was "just a guessing". It now
+tests `!(perf && !perf.done)` and is suppressed only while he is mid-answer.
+
+### 21.5 The pill claims a touch that starts on it and nothing else
+
+Everything below the signal pad is inside his halo, and the lie-down's flat leg sweeps across
+exactly that band. A button that swallowed `move` and `up` as well — which is what the call bubble
+does, because a bubble is only ever tapped — would throw away any stroke that happened to end over
+it. `down` only, and only when no stroke is already in flight.
+
+### 21.6 What was measured (`py tools/traingate.py [--shots]`)
+
+**59 checks, 0 failures, three consecutive runs.** The gate is IN THE REPO, unlike the reach and
+occlusion gates, which live in `C:\tmp` and so cannot be re-run by anyone, including whoever wrote
+them. `tools/_drive.py` is the shared driver; it uses the system Chrome, because this machine's
+network refuses Playwright's own browser download.
+
+| check | result |
+|---|---|
+| the collision, from all three postures | `headDown` never yields `lieDown` in any posture; from a sit or a down it returns `need: 'stand'`. `headSweep` yields `lieDown` from all three. |
+| the boundary | a sit drifting sideways stays a sit to **34 units** over a 69-unit fall |
+| the whole ritual, all 8 tricks | a real gesture path plus a real reward lands a rep for every one, with one cue each |
+| the trial | `perform('lieDown', {judged: true})` still answers by id, bypassing cue interpretation |
+| the list | 8 rows, every one with name + does + hint + level word; standing, only `rollOver` and `playDead` say he needs to be elsewhere; lying down, only `sit` does |
+| Done, at insets **0 / 20 / 40 / 80** | bottom at 734 against floors of 844 / 824 / 804 / 764; rows never below 78 tall |
+| reach gate (ARCHITECTURE 20) | `liveHits` **0** over 6,934 audited frames, with the pill and the list live |
+| frame cost, list open, real loop | median **1.40 ms**, p95 2.70, against 16.7 |
+| errors / network | zero page errors, zero console warnings, zero external requests |
+| looked at | `review/train-screen.png`, `train-tricklist.png`, `train-ghost-sit.png`, `train-ghost-lieDown.png` |
+
+Three things in the gate itself were wrong before they were right, and all three would have
+reported a green screen while measuring nothing:
+
+- it posed him by stepping a fixed number of frames, but `posture` is derived from the rig's
+  springs and lags the request;
+- it drew the next stroke while he was still owed a treat, and a touch then **is** the treat
+  (dog/train.js says so at the top of `pointer`, and is right), so the recogniser never saw it;
+- the install card became eligible partway through, correctly took the surface, and swallowed a
+  stroke — which read as a flaky failure that moved between runs until `dogTouches` showed the
+  touch never reaching the recogniser at all.
+
+`train.debug` gained `lastGuide`, `guidesRead` and `dogTouches` for exactly that: what the
+recogniser made of a stroke used to be inferable only from the performance that followed, by which
+point it had already been acted on.
+
+### 21.7 Left imperfect, stated plainly
+
+- **A diagonal counts as a lie-down.** The detector asks only that the stroke fell and finished out
+  to the side, so one long diagonal from his crown to his shoulder reads as the L. It is forgiving
+  in the direction a player would want, and the rival gestures are safe (a sweep across the body
+  starts on body zones, not the head), but it is not the figure the ghost draws.
+- **The ghost is still faint on fur.** `hintAlpha` is 0.34 for all eight figures and was chosen by
+  looking; the L is legible over his chest at that alpha and was not over his muzzle, which is why
+  the geometry moved rather than the alpha. In one still frame the two vertical legs look alike —
+  it is the travelling fingertip that sells the corner, and a still cannot show that.
+- **`lessons()` is rebuilt every frame the panel is open**, because the posture line is live. Eight
+  objects and eight strings per frame against a 1.40 ms frame; the eight rows of type drawn beside
+  it cost far more.
+- **The hint copy says "out to one side" rather than "along the floor"**, which is what the real
+  hand signal does. On a frontal rig the flat leg is drawn at his chest, and a fall all the way to
+  the rug would need a sideways sweep wider than the screen to clear `outShare`. The words describe
+  what she can actually draw.
+- **Nothing here has been on the phone.** Blocker 1.7 still gates this as it gates everything.

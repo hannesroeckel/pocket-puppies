@@ -63,14 +63,19 @@ import { TRICKS, TRICK_IDS, TRICK_POSE, trickName, endPosture } from './anim/tri
 import { matchWord, utteranceSim, normWord } from './voice.js';
 import { drawPlate, drawText } from '../ui/text.js';
 /* CHROME ONLY — the training pad, the signal glyphs and the legend are this
-   module's own art. This is the leave button, which is chrome and was the last
-   place in the game still naming its own cream and its own brown. */
-import { INK, SURF } from '../ui/tokens.js';
+   module's own art. This is the leave button and the trick-list pill, which are
+   chrome; the leave button was the last place in the game still naming its own
+   cream and its own brown. `NOMINAL` is the documented answer for type on
+   translucent chrome: the pill is drawn at 0.72 over whatever the room happens
+   to be, so nothing can know exactly what the ink composites against, and the
+   guess has to err dark. */
+import { INK, SURF, NOMINAL, type } from '../ui/tokens.js';
 
 const T = BALANCE.train;
 const SG = T.signal;
 const O = T.obey;
 const UI = BALANCE.ui.train;
+const TK = UI.tricks;
 const VW = BALANCE.view.W;
 
 /* ==========================================================================
@@ -113,6 +118,16 @@ const COPY = {
   padLabel: () => 'signal here',
   legendEmpty: (P) => `${capitalise(P.they)} ${P.has} not learned a signal yet`,
   legendTitle: (P) => `What ${P.they} think${P.s} you mean`,
+  /* ---- THE TRICK LIST (ui/tricklist.js) ----
+     A DIFFERENT QUESTION FROM THE LEGEND, and the two must not be merged. The
+     legend is what he thinks a signal means — his idea, possibly wrong. This
+     is what there is to teach at all, which nothing in the game said out loud
+     before: the hints only ever surfaced as a ghost gesture that cycled round
+     one at a time after three seconds of stillness, so the ladder could only
+     be discovered by stopping and waiting (docs/FEEDBACK-QUEUE.md 1b). */
+  tricksTitle: (P) => `What ${P.they} can learn`,
+  tricksOpen: () => 'Tricks',
+  tricksClose: () => 'Done',
 };
 
 /* ---- little art constants (scene art, not design tunables: §11 G) ------ */
@@ -245,6 +260,10 @@ export function createTraining(rig, opts = {}) {
   const toast = opts.toast || (() => {});
   const voice = opts.voice || null;
   const busyElsewhere = opts.busyElsewhere || (() => false);
+  /* the trick list lives in ui/tricklist.js and is opened by scenes/room.js,
+     the way every other full surface in the game is — this layer only owns the
+     pill that asks for it */
+  const openTricks = opts.openTricks || (() => {});
   const s = rig.springs;
 
   const sp = makeSprings(['train', 'trickHold', 'spin', 'treat', 'nom', 'cueFlash', 'call'], reduced);
@@ -272,6 +291,19 @@ export function createTraining(rig, opts = {}) {
   let voiceArmed = 0;           // seconds left to attach a heard word to a signal
   let calledAt = -1e9;          // when his name was last called
   let downHintCount = 0;
+  /* WHAT THE RECOGNISER MADE OF THE LAST STROKE ON HIM, for the debug block.
+     Sit and lie down were told apart by hidden state for six stages and no
+     harness could see which of the two a gesture had been read as — the
+     performance that followed was the only evidence, and by then the answer
+     had already been acted on. A gate can now assert the reading itself. */
+  let lastGuide = null;
+  /* how many on-body gestures have been READ, and how many touches on him have
+     been captured at all. A stale `lastGuide` is ambiguous — it means either
+     "the stroke was read as nothing" or "the stroke never got here" — and the
+     two have completely different causes. The counters make a harness able to
+     tell them apart instead of inferring. */
+  let guidesRead = 0;
+  let dogTouches = 0;
   let listeners = [];
 
   /* ---- the signal she was last given ------------------------------- */
@@ -336,7 +368,13 @@ export function createTraining(rig, opts = {}) {
       const need = TRICKS[id].prereq;
       if (need === 'any') return true;
       if (need === now) return true;
-      /* headDown chains sit->lieDown, so lieDown is offered from a sit only */
+      /* LIE DOWN IS ASKABLE FROM A STAND. Its guide is an L of its own now
+         rather than a second helping of the sit's stroke, so the gesture no
+         longer needs him already sitting to be unambiguous — and `chainFor`
+         sits him on the way, which is how a real dog gets to the floor.
+         Nothing else widens: a sweep across the body still wants a dog who is
+         already lying on it. */
+      if (id === 'lieDown' && now === 'stand') return true;
       return false;
     });
   }
@@ -350,6 +388,10 @@ export function createTraining(rig, opts = {}) {
       x0: x, y0: y, x: x, y: y, lx0: lx, ly0: ly, lx, ly,
       travel: 0, turn: 0, lastAng: null,
       flipsY: 0, lastDirY: 0,
+      /* the "down" L (BALANCE.train.guide.downSweep): the deepest point the
+         stroke has reached. How far it fell and where it finished is the whole
+         shape — see the note in balance.js for why there is no corner here. */
+      deepY: ly,
       zone: where === 'dog' ? zoneAt(lx, ly) : '',
       moved: false, holding: 0,
     };
@@ -377,6 +419,11 @@ export function createTraining(rig, opts = {}) {
         cap.lastDirY = dirY;
       }
     }
+    /* HOW FAR THE "DOWN" L HAS FALLEN, in rig-local units so it is measured in
+       the same units as every other guide threshold. Where it FINISHES is read
+       off the end of the path in `classifyGuide`, so an out-and-back scribble
+       is a scribble rather than a sweep. */
+    if (ly > cap.deepY) cap.deepY = ly;
     cap.x = x; cap.y = y; cap.lx = lx; cap.ly = ly;
     if (cap.travel > SG.tapTravel) cap.moved = true;
   }
@@ -672,6 +719,23 @@ export function createTraining(rig, opts = {}) {
   /* ================================================================== */
   /*  GUIDING — the gesture that induces a pose                          */
   /* ================================================================== */
+  /**
+   * WHAT THE GESTURE NEEDS, WHICH IS NOT WHAT THE TRICK NEEDS.
+   *
+   * `TRICKS[id].prereq` is the posture the trick passes THROUGH, and `chainFor`
+   * walks him into it — asking a standing dog to lie down sits him on the way.
+   * This is the shorter list: the postures without which the GUIDE cannot be
+   * read at all. Sweeping across a standing dog is not a roll-over waiting to
+   * happen, it is an ordinary stroke, and reading it as a request would take
+   * the petting field's gestures away from it.
+   *
+   * Three of the eight, and `classifyGuide` returns each one from here rather
+   * than from a literal, so the trick list (`lessons()`) cannot come to a
+   * different answer than the recogniser about what she can teach right now.
+   * That drift is the exact shape of the defect this branch exists to fix.
+   */
+  const GUIDE_NEEDS = { sit: 'stand', rollOver: 'down', playDead: 'down' };
+
   /** which petting zone a rig-local point is in (may be '') */
   function zoneAt(lx, ly) {
     if (!pet) return '';
@@ -694,16 +758,25 @@ export function createTraining(rig, opts = {}) {
 
   /**
    * Classify a finished on-body gesture into a guide, then into a trick.
-   * The POSTURE decides which trick a stroke means — sit and lie down share
-   * one gesture, exactly as the DS did.
+   *
+   * THE SHAPE DECIDES WHICH TRICK A STROKE MEANS, AND ONLY THE SHAPE. The DS
+   * gave sit and lie down the same stroke and told them apart by the posture
+   * he was already in; we shipped that faithfully and it failed on contact
+   * with a player — he did the gesture and could not tell what he was teaching
+   * (docs/FEEDBACK-QUEUE.md 1). The lie-down is an L of its own now, and the
+   * posture disambiguation that propped up the collision is gone: `headDown`
+   * means sit whatever he is doing, `headSweep` means lie down whatever he is
+   * doing, and a trick that needs him somewhere else says so.
    */
   function classifyGuide(g) {
     const G = T.guide;
+    const DS = G.downSweep;
     const netX = g.lx - g.lx0, netY = g.ly - g.ly0;
     const net = Math.hypot(netX, netY);
     const straight = clamp(net / Math.max(1, g.travel), 0, 1);
     const now = posture();
     const zone = g.zone;
+    const overHead = zone === 'head' || zone === 'ear' || zone === 'muz';
 
     /* ---- a circle low down by the paws: spin (research §5 — the DS taught
            this by waving a treat about at floor level) ---- */
@@ -715,9 +788,9 @@ export function createTraining(rig, opts = {}) {
     /* ---- press and hold on the flank: play dead (lying down only) ---- */
     if (!g.moved && g.dur >= G.holdFor
       && (zone === 'belly' || zone === 'back' || zone === 'chest' || zone === 'neck')) {
-      return now === 'down'
+      return now === GUIDE_NEEDS.playDead
         ? { guide: 'flankHold', trick: 'playDead' }
-        : { guide: 'flankHold', trick: '', need: 'down' };
+        : { guide: 'flankHold', trick: '', need: GUIDE_NEEDS.playDead };
     }
 
     /* ---- a paw wiggled up and down: shake ---- */
@@ -725,13 +798,35 @@ export function createTraining(rig, opts = {}) {
       return { guide: 'pawWiggle', trick: 'shake' };
     }
 
+    /* ---- DOWN OVER THE HEAD, THEN OUT TO ONE SIDE: lie down ----
+       Tested BEFORE the straight-stroke branch below, and it has to be: an L of
+       a 20-unit fall and a 24-unit sweep has a net vector that is a diagonal
+       and a straightness of about 0.7, so it would clear `straightAt` and be
+       read as a sloppy sweep across the body.
+
+       It FELL, and it FINISHED out to the side. `deepY` is the deepest the
+       stroke reached, so an out-and-back scribble finishes where it started and
+       is not a sweep; `outShare` is what keeps a sloppy sit out. No corner is
+       measured — two attempts to find one from a path whose points are not kept
+       are recorded in balance.js, along with the numbers that killed each. */
+    if (overHead) {
+      const fell = g.deepY - g.ly0;
+      const out = Math.abs(g.lx - g.lx0);
+      if (fell >= DS.fall && out >= DS.flat && out >= fell * DS.outShare) {
+        return { guide: 'headSweep', trick: 'lieDown', dir: g.lx > g.lx0 ? 1 : -1 };
+      }
+    }
+
     if (net >= G.minTravel && straight > G.straightAt) {
       const vertical = Math.abs(netY) > Math.abs(netX) * 1.1;
-      /* ---- down over the head: sit, then lie down ---- */
-      if (vertical && netY > 0 && (zone === 'head' || zone === 'ear' || zone === 'muz')) {
-        if (now === 'stand') return { guide: 'headDown', trick: 'sit' };
-        if (now === 'sit') return { guide: 'headDown', trick: 'lieDown' };
-        return { guide: 'headDown', trick: '' };       // already down: nothing to do
+      /* ---- down over the head: sit, and only ever sit ----
+         A stroke that stops at the bottom of the head is the sit signal. If he
+         is already sitting or lying down there is nothing for it to do, and
+         `need` says which posture it wants rather than quietly meaning a
+         different trick — which is what it used to do. */
+      if (vertical && netY > 0 && overHead) {
+        if (now === GUIDE_NEEDS.sit) return { guide: 'headDown', trick: 'sit' };
+        return { guide: 'headDown', trick: '', need: GUIDE_NEEDS.sit };
       }
       /* ---- up the chest to the chin: beg ---- */
       if (vertical && netY < 0 && (zone === 'chest' || zone === 'chin' || zone === 'neck' || zone === 'belly')) {
@@ -752,9 +847,11 @@ export function createTraining(rig, opts = {}) {
          on the floor", and there is no rival horizontal gesture from `down`, so
          the loose test is also the faithful one. */
       if (!vertical && Math.abs(netX) > G.minTravel * 1.3) {
-        if (now === 'down') return { guide: 'bodyAcross', trick: 'rollOver', dir: netX > 0 ? 1 : -1 };
+        if (now === GUIDE_NEEDS.rollOver) {
+          return { guide: 'bodyAcross', trick: 'rollOver', dir: netX > 0 ? 1 : -1 };
+        }
         if (zone === 'back' || zone === 'belly' || zone === 'chest' || zone === 'neck') {
-          return { guide: 'bodyAcross', trick: '', need: 'down' };
+          return { guide: 'bodyAcross', trick: '', need: GUIDE_NEEDS.rollOver };
         }
       }
     }
@@ -1034,6 +1131,25 @@ export function createTraining(rig, opts = {}) {
       return true;
     }
 
+    /* ---- THE TRICK LIST ----
+       IT CLAIMS A TOUCH THAT STARTS ON IT AND NOTHING ELSE. The pill sits
+       under the pad, and everything below the pad is inside his halo — the
+       lie-down's flat leg sweeps left across exactly this band and FINISHES
+       here. The first version swallowed move and up as well (copying the call
+       bubble, which is only ever tapped), so lifting her finger over the pill
+       threw the whole stroke away: the gesture was never classified and the
+       lesson silently did not happen. Caught by the gate, which read
+       `lastGuide` and found the previous stroke's answer still sitting there.
+
+       So: `down` only, and only when no stroke is already in flight. A gesture
+       that ends here is still a gesture, and one that begins here is a tap on
+       a button. */
+    if (!cap && ev.type === 'down' && onTricksButton(ev.x, ev.y)) {
+      openTricks();
+      sinceInput = 0;
+      return true;
+    }
+
     /* ---- "CALL HIM" ----
        The ONLY way the microphone ever opens: one press, one utterance. This
        runs inside a real pointer event, which is the only context iOS will
@@ -1052,6 +1168,7 @@ export function createTraining(rig, opts = {}) {
         if (reward()) return true;
       }
       if (her) {
+        dogTouches++;
         startCapture('dog', ev.x, ev.y, l.x, l.y);
         /* taps above the head are the jump guide, so they must not fall
            through to the petting field as a miss */
@@ -1085,6 +1202,15 @@ export function createTraining(rig, opts = {}) {
         return true;
       }
       const res = classifyGuide(g);
+      guidesRead++;
+      lastGuide = {
+        guide: res.guide || '', trick: res.trick || '', need: res.need || '',
+        from: posture(),
+        /* the L's two measurements, so a rejection says WHICH one was short */
+        fell: +(g.deepY - g.ly0).toFixed(1),
+        out: +Math.abs(g.lx - g.lx0).toFixed(1),
+        zone: g.zone || '',
+      };
       if (res.trick) {
         guideInto(res.trick, res);
         return true;
@@ -1094,7 +1220,11 @@ export function createTraining(rig, opts = {}) {
            teaches itself, so the line is a safety net, not a tutorial */
         downHintCount++;
         if (downHintCount >= 2) {
-          setHint(res.need === 'down' ? COPY.needDown(P()) : COPY.needSit(P()));
+          /* three postures now, not two: deleting the sit/lie-down collision
+             means a downward stroke over the head can want him STANDING, which
+             this line could not previously say and so said "sitting" instead */
+          setHint(res.need === 'down' ? COPY.needDown(P())
+            : (res.need === 'stand' ? COPY.needStand(P()) : COPY.needSit(P())));
           downHintCount = 0;
         }
         return false;
@@ -1246,6 +1376,12 @@ export function createTraining(rig, opts = {}) {
     return true;
   }
 
+  /** is a virtual point on the trick-list pill? */
+  function onTricksButton(x, y) {
+    const B = TK.open;
+    return x >= B.x && x <= B.x + B.w && y >= B.y && y <= B.y + B.h;
+  }
+
   /** is a virtual point on the "call him" button? */
   function onCallButton(x, y) {
     if (!voice || !voice.armed) return false;
@@ -1275,14 +1411,34 @@ export function createTraining(rig, opts = {}) {
     sp.treat.to(owed ? 1 : 0);
 
     /* ---- the ghost gesture hint (discoverability, one at a time) ---- */
-    if (on && sinceInput > T.hintAfter && !perf) {
+    /* THE GHOST COMES BACK. This tested `!perf`, and `perf` is not cleared when
+       a performance ENDS — it is left in place, done, for the result to be read
+       off. So the one piece of discoverability the training screen had switched
+       itself off permanently the first time she taught him anything, and the
+       only thing that ever named a trick again was waiting out a whole session
+       and coming back. That is half of why the roster was "just a guessing"
+       (docs/FEEDBACK-QUEUE.md 1b), and the trick list is the other half.
+
+       It is still suppressed while he is actually mid-answer: a dotted figure
+       drawn over a dog doing the trick would be telling her to do the thing she
+       has just done. */
+    const busy = !!(perf && !perf.done);
+    if (on && sinceInput > T.hintAfter && !busy) {
       const list = teachable();
       if (list.length) {
         const i = Math.floor((sinceInput - T.hintAfter) / T.hintCycle) % list.length;
+        const was = hintPose;
         hintPose = list[i];
-        if (!hint || hintT > T.hintCycle) setHint(TRICKS[hintPose].hint);
+        /* THE WORDS FOLLOW THE FIGURE. This was `if (!hint || hintT >
+           T.hintCycle)`, i.e. the line only changed once it had been up for a
+           whole cycle — so the ghost moved on and the instruction did not, and
+           the render showed the lie-down's L being drawn under "Stroke down
+           over the top of the head". Two lessons that look the same is the
+           defect this branch exists to fix; saying the wrong one out loud is
+           the same defect with extra confidence. */
+        if (!hint || hintPose !== was) setHint(TRICKS[hintPose].hint);
       }
-    } else if (perf) hintPose = '';
+    } else if (busy) hintPose = '';
 
     stepPerf(dt);
     for (const k in sp) sp[k].step(dt);
@@ -1540,7 +1696,7 @@ export function createTraining(rig, opts = {}) {
     }
 
     /* ---- the ghost gesture hint: dotted arrow on her body ---- */
-    if (w > 0.02 && hintPose && !perf && sinceInput > T.hintAfter) {
+    if (w > 0.02 && hintPose && !(perf && !perf.done) && sinceInput > T.hintAfter) {
       const a = clamp((sinceInput - T.hintAfter) / 0.8, 0, 1) * T.hintAlpha * w;
       drawGuideGhost(c, hintPose, a);
     }
@@ -1601,11 +1757,39 @@ export function createTraining(rig, opts = {}) {
     const spec = TRICKS[id];
     const anchor = (part) => pet.anchor(part);
     const toV = (lx, ly) => ({ x: rig.x + lx * rig.s, y: rig.y + ly * rig.s * (rig.sy || 1) });
-    let from = null, to = null, kind = 'line';
+    let from = null, to = null, mid = null, kind = 'line';
     const head = anchor('head'), body = anchor('body'), muz = anchor('muz');
     if (spec.guide === 'headDown') {
       from = toV(head.x, head.y - head.hy * 0.55);
       to = toV(head.x, head.y + head.hy * 0.62);
+    } else if (spec.guide === 'headSweep') {
+      /* THE L, AND IT HAS TO LOOK LIKE ONE. This is the whole fix for the sit
+         and lie-down collision: the two ghosts are now obviously different
+         figures, so the suggestion tells her which lesson she is about to
+         teach without a word of UI. The corner clears the head by the same
+         margin the sit's stroke ends at, and the flat leg runs off toward the
+         floor on his left, where there is room for it in every posture. */
+      from = toV(head.x, head.y - head.hy * 0.55);
+      /* THE CORNER GOES UNDER HIS CHIN, not across his muzzle. At 0.72 of the
+         head's half-height the flat leg ran straight over his nose and the
+         figure read as a CROSS on his face rather than an L — visible the
+         moment it was rendered, invisible to any measurement of it.
+
+         The geometry is not free: whatever is drawn here has to be a path the
+         recogniser would actually accept, or the hint teaches a gesture that
+         fails. `downSweep` wants the sideways finish to be at least half the
+         fall, and this is a fall of 1.5 head-halves against a 60-unit sweep,
+         which clears it with room. A longer fall — down to the floor, which is
+         what the signal really is — would need a sweep nobody has space for.
+
+         It sits just BELOW the chin rather than at it, because at chin height
+         the dashes ran along his dark muzzle and disappeared into it. A little
+         lower and they cross the cream of his chest, where a dotted line can
+         actually be seen. Both versions measure identically; only one of them
+         can be read. */
+      mid = toV(head.x, head.y + head.hy * 1.15);
+      to = toV(head.x - 70, head.y + head.hy * 1.15);
+      kind = 'elbow';
     } else if (spec.guide === 'chinUp') {
       from = toV(body.x, body.y + body.hy * 0.55);
       to = toV(muz.x, muz.y + 8);
@@ -1635,6 +1819,10 @@ export function createTraining(rig, opts = {}) {
     c.setLineDash([3, 6]);
     if (kind === 'line' || kind === 'wiggle') {
       c.beginPath(); c.moveTo(from.x, from.y); c.lineTo(to.x, to.y); c.stroke();
+    } else if (kind === 'elbow') {
+      c.beginPath();
+      c.moveTo(from.x, from.y); c.lineTo(mid.x, mid.y); c.lineTo(to.x, to.y);
+      c.stroke();
     } else if (kind === 'circle') {
       c.beginPath(); c.ellipse(from.x, from.y, 30, 12, 0, 0, TAU); c.stroke();
     }
@@ -1642,7 +1830,16 @@ export function createTraining(rig, opts = {}) {
     /* the fingertip, travelling the path so the direction is unmistakable */
     let fx = from.x, fy = from.y;
     if (kind === 'line') { fx = lerp(from.x, to.x, ph); fy = lerp(from.y, to.y, ph); }
-    else if (kind === 'wiggle') { fy = lerp(from.y, to.y, hump(ph)); }
+    else if (kind === 'elbow') {
+      /* down the first leg, then out along the second, so the corner is a
+         thing she watches happen rather than a bend she has to notice */
+      const legs = Math.hypot(mid.x - from.x, mid.y - from.y) + Math.hypot(to.x - mid.x, to.y - mid.y);
+      const at = ph * legs;
+      const one = Math.hypot(mid.x - from.x, mid.y - from.y);
+      const k = at < one ? at / Math.max(1, one) : (at - one) / Math.max(1, legs - one);
+      const a0 = at < one ? from : mid, a1 = at < one ? mid : to;
+      fx = lerp(a0.x, a1.x, k); fy = lerp(a0.y, a1.y, k);
+    } else if (kind === 'wiggle') { fy = lerp(from.y, to.y, hump(ph)); }
     else if (kind === 'circle') { fx = from.x + Math.cos(ph * TAU) * 30; fy = from.y + Math.sin(ph * TAU) * 12; }
     else if (kind === 'taps') { fy = from.y - hump(ph) * 8; }
     else if (kind === 'hold') { /* stays put, pulses */ }
@@ -1751,11 +1948,37 @@ export function createTraining(rig, opts = {}) {
       c.restore();
     }
 
+    /* ---- THE TRICK LIST PILL ----
+       It fades with the rest of the chrome while he is mid-answer, because
+       reading the roster is not what she is doing in that second — but it is
+       never removed, since a control that disappears is one she has to
+       rediscover. */
+    drawTricksButton(g, c, chrome);
+
     /* ---- "CALL HIM" — the only microphone affordance in the game ----
        Drawn only when she has opted in AND the recogniser has not retired
        itself. It never appears as a fallback, an error, or a nag: it is a
        little extra button that is simply absent when it cannot work. */
     if (voice && voice.armed) drawCallButton(c, clamp(w, 0, 1));
+  }
+
+  /** the pill that opens the roster — the answer to "what can he even learn?" */
+  function drawTricksButton(g, c, a) {
+    if (a <= 0.01) return;
+    const B = TK.open;
+    c.save();
+    c.globalAlpha = clamp(a, 0, 1) * 0.72;
+    c.fillStyle = SURF.chrome;
+    roundRect(c, B.x, B.y, B.w, B.h, B.r); c.fill();
+    c.globalAlpha = clamp(a, 0, 1) * 0.55;
+    c.strokeStyle = SURF.border(0.5); c.lineWidth = 1.2;
+    roundRect(c, B.x, B.y, B.w, B.h, B.r); c.stroke();
+    c.restore();
+    drawText(g, COPY.tricksOpen(), {
+      ...type('labelMd', { weight: 800 }),
+      x: B.x + B.w / 2, y: B.y + B.h / 2, anchor: 'free', align: 'center',
+      ink: INK.body, over: NOMINAL, fade: clamp(a, 0, 1), maxWidth: B.w - 18,
+    });
   }
 
   /** a small speech-bubble button that pulses while it is listening */
@@ -1924,6 +2147,10 @@ export function createTraining(rig, opts = {}) {
   /* ================================================================== */
   const api = {
     /* ---- room-facing ---- */
+    /* the copy block, so ui/tricklist.js can title itself in this module's
+       voice rather than starting a second one (ui/shop.js exports its COPY for
+       the same reason) */
+    COPY,
     get active() { return on || sp.train.x > 0.01; },
     get modal() { return on; },
     /** true while she is mid-trick: the room stops dog/toy.js resetting her */
@@ -2015,6 +2242,45 @@ export function createTraining(rig, opts = {}) {
     },
     /** the roster itself, for a judge that wants to teach as well as test */
     get roster() { return TRICK_IDS.map((id) => ({ id, name: trickName(id), ...TRICKS[id] })); },
+    /**
+     * EVERY trick, in teaching order, resolved into words she can read —
+     * what it is, how to ask for it, how well he knows it, and whether the
+     * gesture will work from where he is standing this second.
+     *
+     * DELIBERATELY NOT `repertoire()`. That one hides everything he has never
+     * done, because a judge may only ask for what he knows; this is the
+     * opposite question and answering it from the same call would have quietly
+     * widened what a trial can ask for. Two questions, two methods.
+     *
+     * The copy is resolved HERE rather than in the panel, so `game.pron` is
+     * read at the moment of asking and a list opened for one dog can never be
+     * drawn with another dog's pronouns.
+     */
+    lessons() {
+      const P2 = P();
+      const now = posture();
+      return TRICK_IDS.map((id) => {
+        const spec = TRICKS[id];
+        const rec = game.trick(id);
+        const needs = GUIDE_NEEDS[id] || '';
+        return {
+          id, name: spec.name,
+          does: spec.does(P2),
+          hint: spec.hint,
+          /* the SAME five words the cue legend uses (BALANCE.train.words.level).
+             A second vocabulary for the same idea is how "steady" and "getting
+             it" end up meaning different things in different corners. */
+          know: game.describeTrickLevel(id),
+          started: rec.reps > 0,
+          /* live, and it flips the moment he moves — which is what teaches the
+             posture ladder without a locked door ever being drawn */
+          ready: !needs || needs === now,
+          /* said as HIM needing something, never as the trick being locked */
+          needs: (!needs || needs === now) ? ''
+            : (needs === 'down' ? COPY.needDown(P2) : COPY.needStand(P2)),
+        };
+      });
+    },
     trickForCue,
     cueFor: (id) => game.cueFor(id),
     isLearned: (id) => game.isLearned(id),
@@ -2049,6 +2315,7 @@ export function createTraining(rig, opts = {}) {
         on, w: +sp.train.x.toFixed(3), posture: posture(),
         hint, hintPose,
         cue: { drawn: cue.drawn, read: cue.sig, misread: cue.misread, conf: +cue.conf.toFixed(2) },
+        lastGuide, guidesRead, dogTouches,
         perf: api.performance,
         tricks, cues,
         known: game.known(),
