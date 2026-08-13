@@ -75,15 +75,29 @@ export function applyElapsed(game, now = Date.now()) {
   const hours = elapsedMs / HOUR;
   const capped = Math.min(hours, T.maxDecayHours);
 
-  /* needs decay (energy recovers) */
+  /* ---- needs decay, FOR EVERY DOG (queue item 7) ----------------------
+     This decayed the active dog only, through `addNeed` -> `dog()`, and it was
+     reported as a feature: "he never resents her". That conflated two things.
+     Needs are PHYSICAL and recoverable — they should pass with time for every
+     dog, and a bowl of food fixes them in seconds. The bond is EMOTIONAL and
+     not recoverable, and that is what the ratcheting floor protects. The
+     principle was never "nothing changes while she is away"; it was "the
+     relationship is never taken away from her".
+
+     The 36-hour cap still applies to all of them, so a fortnight away is no
+     worse than a day and a half for anybody. */
   for (const key in T.needDecayPerHour) {
     const per = T.needDecayPerHour[key];
     if (!per) continue;
-    game.addNeed(key, -per * capped);
+    if (game.addNeedAll) game.addNeedAll(key, -per * capped);
+    else game.addNeed(key, -per * capped);
   }
 
   /* coat gloss dulls while she's away, so grooming stays a ritual */
-  if (game.addGloss && capped > 0) game.addGloss(-T.glossDecayPerHour * capped);
+  if (capped > 0) {
+    if (game.addGlossAll) game.addGlossAll(-T.glossDecayPerHour * capped);
+    else if (game.addGloss) game.addGloss(-T.glossDecayPerHour * capped);
+  }
 
   /* affection: a small "missed you" dip, bounded, and the mutator refuses to
      go below the floor no matter what we pass it. Deliberately tiny — the bond
@@ -100,7 +114,18 @@ export function applyElapsed(game, now = Date.now()) {
     game.touch();
   }
 
-  state.lastSeenAt = now;
+  /* ---- THE REUNION RUNS ON THE LONGER OF THE TWO GAPS (queue item 4) ----
+     `hours` above is how long the APP was shut. This dog may have been waiting
+     far longer than that — she can play daily and still not have picked him up
+     for a fortnight — and the reunion is about him, not about the app. Read
+     his own clock before it is stamped, and take whichever gap is longer. */
+  const dogHours = game.gapHoursFor ? game.gapHoursFor(game.dog.id, now) : hours;
+  const gap = Math.max(hours, num(dogHours, hours));
+
+  /* both clocks: the app's, and the one in the room. The others go on waiting,
+     which is the entire point of the per-dog field. */
+  if (game.markSeen) game.markSeen(now);
+  else state.lastSeenAt = now;
 
   /* MOOD IS NOT PERSISTED. It starts wherever the bond and the current needs
      say it should — a mood that survives a cold start is a grudge, not a mood.
@@ -109,16 +134,21 @@ export function applyElapsed(game, now = Date.now()) {
 
   game.touch();
 
-  const reunion = hours >= T.reunionAfterHours;
+  const reunion = gap >= T.reunionAfterHours;
   return {
-    hours: +hours.toFixed(3),
+    /* `hours` is the gap the GREETING is chosen from — the longer of the two.
+       `appHours` is how long the app itself was shut, kept separate because it
+       is what the day boundary and the decay were computed from. */
+    hours: +gap.toFixed(3),
+    appHours: +hours.toFixed(3),
+    dogHours: +num(dogHours, hours).toFixed(3),
     cappedHours: +capped.toFixed(3),
     capped: hours > T.maxDecayHours,
     reunion,
     newDay,
     /* the reunion's intensity input: time_away x affection (research §1.7).
        0..1, saturating at BALANCE.reunion.hoursFull hours. */
-    intensity: reunion ? reunionIntensity(hours, game.affection) : 0,
+    intensity: reunion ? reunionIntensity(gap, game.affection) : 0,
     /* >0 means the device clock had moved backwards and we refused to trust it */
     clockSkewMs: clockSkew,
   };
@@ -146,12 +176,18 @@ export function decayLive(game, dt) {
   const d = num(dt, 0);
   if (d <= 0) return;
   const perSec = d / 3600;
+  /* EVERY DOG, here too. The offline model advancing all of them while the live
+     model advanced only the one in the room would mean a long session quietly
+     slowed the other dog's day down — the same freeze as item 7, just smaller
+     and harder to see. */
   for (const key in T.needDecayPerHour) {
     const per = T.needDecayPerHour[key];
     if (!per) continue;
-    game.addNeed(key, -per * perSec);
+    if (game.addNeedAll) game.addNeedAll(key, -per * perSec);
+    else game.addNeed(key, -per * perSec);
   }
-  if (game.addGloss) game.addGloss(-T.glossDecayPerHour * perSec);
+  if (game.addGlossAll) game.addGlossAll(-T.glossDecayPerHour * perSec);
+  else if (game.addGloss) game.addGloss(-T.glossDecayPerHour * perSec);
 }
 
 /** Human-readable gap, for the reunion line stage 2 will show. */

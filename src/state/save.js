@@ -313,6 +313,35 @@ export const MIGRATIONS = {
     s.v = 6;
     return s;
   },
+
+  /* ---- v6 -> v7 : the save tracked time once, and needed to track it twice
+     Queue items 4 and 7, which have one root cause. `lastSeenAt` was stored
+     for the SAVE, so it answered "when was the app last open?" and was then
+     used to answer "how long has she been away from this dog?" — a different
+     question with a different answer the moment there are two dogs.
+
+     Every dog gets his own `lastSeenAt`, SEEDED FROM THE APP CLOCK. That is
+     the honest conversion: an old save genuinely does not know when she last
+     picked up each dog, and the one thing that must not happen is inventing a
+     gap — a migration that seeded 0, or `bornAt`, would fire a full-intensity
+     reunion for a dog she was playing with five minutes before she updated.
+     Seeding from `lastSeenAt` means the first launch after this migration
+     greets everybody exactly as the old build would have, and the per-dog
+     clocks diverge from there, which is the only place they can honestly
+     start diverging.
+
+     Nothing else moves. Needs, affection, floors, tricks and coins are
+     untouched: this bump adds a clock, it does not spend anything. */
+  7: (s) => {
+    const dogs = Array.isArray(s.dogs) ? s.dogs : [];
+    const seed = Number.isFinite(+s.lastSeenAt) ? +s.lastSeenAt : Date.now();
+    for (const d of dogs) {
+      if (!d || typeof d !== 'object') continue;
+      if (!Number.isFinite(+d.lastSeenAt) || +d.lastSeenAt <= 0) d.lastSeenAt = seed;
+    }
+    s.v = 7;
+    return s;
+  },
 };
 
 export function migrate(raw) {

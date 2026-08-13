@@ -40,7 +40,7 @@ import {
   collected as collectedFinds, FIND_BY_ID,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -58,6 +58,17 @@ export function newDog(now, opts = {}) {
   return {
     id: 'dog-' + now.toString(36),
     name, breedId, sex, bornAt: now,
+    /* ---- WHEN SHE WAS LAST WITH *THIS* DOG (queue item 4) ---------------
+       The save used to track time once, globally, and that is not the same
+       question. Play with the Cockapoo every day for a fortnight and the game
+       knew she had been here yesterday, so the Schnoodle greeted her flatly
+       after two weeks apart — exactly the moment the reunion exists for.
+
+       IT IS THE BOND'S CLOCK, NOT THE BODY'S. Needs decay off the app clock
+       (`state.lastSeenAt`), which advances for every dog whether or not he is
+       the one in the room; this advances only when she is actually with him,
+       and the reunion is driven from whichever of the two gaps is longer. */
+    lastSeenAt: now,
     needs: { hunger: 0.82, thirst: 0.86, cleanliness: 0.94, energy: 0.90 },
     affection: BALANCE.affection.start,
     affectionFloor: BALANCE.affection.startFloor,
@@ -607,6 +618,46 @@ export function createGame(state, opts = {}) {
       d.needs[key] = clampNum(num(d.needs[key], 1) + (+delta), 0, 1, 1);
       onChange();
       return d.needs[key];
+    },
+    /**
+     * The same need on EVERY dog. `applyElapsed` and `decayLive` use this, and
+     * the distinction is the whole of queue item 7: needs are physical and
+     * recoverable, so they pass with time for a dog she is not looking at, and
+     * a bowl of food fixes them in seconds. Freezing them made the second dog
+     * a doll rather than an animal.
+     *
+     * THE BOND IS NOT IN HERE and must not be. Affection and trust are not
+     * recoverable, which is what the ratcheting floor protects, and what "he
+     * never resents her" means. Nothing in this method touches them.
+     */
+    addNeedAll(key, delta) {
+      if (!ok(delta)) return 0;
+      let n = 0;
+      for (const d of state.dogs) {
+        if (!d.needs || !(key in d.needs)) continue;
+        d.needs[key] = clampNum(num(d.needs[key], 1) + (+delta), 0, 1, 1);
+        n++;
+      }
+      if (n) onChange();
+      return n;
+    },
+    /** coat gloss dulls on every dog, for the same reason */
+    addGlossAll(delta) {
+      if (!ok(delta)) return 0;
+      for (const d of state.dogs) d.gloss = clampNum(num(d.gloss, 0.55) + (+delta), 0, 1, 0.55);
+      onChange();
+      return state.dogs.length;
+    },
+    /**
+     * How long since she was last with a given dog, in hours. Falls back to the
+     * app clock for a dog that predates the per-dog field, which is what
+     * MIGRATIONS[7] fills in anyway — belt and braces, because this feeds the
+     * reunion and a wrong answer here is a flat greeting after a fortnight.
+     */
+    gapHoursFor(id, now = Date.now()) {
+      const d = state.dogs.find((x) => x.id === id) || dog();
+      const t = num(d && d.lastSeenAt, 0) || num(state.lastSeenAt, 0) || num(now, 0);
+      return Math.max(0, (num(now, Date.now()) - t) / 3600e3);
     },
     setNeed(key, v) {
       const d = dog();
@@ -1416,10 +1467,17 @@ export function createGame(state, opts = {}) {
      * breed and a different set of needs actually arrive. Mutating the id
      * under a live scene would leave a Shiba rig wearing a Cockapoo's state.
      */
-    switchDog(id) {
+    switchDog(id, now = Date.now()) {
       if (typeof id !== 'string' || !id) return false;
       if (id === state.activeDogId) return false;
       if (!state.dogs.some((d) => d.id === id)) return false;
+      /* STAMP THE DOG SHE IS LEAVING, and only him. His gap starts here; the
+         incoming dog's gap is still running and is read by scenes/room.js on
+         the remount, which is what decides whether he gets a reunion or a
+         quiet hello. Stamping the arrival here would destroy the very number
+         the greeting is chosen from. */
+      const leaving = dog();
+      if (leaving) leaving.lastSeenAt = num(now, Date.now());
       state.activeDogId = id;
       onChange();
       return true;
@@ -1566,14 +1624,33 @@ export function createGame(state, opts = {}) {
       onChange();
     },
 
-    /* `lastSeenAt` is the input to the whole elapsed-time model. A NaN here
-       would make every decay, the reunion trigger and the day boundary NaN at
-       once — and it would be persisted. */
+    /**
+     * SHE IS HERE, WITH THIS DOG, NOW. Stamps both clocks, because there are
+     * two and they answer different questions:
+     *
+     *   state.lastSeenAt  when the APP was last open. Drives the offline decay
+     *                     and the day boundary, for every dog equally.
+     *   dog.lastSeenAt    when she was last with THIS dog. Drives the reunion,
+     *                     and only advances for the dog in the room — which is
+     *                     the whole of queue item 4.
+     *
+     * A NaN in either would make every decay, the reunion trigger and the day
+     * boundary NaN at once, and it would be persisted.
+     *
+     * (This method was very nearly written twice. A second `markSeen` added to
+     * this literal for the per-dog clock sat forty lines above and was silently
+     * dead — a duplicate key in an object literal is the LAST one, with no
+     * warning from anywhere, and the reunion simply never stamped. One method,
+     * both clocks.)
+     */
     markSeen(now = Date.now()) {
       const t = num(now, Date.now());
-      if (t <= 0) return;
+      if (t <= 0) return 0;
       state.lastSeenAt = t;
+      const d = dog();
+      if (d) d.lastSeenAt = t;
       onChange();
+      return t;
     },
 
     /* ---- derived --------------------------------------------------- */

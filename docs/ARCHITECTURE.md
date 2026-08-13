@@ -2639,3 +2639,97 @@ point it had already been acted on.
   the rug would need a sideways sweep wider than the screen to clear `outShare`. The words describe
   what she can actually draw.
 - **Nothing here has been on the phone.** Blocker 1.7 still gates this as it gates everything.
+
+---
+
+## 22. Per-dog time (`feature/per-dog-time`) — as built
+
+Queue items 4 and 7, which are one root cause: **the save tracked time once, and it needed to
+track it twice.** `lastSeenAt` answered "when was the app last open?" and was then used to answer
+"how long has she been away from this dog?" — a different question with a different answer the
+moment there are two dogs.
+
+Cache **8.9.0**, schema **v7**.
+
+### 22.1 Two clocks, because there are two questions
+
+| clock | answers | advances |
+|---|---|---|
+| `state.lastSeenAt` | when the app was last open | every launch, for everybody |
+| `dog.lastSeenAt` | when she was last with **this** dog | only for the dog in the room |
+
+`markSeen()` stamps both, and is the only thing that does. `switchDog()` stamps the dog she is
+**leaving** and deliberately not the one she is arriving at — stamping the arrival there would
+destroy the very number the greeting is chosen from, which `scenes/room.js` reads on the remount.
+
+### 22.2 Needs pass for every dog; the bond does not
+
+`applyElapsed` and `decayLive` now go through `addNeedAll` / `addGlossAll` rather than `addNeed`,
+which resolved to `dog()` and so only ever touched the one in the room. The distinction is the
+whole of item 7, and it was reported as a *feature* first time round:
+
+- **Needs are physical and recoverable.** They should pass with time for every dog, and a bowl of
+  food fixes them in seconds. Freezing them made the second dog a doll rather than an animal.
+- **The bond is emotional and not recoverable.** Affection, the ratcheting floor and trust are not
+  in `addNeedAll` and must never be. "He never resents her" was never "nothing changes while she
+  is away"; it was "the relationship is never taken away from her".
+
+The 36-hour cap binds for the inactive dog exactly as for the active one — measured, both dogs
+identical at 36 hours and at 14 days.
+
+### 22.3 The reunion runs on the longer gap
+
+`applyElapsed` returns `hours` as **max(app gap, this dog's gap)**, with `appHours` and `dogHours`
+kept separate because the decay and the day boundary are computed from the app's clock and would
+be wrong if they quietly took the longer one.
+
+And the beat now fires **on a swap**, which is where item 4 actually bites: play with the Cockapoo
+daily for a fortnight, pick him up, and he gets the reunion the absence earned rather than the
+warm one-liner that was the only thing a swap could produce. Measured: app closed 12 minutes,
+his own gap a fortnight, and the switch plays the reunion at **k = 0.48**. Switching to a dog she
+was just with stays a quiet hello.
+
+### 22.4 A duplicate key that was silently the loser
+
+The per-dog stamp was written as a second `markSeen` in `createGame`'s api literal, forty lines
+above the `markSeen` that was already there. **A duplicate key in an object literal is the last
+one, silently**, so the new method was dead the moment it was typed: the reunion fired, the clock
+never advanced, and nothing anywhere said so. Caught because the gate asserted the stamp rather
+than trusting it. One method now stamps both clocks, and a sweep for other duplicate api methods
+came back empty.
+
+### 22.5 Schema v7, and the one real migration risk
+
+Every dog gets `lastSeenAt` **seeded from the app clock**. That is the only seeding that cannot
+lie: an old save genuinely does not know when she last picked up each dog, and seeding 0 or
+`bornAt` would fire a full-intensity reunion for a dog she had been playing with a minute before
+she updated. Seeding from `lastSeenAt` means the first launch after the migration greets everybody
+exactly as the old build would have, and the clocks diverge from there.
+
+### 22.6 What was measured (`py tools/timegate.py`)
+
+**20 checks, 0 failures.**
+
+| check | result |
+|---|---|
+| a day away, both dogs | hunger 0.820 → 0.196 and thirst 0.860 → 0.000 for the active dog **and** for the one she is not looking at |
+| the bond, both dogs | affection never below the floor, at any gap |
+| the 36-hour cap, both dogs | 14 days is bit-identical to 36 hours (0.0640) |
+| the reunion on his own clock | app shut 0.20 h, his gap 336 h → reunion plays at k 0.48, and his clock is stamped once he has been seen |
+| a swap that is not an absence | quiet hello, no beat |
+| v6 → v7 | migrates, keeps name/coins/affection, and every dog lands **5 minutes** of gap — the app clock — rather than an invented fortnight |
+| v1…v7 | all migrate to v7 through the real table |
+| the training gate | 59/59 still pass |
+
+### 22.7 Left imperfect
+
+- **The inactive dog's needs advance on the app's clock, not his own.** Offline decay uses the app
+  gap for everybody, so a dog she has not picked up in a fortnight is exactly as hungry as the one
+  she plays with daily. That is deliberate — the cap makes both of them "hungry" long before the
+  difference could matter, and giving each dog his own decay clock would need a third timestamp to
+  avoid double-decaying. Revisit only if a third dog ever exists.
+- **A swap does not re-run `applyElapsed`.** The needs decay that happens on a swap is whatever the
+  live decay has accumulated, which is nothing much. Correct today, because a swap does not
+  advance the wall clock, but worth remembering if a swap ever becomes something she does after a
+  long absence inside one session.
+- **Nothing here has been on the phone.** She has two dogs only if she has saved 400 care points.

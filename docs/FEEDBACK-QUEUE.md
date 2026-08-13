@@ -178,7 +178,7 @@ Two possibilities, and I've asked which:
   paws are currently a **bad** petting zone (rubbing them makes him pull away), so a
   handshake affordance would need to coexist with that without muddling the sweet/bad model.
 
-## 4. Per-dog reunion timing — found while answering a question, not reported
+## 4. Per-dog reunion timing ✅ FIXED on `feature/per-dog-time` (cache 8.9.0)
 
 `applyElapsed` decays only the **active** dog (`addNeed` → `dog()`), which is right: the
 ignored dog never starves. But `lastSeenAt` is stored **once for the whole save**, not per dog.
@@ -190,6 +190,13 @@ asset in the project.
 
 **Fix:** per-dog `lastSeenAt`, stamped when she switches away; trigger the reunion on whichever
 gap is longer.
+
+> **Fixed.** Every dog carries his own `lastSeenAt`, stamped when she switches away from him and
+> when she is with him; `state.lastSeenAt` stays the app's clock. The reunion runs on **whichever
+> gap is longer**, and it now fires on a swap as well as on a launch — which is where this item
+> actually bites. Measured: app shut for 12 minutes, his own gap a fortnight, reunion at k 0.48.
+> Schema v7; every dog's clock is seeded from the app clock so the migration cannot invent a gap.
+> ARCHITECTURE 22.
 
 ## 5. Toasts land on top of the thing they are describing
 
@@ -244,7 +251,7 @@ her which.
 Also worth checking: whether finds ever stop spawning once she owns them, or whether she gets
 the same buttercup forever.
 
-## 7. The other dog does not get hungry while she is away from it 🐞 AND I MISJUDGED THIS
+## 7. The other dog does not get hungry while she is away from it ✅ FIXED on `feature/per-dog-time` (cache 8.9.0)
 
 > "when switching between dog, it seems like one just picks up where one left the dog, although
 > it should be hungry and thirsty after a certain time, which it is not"
@@ -268,3 +275,9 @@ existing 36h cap so a fortnight away is no worse than a day and a half. Leave af
 alone. Pairs directly with item 4 (per-dog `lastSeenAt`) — do them together, since both stem from
 the same root: **the save tracks time once globally when it needs to track it per dog.**
 
+> **Fixed, and you were right.** `applyElapsed` and `decayLive` decay **every** dog through
+> `addNeedAll`, with the 36-hour cap intact for all of them, so the dog she is not looking at gets
+> hungry, thirsty and dull-coated like an animal instead of waiting frozen like a doll. Affection,
+> the floor and trust are untouched and are deliberately not reachable from that path: needs are
+> physical and recoverable, the bond is not. Done together with item 4, as this note asked.
+> ARCHITECTURE 22.

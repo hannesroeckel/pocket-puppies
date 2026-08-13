@@ -42,7 +42,7 @@ import { drawBowl, drawFind } from './props.js';
    the per-frame assertion that says so. See ui/reach.js. */
 import reach from '../ui/reach.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
-import { decayLive, describeGap } from '../state/time.js';
+import { decayLive, describeGap, reunionIntensity } from '../state/time.js';
 
 const VW = BALANCE.view.W, VH = BALANCE.view.H, FLOOR = BALANCE.view.floorY;
 const PA = BALANCE.particles;
@@ -1446,14 +1446,26 @@ export function createRoomScene() {
            The kennel does not own the most important thing it causes. */
         openNaming('first');
       } else if (params && params.switched) {
-        /* a swap between two named dogs. One warm line, pronoun-parameterised
-           from the dog who is now in the room — which is why the copy could
-           not be written with a fixed pronoun (he is a Schnoodle, she is a
-           Cockapoo, and this is the line both of them use). */
-        const P = app.game.pron;
-        toasts.show(`${app.game.dog.name} ${P.is} here`, 2.2);
-        idle.cancel(1.2);
-        rig.blinkNow(2);
+        /* ---- A SWAP, AND IT MAY BE A REUNION (queue item 4) -------------
+           This was always the warm one-liner, because the only gap the game
+           could measure was the app's — so picking a dog up after a fortnight
+           of playing with the other one got the same "he is here" as picking
+           him up after five minutes. The gap is his own now, and if it is a
+           real absence he gets the beat the absence earned.
+
+           `markSeen` comes AFTER the gap is read, and only here: reading it in
+           `switchDog` would have stamped the arrival before anyone could ask
+           how long he had been waiting. */
+        const gap = app.game.gapHoursFor(app.game.dog.id);
+        if (gap >= BALANCE.time.reunionAfterHours) {
+          playReunion(reunionIntensity(gap, app.game.affection), gap);
+        } else {
+          const P = app.game.pron;
+          toasts.show(`${app.game.dog.name} ${P.is} here`, 2.2);
+          idle.cancel(1.2);
+          rig.blinkNow(2);
+        }
+        app.game.markSeen();
       }
       /* if she came back to an unnamed puppy, name it once the greeting lands */
       if (!app.game.isNamed && (reunion.active || walk.active)) pendingNaming = true;
