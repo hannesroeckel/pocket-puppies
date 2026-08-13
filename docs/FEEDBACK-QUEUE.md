@@ -9,7 +9,7 @@ Ordered by value.
 
 ---
 
-## 1. Sit and Lie down are indistinguishable when teaching ⚠️ real design flaw
+## 1. Sit and Lie down are indistinguishable when teaching ✅ FIXED on `feature/training-clarity` (cache 8.8.0)
 
 > "the moves lie down and sit are hard to distinguish when teaching the dog as one pulls
 > down on the dog for both"
@@ -37,7 +37,21 @@ Then **delete the posture-based disambiguation** — it exists only to prop up t
 Safe for the obedience contest, which performs by id (`perform(id, {judged:true})`) and never
 goes through cue interpretation.
 
-## 1b. There is no trick list — training is guesswork ⚠️ same root cause as 1
+> **Fixed.** Lie down has its own gesture: down over the head, then **out to one side** — an L,
+> which is the real hand signal and is distinguishable by shape rather than by hidden state. The
+> posture disambiguation is **deleted**: `headDown` means sit whatever he is doing (and says
+> `need: 'stand'` when he is already sitting, instead of silently meaning something else), and
+> `headSweep` means lie down whatever he is doing, with `chainFor` sitting him on the way. The
+> ghost gesture now draws an obviously different figure, and the hint line follows it — it used
+> to lag a whole cycle and captioned the L with *"Stroke down over the top of the head"*.
+>
+> **Measured:** `headDown` never yields a lie-down from any of the three postures, `headSweep`
+> yields one from all three, a sit drawn with up to 34 units of sideways drift is still a sit, all
+> eight tricks still teach through a real gesture path, and the trial still performs by id.
+> 59 checks in **`tools/traingate.py`**, which is in the repo. Full write-up, including two failed
+> detectors and three defects found only by rendering it, in ARCHITECTURE 21.
+
+## 1b. There is no trick list — training is guesswork ✅ FIXED on `feature/training-clarity` (cache 8.8.0)
 
 > "we also need more descriptions for the player regarding the tricks. currently its just a
 > guessing"
@@ -68,6 +82,19 @@ Notes:
   parameterised from `game.pron` (the pattern is already established in `train.js`'s `COPY`).
 - The mis-association cue legend already exists and is separate — it shows what he *thinks* a
   word means. Don't merge the two; they answer different questions.
+
+> **Fixed.** `src/ui/tricklist.js`, opened by a **Tricks** pill in the training chrome. Every
+> trick, taught or not, with its name, **what he does** (a new `does:` field on each entry in
+> `dog/anim/tricks.js`, pronoun-parameterised from `game.pron`), how to ask for it, and how well he
+> knows it in words — the same five the cue legend uses, never a bar and never a count. The
+> "he needs to be lying down first" line appears only while the posture is actually wrong and
+> disappears the moment he moves, so nothing is ever drawn as a locked door. The legend and the
+> list are kept separate, as this item asked.
+>
+> One extra defect fell out of it: **the ghost hint switched itself off for good** the first time
+> she taught him anything, because it tested `!perf` and a finished performance is left in place
+> for its result to be read. So "the only way to learn what exists is to stop and wait" was worse
+> than reported — after the first lesson, waiting did not work either.
 
 ## 1c. The ball can land behind the nav bar and become unreachable ✅ FIXED on `fix/reachable-area` (cache 8.7.1)
 

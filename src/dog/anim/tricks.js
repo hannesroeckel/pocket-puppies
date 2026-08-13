@@ -35,6 +35,9 @@
 import BALANCE from '../../state/balance.js';
 import { registerClip } from './index.js';
 import { TAU, clamp, lerp, smooth, plateau, hump } from '../../engine/draw.js';
+/* COPY ONLY — 'He' from 'he', for the `does` lines below. state/game.js does
+   not import this module (see the roster note), so this direction is safe. */
+import { capitalise } from '../../state/game.js';
 
 const T = BALANCE.train;
 const TR = BALANCE.rig.trick;
@@ -60,56 +63,90 @@ const atLeast = (sp, v, k) => sp.to(Math.max(sp.t, sp.t * (1 - k) + v * k));
      guide   the gesture on her body that INDUCES the pose (dog/train.js)
      poseAt  progress at which the pose has landed — this is where the reward
              window opens and where a contest's stopwatch stops
+
+   TWO STRINGS PER TRICK, ANSWERING TWO DIFFERENT QUESTIONS. `does` is what he
+   will do; `hint` is how to ask for it. The trick list (ui/tricklist.js) shows
+   both, because "there is no trick list — training is guesswork"
+   (docs/FEEDBACK-QUEUE.md 1b) was a player discovering an invisible ladder by
+   waiting for the ghost hint to cycle round to it.
+
+   `does` TAKES THE PRONOUNS, `hint` HAS NONE. A hint is an instruction to her
+   and never names him, so it stays a plain string. What he does cannot be said
+   without a pronoun, so it is a function of `game.pron` — the same rule
+   dog/train.js's COPY block follows, for the same reason: the gift puppy is
+   male and a later dog may not be.
    ========================================================================== */
 export const TRICKS = {
   sit: {
     id: 'sit', name: 'Sit', order: 0,
     prereq: 'stand', ends: 'sit', guide: 'headDown',
     dur: T.clip.sit, poseAt: 0.56, transient: false,
+    does: (P) => `${capitalise(P.they)} sit${P.s} down and wait${P.s}, looking up at you`,
     /* the one-line teaching prompt. NO PRONOUNS HERE — dog/train.js supplies
        them from game.pron at draw time (see COPY there). */
     hint: 'Stroke down over the top of the head',
   },
   lieDown: {
     id: 'lieDown', name: 'Lie down', order: 1,
-    prereq: 'sit', ends: 'down', guide: 'headDown',
+    /* THE GESTURE IS AN L, AND IT IS ITS OWN SHAPE. It used to be `headDown` —
+       the same stroke as the sit — told apart only by whether he happened to
+       be sitting, which is hidden state and therefore invisible: "the moves lie
+       down and sit are hard to distinguish when teaching the dog as one pulls
+       down on the dog for both" (docs/FEEDBACK-QUEUE.md 1). This is the real
+       hand signal for "down": palm down over the head, then a flat sweep along
+       the floor. `prereq` stays 'sit' because that is still the posture he
+       passes through — dog/train.js chains him through it. */
+    prereq: 'sit', ends: 'down', guide: 'headSweep',
     dur: T.clip.lieDown, poseAt: 0.60, transient: false,
-    hint: 'From a sit, stroke down over the head again',
+    does: (P) => `${capitalise(P.they)} fold${P.s} onto ${P.their} front, head still up`,
+    /* "OUT TO ONE SIDE" RATHER THAN "ALONG THE FLOOR", which is what the real
+       hand signal does and what this hint said first. On a frontal rig the flat
+       leg is drawn across his chin, not along the rug, and the recogniser wants
+       the sideways finish to be at least half the fall — so "along the floor"
+       was asking her for a stroke that would fall too far to be accepted. It
+       also says ONE side, not left: either direction reads. */
+    hint: 'Stroke down over the head, then out to one side',
   },
   beg: {
     id: 'beg', name: 'Beg', order: 2,
     prereq: 'sit', ends: 'sit', guide: 'chinUp',
     dur: T.clip.beg, poseAt: 0.58, transient: false,
+    does: (P) => `${capitalise(P.they)} sit${P.s} up tall and paw${P.s} at the air`,
     hint: 'Stroke up from the chest to the chin',
   },
   shake: {
     id: 'shake', name: 'Shake', order: 3,
     prereq: 'any', ends: 'keep', guide: 'pawWiggle',
     dur: T.clip.shake, poseAt: 0.46, transient: false,
+    does: (P) => `${capitalise(P.they)} lift${P.s} a front paw for you to take`,
     hint: 'Take a front paw and wiggle it up and down',
   },
   spin: {
     id: 'spin', name: 'Spin', order: 4,
     prereq: 'stand', ends: 'stand', guide: 'floorCircle',
     dur: T.clip.spin, poseAt: 0.52, transient: true,
+    does: (P) => `${capitalise(P.they)} turn${P.s} a whole circle on the spot`,
     hint: 'Circle a finger low down by the paws',
   },
   jump: {
     id: 'jump', name: 'Jump', order: 5,
     prereq: 'stand', ends: 'stand', guide: 'tapAbove',
     dur: T.clip.jump, poseAt: 0.44, transient: true,
+    does: (P) => `${capitalise(P.they)} bounce${P.s} straight up off ${P.their} front paws`,
     hint: 'Tap a few times just above the head',
   },
   rollOver: {
     id: 'rollOver', name: 'Roll over', order: 6,
     prereq: 'down', ends: 'down', guide: 'bodyAcross',
     dur: T.clip.rollOver, poseAt: 0.52, transient: true,
+    does: (P) => `${capitalise(P.they)} roll${P.s} right over and come${P.s} back up`,
     hint: 'Lying down, sweep a finger across the belly',
   },
   playDead: {
     id: 'playDead', name: 'Play dead', order: 7,
     prereq: 'down', ends: 'down', guide: 'flankHold',
     dur: T.clip.playDead, poseAt: 0.52, transient: false,
+    does: (P) => `${capitalise(P.they)} flop${P.s} onto ${P.their} side and stay${P.s} put`,
     hint: 'Lying down, press and hold on the side',
   },
 };
@@ -126,6 +163,14 @@ export const TRICK_IDS = Object.keys(TRICKS).sort((a, b) => TRICKS[a].order - TR
   if (missing.length || extra.length) {
     throw new Error('trick roster out of sync with BALANCE.train.roster: '
       + `missing [${missing}] extra [${extra}]`);
+  }
+  /* EVERY TRICK OWES THE LIST TWO LINES. The trick list is the only place a
+     player can find out what a trick even is, so a trick that ships without
+     `does` or `hint` is one she can never learn about — the very hole 1b
+     reported. Checked here rather than trusted, exactly as the roster is. */
+  const mute = TRICK_IDS.filter((id) => typeof TRICKS[id].does !== 'function' || !TRICKS[id].hint);
+  if (mute.length) {
+    throw new Error(`trick(s) with nothing to say in the trick list: [${mute}]`);
   }
 })();
 export const trickName = (id) => (TRICKS[id] ? TRICKS[id].name : id);

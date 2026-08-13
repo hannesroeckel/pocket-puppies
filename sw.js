@@ -109,6 +109,15 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.8.0: THE TRAINING SCREEN SAYS WHAT IT CONTAINS. `src/ui/tricklist.js` is a
+   NEW MODULE and MUST appear in PRECACHE below — `scenes/room.js` imports it
+   unconditionally, so a phone that took this generation without it would fail to
+   resolve the import offline and get a blank screen, which is the exact failure
+   8.5.0's note describes. Sit and lie down also stopped sharing one gesture
+   (`dog/anim/tricks.js`, `dog/train.js`), so a phone holding 8.7.1 would keep
+   teaching both with one stroke for ever. Forward only, as always.
+   `py tools/check-precache.py` now expects 53 entries.
+
    8.7.1: THE REACHABLE PLAY AREA (ui/reach.js). A ball dropped after he was hit
    with it landed at a hardcoded y 782, which is inside the nav's hit rect on the
    target iPhone, so the touch went to the bar and the ball could never be picked
@@ -120,7 +129,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.7.1';
+const VERSION = '8.8.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -184,6 +193,7 @@ const PRECACHE = [
      would boot online and 404 the shop and the kennel on a plane. */
   './src/ui/shop.js',
   './src/ui/kennel.js',
+  './src/ui/tricklist.js',
   /* stage 9, the design-system pass. `tokens.js` is imported by every module in
      this directory, so of the 51 entries it is the single most expensive one to
      forget. */

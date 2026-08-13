@@ -35,6 +35,7 @@ import { createNaming } from '../ui/naming.js';
 import { createInstall } from '../ui/install.js';
 import { createShop } from '../ui/shop.js';
 import { createKennel } from '../ui/kennel.js';
+import { createTrickList } from '../ui/tricklist.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
 /* THE REACHABLE PLAY AREA: the bound every interactive prop is clamped to, and
@@ -301,7 +302,7 @@ export function createRoomScene() {
   let care = null, toy = null, reunion = null, naming = null;
   let train = null, voice = null, walk = null, contest = null;
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
-  let shop = null, kennel = null;
+  let shop = null, kennel = null, tricks = null;
   let roomCv = null, ovCv = null;
   /* CONTENTED PANTING (research §1.9). Driven off the rig's own `drive.pant`
      channel rather than by a clip, because panting is a STATE he is in, not an
@@ -1240,6 +1241,22 @@ export function createRoomScene() {
         /* she will not be asked to learn anything while she is eating, being
            washed, or off after the ball */
         busyElsewhere: () => !!(care.modal || (toy && toy.busy) || reunion.active),
+        openTricks: () => { if (tricks) tricks.start(); },
+      });
+      /* ---- THE TRICK LIST -------------------------------------------
+         A sub-surface of training rather than a destination of its own: it is
+         opened from the pill in the training chrome, it closes with training,
+         and it is NOT in `surfaceOwner` — training already holds the screen
+         while it is up, and adding a second entry for a panel that can only
+         exist inside the first would let training refuse to open over its own
+         list. Everything it says comes from dog/train.js, live, so there is no
+         second answer to what he knows. */
+      tricks = createTrickList({
+        reduced: app.reduced,
+        sound: (name) => app.audio.play(name),
+        lessons: () => train.lessons(),
+        copy: train.COPY,
+        pron: () => app.game.pron,
       });
       /* ---- WALKS (stage 4) ------------------------------------------
          Four beats, no gait cycle, and the absence beat is a pure function of
@@ -1464,6 +1481,7 @@ export function createRoomScene() {
          the one being built */
       if (shop) shop.stop();
       if (kennel) { kennel.stop(); }
+      if (tricks) tricks.stop();
     },
 
     resize(a) {
@@ -1475,6 +1493,7 @@ export function createRoomScene() {
       if (sheet) sheet.setInset(view.safe.bottom / view.vs);
       if (shop) shop.setInset(view.safe.bottom / view.vs);
       if (kennel) kennel.setInset(view.safe.bottom / view.vs);
+      if (tricks) tricks.setInset(view.safe.bottom / view.vs);
       if (naming) naming.resize(view);
     },
 
@@ -1602,6 +1621,14 @@ export function createRoomScene() {
       sheet.update(dt);
       shop.update(dt);
       kennel.update(dt);
+      /* THE LIST CANNOT OUTLIVE TRAINING. It is opened from the training
+         chrome and reads live out of that layer, so anything that leaves
+         training — the X, the nav, a walk coming home, the scene changing —
+         has to take the list with it. Derived from `train.modal` rather than
+         called from each of those sites, which is the mistake the surface
+         arbiter exists to stop being made one `if` at a time. */
+      if (tricks.isOpen && !train.modal) tricks.stop();
+      tricks.update(dt);
       /* THE REWARD LANDS IN THE WORLD, on the frame she earns it. `rugBlue` is
          the only unlock that changes the prebuilt room art, so this is the one
          place that has to notice. */
@@ -1771,6 +1798,11 @@ export function createRoomScene() {
       walk.drawOver(g);
       /* the judge's board, the chips and the result card, likewise */
       contest.drawOver(g);
+      /* THE TRICK LIST, over the training chrome that opened it. Below the
+         sheet and everything after it, because none of those can be open at
+         the same time as training — the ordering here is what that claim looks
+         like if it is ever wrong. */
+      tricks.draw(g);
       sheet.draw(g);
       /* the shop and the kennel sit ABOVE the sheet and BELOW the install card,
          which is the same order surfaceOwner() puts them in */
@@ -1821,6 +1853,18 @@ export function createRoomScene() {
         return;
       }
       if (capture === 'shop') { capture = ''; if (ev.type !== 'down') return; }
+
+      /* THE TRICK LIST, and it consumes EVERYTHING while it is up — the same
+         rule the shop, the kennel and the install card each had to be given.
+         It is drawn over a scrim, so a touch falling through it would be a
+         stroke on a dog she cannot see, and a stroke on the training screen is
+         not inert: it is read as a guide gesture. */
+      if (tricks.isOpen) {
+        tricks.pointer(ev);
+        capture = tricks.isOpen ? 'tricks' : '';
+        return;
+      }
+      if (capture === 'tricks') { capture = ''; if (ev.type !== 'down') return; }
 
       if (ev.type === 'down') {
         if (sheet.isOpen) {
@@ -2014,6 +2058,7 @@ export function createRoomScene() {
         /* ---- stage 6 ---- */
         shop: shop ? shop.debug : null,
         kennel: kennel ? kennel.debug : null,
+        tricks: tricks ? tricks.debug : null,
         wear: rig.wear || '',
         rug: rugShown,
         navIds: nav ? nav.items.map((i) => i.id) : [],

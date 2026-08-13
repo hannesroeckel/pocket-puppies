@@ -922,6 +922,41 @@ export const BALANCE = {
       circleTurn: 3.6,          // radians of turning for the floor circle
       /* how long after the signal a guide still counts as the SAME lesson */
       window: 3.8,
+      /* ---- THE "DOWN" SIGNAL IS AN L ----------------------------------
+         Sit and lie down used to share one gesture (`headDown`) and were told
+         apart by whether he was already sitting. He is the only one who can
+         see that difference, so on screen the two lessons were the same
+         stroke — reported by the human as the training screen's real defect
+         (docs/FEEDBACK-QUEUE.md 1).
+
+         Lie down now has the shape of the actual hand signal: down over the
+         head, then a flat sweep along the floor. Detected in two phases
+         rather than from the net vector, because an L's net vector is a
+         diagonal and would read as a sloppy sweep across the body.
+
+         THREE NUMBERS AND NO CORNER, which took two failed attempts to arrive
+         at and is worth recording, because both failures were the same
+         mistake: trying to find the elbow from a path whose points are not
+         kept.
+
+           1. Elbow = the first point `fall` units below the start. On a real
+              stroke that is near the TOP of the descent, so the whole rest of
+              the fall was then counted against the flat leg — a clean
+              69-down-60-across L came out fall 13.8, drop 55.3, flat 60, and
+              was rejected for 60 < 55.3 x 1.15.
+           2. Elbow = the deepest point so far, frozen once the hand had moved
+              sideways from it. The flat leg runs at CONSTANT depth, so every
+              segment of it tied the deepest point and dragged the elbow along
+              underneath the finger: the sideways distance from it was always
+              zero and the corner never latched at all.
+
+         So the corner is not measured. The shape is: it started over his head,
+         it FELL, and it FINISHED out to the side. `outShare` is what keeps a
+         sloppy sit out — a 60-unit downward stroke that wanders 20 units
+         sideways is a sit drawn badly, not a request to lie down, and at 0.5
+         it stays a sit until it is going more than halfway across as far as it
+         is going down. */
+      downSweep: { fall: 13, flat: 17, outShare: 0.5 },
     },
 
     /* ---- reward timing MATTERS ---------------------------------------
@@ -2317,6 +2352,35 @@ export const BALANCE = {
          Deriving the width from the button means moving one cannot re-break
          the other. */
       close: { x: 342, y: 62, r: 17, hintGap: 9 },
+      /* ---- THE TRICK LIST (ui/tricklist.js) ---------------------------
+         The legend above says what he THINKS a signal means. Nothing said
+         what there was to teach at all: the eight hints only ever appeared as
+         a ghost gesture that cycled one at a time after three seconds of
+         stillness, so the ladder could only be found by stopping and waiting
+         — "we also need more descriptions for the player regarding the
+         tricks. currently its just a guessing" (docs/FEEDBACK-QUEUE.md 1b).
+
+         `open` is the pill that opens it, and it sits UNDER the signal pad
+         (which ends at `pad.bottom` 306) on the opposite side from the "call
+         him" bubble at (44, 430). It is deliberately not in the top row: the
+         hint line is centred and its width is already derived from the leave
+         button, so a second thing up there would have taken words off the
+         first instruction in the beat. */
+      tricks: {
+        open: { x: 16, y: 320, w: 96, h: 34, r: 17 },
+        /* rowH carries FOUR lines — name, what he does, how to ask, and (only
+           for the two floor tricks, and only while he is not on the floor) why
+           not. At 78 the fourth line sat four units off the bottom edge and
+           looked like it had fallen out of the row; 82 gives it room and still
+           fits eight rows plus Done above the home bar at every inset, because
+           ui/tricklist.js fits the height rather than trusting this number. */
+        pad: 14, headH: 58, rowH: 82, rowGap: 6, closeH: 42, closeGap: 10,
+        /* the lowest a row may reach. The list is a full-height sheet and the
+           nav is hidden behind it, so the only floor is the safe area — but
+           `rowH` is fitted to what is left rather than typed in, so a ninth
+           trick shortens the rows instead of pushing Done off the screen. */
+        bottomPad: 12,
+      },
     },
     /* the route map. A CUTE HAND-DRAWN MAP, not a UI: the paper, the wobble in
        the ink and the little house are the whole charm of the beat. */
