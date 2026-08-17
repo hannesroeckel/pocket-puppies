@@ -109,6 +109,12 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.11.0: FOUR MORE THINGS IN THE SHOP, EACH OF WHICH DOES SOMETHING. No new
+   module and no schema change, but `state/balance.js`, `dog/care.js`,
+   `state/time.js`, `dog/toy.js`, `scenes/props.js` and `ui/shop.js` all move, and
+   a phone holding 8.10.0 would show a twelve-row shop it cannot honour — the
+   rows come from balance.js and the EFFECTS come from the modules. Forward only.
+
    8.10.0: EVERY FIND HAS A HOME AND A PURPOSE (schema v8). `src/ui/collection.js`
    is a NEW MODULE and MUST appear in PRECACHE below — `scenes/room.js` imports it
    unconditionally, so a phone that took this generation without it would fail to
@@ -150,7 +156,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.10.0';
+const VERSION = '8.11.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

@@ -624,7 +624,18 @@ export function createCare(rig, opts = {}) {
          thing, never a reason to have waited to do it: it multiplies the gloss
          a stroke earns and changes nothing else — not the need it fills, not
          the care points it pays, not the grain she has to follow. */
-      game.addGloss(travel * B.glossPerUnit * (0.5 + q * 0.5) * toolMul('brushSoft', SHOP.brushGloss));
+      /* THE BEST TOOL SHE HAS, NOT THE SUM OF THEM. The comb only counts on a
+         coat the brush cannot get through — `fur.type` is the breed's own
+         declaration and two of the three are not 'short' — so on the Shiba the
+         comb is an expensive brush and says so, and the two doodles are what it
+         is for. Multiplied rather than added, and never stacked: owning both
+         should not double anything. */
+      const curly = !!(rig.breed && rig.breed.fur) && rig.breed.fur.type !== 'short';
+      const brushMul = Math.max(
+        toolMul('brushSoft', SHOP.brushGloss),
+        curly ? toolMul('combCurly', SHOP.combGloss) : 1,
+      );
+      game.addGloss(travel * B.glossPerUnit * (0.5 + q * 0.5) * brushMul);
       game.fillNeed('brush', travel * B.cleanPerUnit);
       /* brushing also lifts loose dirt, just never all of it */
       for (let i = 0; i < coat.regions.length; i++) {
@@ -800,7 +811,11 @@ export function createCare(rig, opts = {}) {
         const eat = Math.min(fill, F.bitePerBowl);
         fill = clamp(fill - eat, 0, 1);
         sp.fill.to(fill);
-        game.fillNeed('feed', eat * F.needPerBowl);
+        /* THE GOOD KIBBLE IS A PROPER MEAL. Same bowl, same number of bites,
+           more of him filled by each one — so it reads as better food rather
+           than as a bigger portion, and a bowl of the ordinary stuff is never
+           a mistake. */
+        game.fillNeed('feed', eat * F.needPerBowl * toolMul('kibbleGood', SHOP.kibbleFill));
         game.addMood(eat * 0.5);
         sound('crunch');
         /* the odd piece flicks out of the bowl */

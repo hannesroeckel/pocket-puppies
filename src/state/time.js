@@ -93,10 +93,16 @@ export function applyElapsed(game, now = Date.now()) {
     else game.addNeed(key, -per * capped);
   }
 
-  /* coat gloss dulls while she's away, so grooming stays a ritual */
+  /* coat gloss dulls while she's away, so grooming stays a ritual — and the
+     rose soap is what slows that down. It is the one tool whose value shows up
+     DAYS later rather than during the action, which is the whole reason to buy
+     it: an obedience trial marks grooming (SCOPE stage 5), so a coat that keeps
+     its shine is points in a contest she has not entered yet. */
   if (capped > 0) {
-    if (game.addGlossAll) game.addGlossAll(-T.glossDecayPerHour * capped);
-    else if (game.addGloss) game.addGloss(-T.glossDecayPerHour * capped);
+    const keep = (game.hasTool && game.hasTool('soapRose')) ? num(BALANCE.economy.shop.soapGlossKeep, 1) : 1;
+    const dull = -T.glossDecayPerHour * capped * keep;
+    if (game.addGlossAll) game.addGlossAll(dull);
+    else if (game.addGloss) game.addGloss(dull);
   }
 
   /* affection: a small "missed you" dip, bounded, and the mutator refuses to

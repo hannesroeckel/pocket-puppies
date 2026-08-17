@@ -241,20 +241,35 @@ export function createToy(rig, opts = {}) {
     sound('huff');
   }
 
-  /** roll for what she actually does with it. Weighted, never certain. */
-  function rollOutcome() {
+  /**
+   * THE THREE WEIGHTS, as their own function so the debug block and the roll
+   * cannot disagree about them. A gate that samples 40 throws is measuring the
+   * RNG as much as the design; reading the weights measures the design.
+   */
+  function weights() {
     const O = T.outcome;
     const mood = game.moodLevel;
     const trust = game.dog.trust;
     const energy = game.dog.needs.energy;
     const tired = 1 - energy;
-    const wFetch = Math.max(0.02, O.fetchBase + mood * O.fetchPerMood + trust * O.fetchPerTrust);
-    const wChew = Math.max(0.02, O.chewBase + energy * O.chewPerEnergy);
-    const wBored = Math.max(0.02, O.boredBase + tired * O.boredPerTired);
-    const tot = wFetch + wChew + wBored;
+    /* WHAT HE IS PLAYING WITH TILTS THE ROLL (BALANCE.toy.kinds). Absent from
+       the table means 1, so every toy that shipped before behaves as it did. */
+    const K = (T.kinds && T.kinds[variant()]) || null;
+    const mul = (k) => (K && Number.isFinite(+K[k]) ? +K[k] : 1);
+    return {
+      fetch: Math.max(0.02, (O.fetchBase + mood * O.fetchPerMood + trust * O.fetchPerTrust) * mul('fetch')),
+      chew: Math.max(0.02, (O.chewBase + energy * O.chewPerEnergy) * mul('chew')),
+      bored: Math.max(0.02, (O.boredBase + tired * O.boredPerTired) * mul('bored')),
+    };
+  }
+
+  /** roll for what she actually does with it. Weighted, never certain. */
+  function rollOutcome() {
+    const w = weights();
+    const tot = w.fetch + w.chew + w.bored;
     const r = rng.next() * tot;
-    if (r < wFetch) return 'fetch';
-    if (r < wFetch + wChew) return 'chew';
+    if (r < w.fetch) return 'fetch';
+    if (r < w.fetch + w.chew) return 'chew';
     return 'bored';
   }
 
@@ -711,6 +726,19 @@ export function createToy(rig, opts = {}) {
     get debug() {
       return {
         state, outcome, unasked, held: toy.held,
+        /* WHAT THIS TOY MAKES LIKELY, as shares that sum to 1. The per-toy bias
+           (BALANCE.toy.kinds) is a probability, so sampling throws measures the
+           RNG as much as the rule; this is the rule. */
+        variant: variant(),
+        odds: (() => {
+          const w = weights();
+          const tot = w.fetch + w.chew + w.bored;
+          return {
+            fetch: +(w.fetch / tot).toFixed(4),
+            chew: +(w.chew / tot).toFixed(4),
+            bored: +(w.bored / tot).toFixed(4),
+          };
+        })(),
         at: [Math.round(toy.x), Math.round(toy.y)], scale: +toy.scale.toFixed(3),
         /* the grab ellipse and how much room it has left above the bar. A
            negative `clear` is the defect, per frame, as one number. */

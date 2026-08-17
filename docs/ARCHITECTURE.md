@@ -2854,3 +2854,98 @@ game. It is removed now rather than faded.
 - **The sill is one shelf.** Nine ornaments and seven slots means two things are always in the box.
   A second surface (the mantel, the floor by the bed) is where this goes next, and it belongs on
   the care-point decor ladder rather than here.
+
+---
+
+## 24. Four more things in the shop (`feature/shop-stock`) — as built
+
+Queue item 2, under the rule the item itself sets and which is the binding one: **every item must
+do something.** Stage 6 cut two unlock rows for being empty, on the principle that an earned reward
+that does nothing is worse than one never promised. So the work here is four *effects*; the rows
+are the easy half.
+
+Cache **8.11.0**. No schema change.
+
+| row | cost | what it actually changes | where |
+|---|---|---|---|
+| The good kibble | 65 | each mouthful fills **1.45×** as much of him | `dog/care.js` feed |
+| A detangling comb | 80 | brushing a **curly** coat gains gloss **1.7×** — and nothing extra on a short one | `dog/care.js` brush |
+| Rose soap | 70 | gloss decays at **0.55×** per hour away | `state/time.js` |
+| A rope tug | 50 | he brings it back **less** and settles down to tug it **more** | `dog/toy.js` |
+
+### 24.1 The comb is gated on the coat, which is the honest version of the note
+
+"For a curly coat the brush cannot reach" would be a lie if it were a flat multiplier, so it reads
+`rig.breed.fur.type !== 'short'` — the breed's own declaration, not a breed-id special case. Two of
+the three breeds are doodles and the soft brush was tuned on the Shiba, so the comb is *for* them.
+On the Shiba it is deliberately no better, and the gate asserts that too.
+
+It also takes the **best** tool rather than the product of them: owning the brush as well must not
+double anything.
+
+### 24.2 The rope tug is the first toy that behaves like itself
+
+`rollOutcome` weighed mood, trust and energy and knew nothing about the object, so "a new toy" was
+a new silhouette and nothing else. `BALANCE.toy.kinds` is a table of multipliers on the three
+weights, defaulting to 1 — so every toy that shipped before behaves exactly as it did, and the ball
+is deliberately **not in the table at all**. A rope tug is for tugging (fetch ×0.55, chew ×1.9); a
+stick is the opposite (fetch ×1.25); a squeaky duck is somewhere between.
+
+The weights are now computed by one function that both the roll and the debug block read, because
+a gate that samples forty throws is measuring the RNG as much as the design. Measured on the rule
+itself: fetch share **0.298 → 0.134** from ball to rope, chew **0.425 → 0.662**.
+
+### 24.3 Twelve rows, and the shop still does not scroll
+
+The no-scroll rule is a design constraint with arithmetic behind it, so the arithmetic moved with
+it: header 62 + 12 × **54** + Done 40 + 8 of gap = **758**, against a floor of 804 on the target
+phone. At the old row height of 58 the twelfth row left six units, which is not a margin.
+**The catalogue is now full** — the next thing added has to replace something, and that is written
+into balance.js beside the number.
+
+### 24.4 Two gate bugs worth recording, because both would have passed as truth
+
+1. **"Ten million coins bought four care unlocks."** They did not: `buyItem` reports a refusal as an
+   *object* — `{ok: false, reason: 'unlock'}` — which is perfectly truthy, and the check was
+   `!!buyItem(id)`. The same call reported the coins untouched in the very same result. The check
+   now asserts the **state**: not one coin moves, and nothing enters the inventory or the unlock set.
+2. **"He brings the rope back less often than the ball" — from a sample of nothing.** Forty throws
+   per toy took ten minutes and returned `{none: 40}` twice, because the loop watched for an
+   `outcome` that had already been cleared. And when it was replaced by reading the odds, the stick
+   came back *lower* than the ball: `setActiveToy` refuses an id that is not in `inventory.toys`
+   and refuses it **silently**, so the gate had compared the rope tug against itself. The debug
+   block now publishes `variant` — what he is actually holding — and the gate asserts it.
+
+### 24.5 One defect found by rendering it
+
+**The rope tug appeared on the shelf as a striped ball.** `glyphFor` tested `kind === 'toy'` before
+any id, so the generic ball glyph won and the new art was never called. Nothing about the row was
+wrong. Ids are asked first now, and the kind branches are the fallback they were always meant to be.
+
+### 24.6 What was measured (`py tools/shopgate.py [--shots]`)
+
+**26 checks, 0 failures.**
+
+| check | result |
+|---|---|
+| the kibble | a bowl restores **0.60** of him against 0.41 with the ordinary stuff |
+| the comb, curly | gloss per brushing session up **1.7×**; owning the brush too adds nothing |
+| the comb, short coat | no change at all on the Shiba (within 2%) |
+| rose soap | gloss lost over 12 hours away **0.0083 → 0.0046** |
+| the rope tug | fetch share 0.298 → 0.134, chew 0.425 → 0.662; the stick goes the other way |
+| the currency wall | 10,000,000 coins: no unlock claims success, zero coins move, inventory and unlocks byte-identical |
+| no scroll, insets 0/20/40/80 | 758 against floors of 844 / 824 / 804 / 764 |
+| looked at | `review/shop.png` |
+
+### 24.7 Left imperfect
+
+- **Rose soap and oatmeal soap are the same drawing.** `drawSoap` takes no colour, so the two rows
+  differ only in their words. It wants a tint parameter, which is a props change rather than a shop
+  one.
+- **The comb is the brush at a different angle.** Recognisable in context, and honest about being
+  the same class of object, but it is not really a comb.
+- **No decor, and that is deliberate.** He asked for room decoration; it stays on the care-point
+  ladder, because coins buying a nicer room is the one thing the two-currency split exists to
+  prevent. The right home for it is a decor row in `economy.unlocks`, not a row in here.
+- **Nothing new is wearable.** A bandana and a bow were on his list; `dog.wear.accessory` exists but
+  nothing renders an accessory, so they would be a promise of something invisible.

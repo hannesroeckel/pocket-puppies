@@ -441,6 +441,38 @@ export function drawSoap(c, x, y, s, squeeze = 0) {
  * find a real unlock rather than a line of text. Unknown variants fall back to
  * the ball, so an older save (or a future find) can never draw nothing.
  */
+/**
+ * A ROPE TUG: two knots and a twist. Drawn in code like everything else, and
+ * deliberately the only toy in the game that is not round or stick-shaped — a
+ * new toy has to be recognisable at 16 units in his mouth, which is the size
+ * every one of these is really designed for.
+ */
+function ropeShape(c, s = 1) {
+  c.save();
+  c.scale(s, s);
+  const rope = '#e6d3ae', shade = '#c9b184', ink = 'rgba(104,58,32,0.30)';
+  /* the braid: two strands crossing between the knots */
+  c.strokeStyle = shade; c.lineWidth = 5.2; c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(-9, 2); c.quadraticCurveTo(0, -6, 9, 2); c.stroke();
+  c.beginPath();
+  c.moveTo(-9, -2); c.quadraticCurveTo(0, 6, 9, -2); c.stroke();
+  /* the knots */
+  c.fillStyle = rope;
+  ell(c, -11, 0, 6.2, 5.4); c.fill();
+  ell(c, 11, 0, 6.2, 5.4); c.fill();
+  c.strokeStyle = ink; c.lineWidth = 1.4;
+  ell(c, -11, 0, 6.2, 5.4); c.stroke();
+  ell(c, 11, 0, 6.2, 5.4); c.stroke();
+  /* frayed ends, two little ticks each */
+  c.strokeStyle = shade; c.lineWidth = 1.6;
+  for (const [x, d] of [[-16, -1], [16, 1]]) {
+    c.beginPath(); c.moveTo(x, -2); c.lineTo(x + d * 3.4, -4.2); c.stroke();
+    c.beginPath(); c.moveTo(x, 2); c.lineTo(x + d * 3.4, 4.2); c.stroke();
+  }
+  c.restore();
+}
+
 export function drawBall(c, bx, by, s, spin = 0, shadowAt, variant) {
   const v = variant && variant !== 'ball' ? variant : '';
   if (shadowAt !== undefined) {
@@ -465,6 +497,7 @@ export function drawBall(c, bx, by, s, spin = 0, shadowAt, variant) {
     c.restore(); return;
   }
   if (v === 'squeaky') { duckShape(c, 1.15); c.restore(); return; }
+  if (v === 'ropeTug') { ropeShape(c, 1.0); c.restore(); return; }
   const g = c.createRadialGradient(-6, -7, 2, 0, 0, 20);
   g.addColorStop(0, '#f7f0dd'); g.addColorStop(0.42, '#e8dcc0'); g.addColorStop(1, '#c9b28c');
   c.fillStyle = g; ell(c, 0, 0, 16, 16); c.fill();
