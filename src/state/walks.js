@@ -285,7 +285,11 @@ export function rollFinds(active, progress, opts = {}) {
     for (const f of FINDS) {
       if (f.tier > maxTier) continue;
       if (taken.has(f.id)) continue;           // not the same thing twice in one walk
-      const wt = blend(a.mix, f.w, 0);
+      /* SOMETHING NEW COMES FIRST. Owned finds are weighted down, not removed:
+         removing them would make a full collection stop paying out and would
+         make the woods hand back things the woods do not have. */
+      let wt = blend(a.mix, f.w, 0);
+      if (owned.has(f.id)) wt *= num(F.ownedWeight, 1);
       if (!(wt > 0)) continue;
       total += wt;
       pool.push([f, total]);
@@ -307,8 +311,10 @@ export function rollFinds(active, progress, opts = {}) {
   /* coins. The high street is where money is dropped. */
   const per = num(F.coins.per[0], 0) + (num(F.coins.per[1], 0) - num(F.coins.per[0], 0)) * p;
   let coins = Math.round(per * blend(a.mix, F.coins.route, 1));
-  /* a duplicate toy is a pleasant duplicate and pays a few coins instead */
-  for (const f of picked) if (f.toy && !f.fresh) coins += F.dupCoins;
+  /* ANY duplicate is a pleasant duplicate and pays a few coins instead. This
+     tested `f.toy`, so a second daisy or a second photo of the same beagle was
+     worth nothing at all — the "litter" half of queue item 6. */
+  for (const f of picked) if (!f.fresh) coins += F.dupCoins;
 
   return { finds: picked, coins: Math.max(0, coins), route: a.route, mix: a.mix };
 }
@@ -318,6 +324,43 @@ export function describeRemaining(progress) {
   const p = clamp(num(progress, 0), 0, 1);
   for (const [at, word] of W.away.words) if (p >= at) return word;
   return W.away.words[W.away.words.length - 1][1];
+}
+
+/**
+ * WHAT BELONGS ON THE SILL. Toys live on the rug (they are what he fetches)
+ * and photos live in the album (they are dogs he met, not ornaments), so the
+ * sill is flowers, keepsakes and little gifts — the things whose only purpose
+ * is to be nice to look at, which is a real purpose and the reason they need a
+ * place of their own rather than a pile.
+ */
+export const SHELVABLE = new Set(['flower', 'keep', 'gift']);
+export function isShelvable(id) {
+  const f = FIND_BY_ID[id];
+  return !!f && SHELVABLE.has(f.kind);
+}
+/** the dogs he has met, in the order he met them — the album */
+export function metDogs(state) {
+  const seen = [];
+  const w = walkState(state);
+  for (const it of w.found) {
+    const id = it && (typeof it === 'string' ? it : it.id);
+    const f = id && FIND_BY_ID[id];
+    if (!f || !f.met) continue;
+    const at = (it && it.at) || 0;
+    const route = (it && it.route) || '';
+    const had = seen.find((x) => x.met === f.met);
+    if (had) { had.times++; if (at && at > had.at) { had.at = at; had.route = route || had.route; } }
+    else seen.push({ id, met: f.met, at, route, times: 1 });
+  }
+  /* a photo she owns but whose meeting predates the capped log still belongs
+     in the album — `unlocks.items` is the authoritative set (`collected`) */
+  const items = state.unlocks && Array.isArray(state.unlocks.items) ? state.unlocks.items : [];
+  for (const id of items) {
+    const f = FIND_BY_ID[id];
+    if (!f || !f.met) continue;
+    if (!seen.some((x) => x.met === f.met)) seen.push({ id, met: f.met, at: 0, route: '', times: 1 });
+  }
+  return seen;
 }
 
 /** every distinct find id he has ever brought home (the collection) */

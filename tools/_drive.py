@@ -59,16 +59,8 @@ def page(b, inset=0, dpr=2, reduced=False, dark=True):
     )
     pg = ctx.new_page()
     pg.add_init_script(PIN)
-    if inset:
-        # THE INSET IS READ BACK OUT OF THE DOM, not out of a variable: index.html
-        # keeps a 1px #safeprobe whose padding is env(safe-area-inset-*), and
-        # main.js measures it. A headless browser reports zero for all four, so
-        # the lever a notched phone pulls is that element's padding-bottom.
-        pg.add_init_script(
-            "addEventListener('DOMContentLoaded', () => {"
-            "  const el = document.getElementById('safeprobe');"
-            f"  if (el) el.style.paddingBottom = '{inset}px';"
-            "});")
+    # remembered so `boot` can apply it through the REAL resize path
+    pg._pp_inset = inset
     return ctx, pg
 
 
@@ -84,7 +76,39 @@ def boot(pg, url, fresh=True):
     # dark brown field — the game was running correctly underneath it the whole
     # time. Lifted here rather than in each gate, because it is a property of
     # pinning the clock and not of anything being tested.
+    # REMOVED, not faded: `.gone` is a 0.35s CSS opacity transition, and CSS
+    # transitions run on real time — which stubbing rAF does not stop. A
+    # screenshot taken promptly caught the splash still half-visible over the
+    # game, which looked like a rendering bug in whatever was being tested.
     pg.evaluate("() => { const b = document.getElementById('boot');"
-                "        if (b) b.classList.add('gone'); }")
+                "        if (b) b.remove(); }")
     pg.evaluate("() => window.__pp.loop.stepFixed(1/60, 8)")
+
+    # ---- THE SAFE-AREA INSET, APPLIED THE WAY A ROTATION APPLIES IT --------
+    # index.html keeps a 1px #safeprobe whose padding is env(safe-area-inset-*),
+    # and main.js measures it; a desktop browser reports zero for all four, so
+    # that element's padding is the lever a notched phone pulls.
+    #
+    # It used to be set from an init script on DOMContentLoaded, and that was a
+    # RACE THAT USUALLY LOST: a module script is deferred, so it runs BEFORE
+    # DOMContentLoaded with `readyState === 'interactive'`, which sends main.js
+    # down its `else boot()` branch — it had already measured the probe by the
+    # time the listener fired. On a cold page the two were close enough to look
+    # fine, and on a second page in the same browser the inset was silently 0,
+    # which quietly turned every "at inset 40" claim into "at inset 0".
+    #
+    # So: set it, then dispatch a real `resize`, which is the production path
+    # (`main.js` listens for it, re-reads the probe, and hands the inset to
+    # every panel through `scene.resize`). Deterministic, and it exercises the
+    # code a rotation exercises.
+    inset = getattr(pg, "_pp_inset", 0)
+    if inset:
+        pg.evaluate(
+            "(v) => { const el = document.getElementById('safeprobe');"
+            "  if (el) el.style.paddingBottom = v + 'px';"
+            "  window.dispatchEvent(new Event('resize')); }", inset)
+        pg.evaluate("() => window.__pp.loop.stepFixed(1/60, 4)")
+        got = pg.evaluate("() => window.__pp.app.view.safe.bottom")
+        if abs(got - inset) > 0.5:
+            raise SystemExit("driver: asked for inset %s, the game read %s" % (inset, got))
     return pg

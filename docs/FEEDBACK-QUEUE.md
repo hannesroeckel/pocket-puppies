@@ -220,7 +220,7 @@ toy/hint sequencing rather than a token.
 
 # Second round of feedback — 2026-08-07
 
-## 6. Walk finds partly work, but the room becomes a junkyard ⚠️ and needs storage
+## 6. Walk finds partly work, but the room becomes a junkyard ✅ FIXED on `feature/find-collection` (cache 8.10.0)
 
 > "It would be great if the items the dog collects during a walk were also ones that one could
 > then use afterwards. Currently, they are only being collected in the room without being able
@@ -250,6 +250,25 @@ her which.
 
 Also worth checking: whether finds ever stop spawning once she owns them, or whether she gets
 the same buttercup forever.
+
+> **Fixed.** `src/ui/collection.js`, opened by tapping the window sill his things stand on.
+> **On the sill** is what she has put out (capped at seven, and a full sill refuses rather than
+> pushing the oldest thing off), **in the box** is everything else, and one tap moves a thing
+> either way. **Dogs he has met** is the album, naming each dog and the route he met them on.
+>
+> And every find now has a purpose: a toy he fetches, a photo is a dog he met, an ornament is out
+> or put away — and **a duplicate of anything pays coins**, which it only did for toys before. So
+> the second walk down the same road pays more than the first, and nothing he carries home is
+> inert. On your other question: no, finds did NOT stop spawning once owned, and the same buttercup
+> really could come home for ever. Owned finds are weighted down to 0.45 now rather than excluded,
+> so something new comes first without the woods running out of woods things.
+>
+> Toys and photos no longer take an ornament's place on the shelf. Decor stays on the care-point
+> ladder, untouched — finds are a third category and arranging them costs nothing.
+>
+> One thing this turned up that was bigger than the item: `loop.resize()` was never called after
+> the scene mounted, so `setInset` had been **dead for the sheet, the shop, the kennel and the
+> trick list** for the whole session on a phone that is never rotated. ARCHITECTURE 23.
 
 ## 7. The other dog does not get hungry while she is away from it ✅ FIXED on `feature/per-dog-time` (cache 8.9.0)
 

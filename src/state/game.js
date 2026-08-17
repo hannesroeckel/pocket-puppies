@@ -37,10 +37,10 @@ import { contestState, classAt, isTop, champStanding } from './contest.js';
 import {
   walkState, startWalk as startWalkModel, walkProgress as walkProgressModel,
   endWalk as endWalkModel, cancelWalk as cancelWalkModel, rollFinds,
-  collected as collectedFinds, FIND_BY_ID,
+  collected as collectedFinds, FIND_BY_ID, isShelvable, metDogs,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -182,7 +182,22 @@ export function newState(now = Date.now(), opts = {}) {
        walk survives the app being killed: it stores when he left and how long
        for, and progress is recomputed from the wall clock on resume. See
        state/walks.js. `day` is the local-midnight index `walksToday` belongs to. */
-    walks: { lastWalkAt: 0, walksToday: 0, found: [], active: null, day: dayIndex(now), total: 0 },
+    walks: {
+      lastWalkAt: 0, walksToday: 0, found: [], active: null, day: dayIndex(now), total: 0,
+      /* ---- WHAT IS OUT ON THE SILL, AND IN WHAT ORDER (queue item 6) -----
+         The room used to display the last seven distinct finds and silently
+         drop the rest, which is how a collection becomes a floor that fills:
+         "when the room fills up it just gets messy. we also need a storage for
+         these items that hides them from the room if wanted."
+
+         This is HER arrangement. An empty array means nothing is out yet and
+         the newest finds fill the sill by themselves (`display` is topped up
+         in `addFind`), so she never has to open the box to have a room worth
+         looking at — but the moment she wants to choose, the choice is hers
+         and it persists. Toys are not in here: they live on the rug, because
+         that is where a toy is. Photos are not either: they are the album. */
+      display: [],
+    },
     flags: { seenIntro: false, namedFirstDog: false },
     settings: { sound: true, reducedMotion: 'auto', mic: false },
   };
@@ -1022,11 +1037,78 @@ export function createGame(state, opts = {}) {
       }
       /* whatever he just carried in is what he wants thrown */
       if (spec.toy) state.inventory.activeToy = spec.toy;
+
+      /* ---- IT GOES OUT ON THE SILL, IF THERE IS ROOM (queue item 6) ------
+         A new thing should be somewhere she can see it without her having to
+         go and arrange it — the beat is "he brought something home", and an
+         invisible reward is the inert-unlock mistake stage 6 already paid for
+         (ARCHITECTURE 17.5). But it never PUSHES anything off: once the sill
+         is full, the newest finds wait in the box until she makes room, which
+         is what stops the room filling up on its own. */
+      if (fresh && isShelvable(id)) {
+        if (!Array.isArray(w.display)) w.display = [];
+        if (w.display.indexOf(id) < 0 && w.display.length < BALANCE.walk.find.onShow) {
+          w.display.push(id);
+        }
+      }
       onChange();
       return { id, fresh, unlockedToy };
     },
     /** every distinct thing he has ever brought home */
     findCollection() { return collectedFinds(state); },
+
+    /* ==================================================================
+       THE COLLECTION — WHAT IS OUT, WHAT IS PUT AWAY, AND WHO HE HAS MET
+
+       Queue item 6. Three answers to "what is this find FOR":
+         a toy    he fetches it (already true — `inventory.toys`)
+         a photo  it is a dog he met, and the album says so (`album()`)
+         anything else  it is nice to look at, and she decides whether it is
+                        out on the sill or in the box (`display`)
+       and a duplicate of any of them is coins (state/walks.js `rollFinds`).
+       ================================================================== */
+    /** what is standing on the sill right now, in her order */
+    onShow() {
+      const w = walkState(state);
+      const owned = collectedFinds(state);
+      if (!Array.isArray(w.display)) w.display = [];
+      /* filtered through what she actually owns, so an imported or edited save
+         cannot put a thing on the shelf that was never found */
+      return w.display.filter((id) => owned.has(id) && isShelvable(id))
+        .slice(0, BALANCE.walk.find.onShow);
+    },
+    /** everything she owns that COULD stand on the sill but is not out */
+    inBox() {
+      const out = new Set(api.onShow());
+      return Array.from(collectedFinds(state))
+        .filter((id) => isShelvable(id) && !out.has(id));
+    },
+    /** the dogs he has met, newest first — the album */
+    album() {
+      return metDogs(state).sort((a, b) => (b.at || 0) - (a.at || 0));
+    },
+    /**
+     * Put something out, or put it away. One method, because it is one
+     * decision, and it returns what actually happened rather than a boolean:
+     * a full sill is not a failure, it is a thing she needs told.
+     * @returns {{ok, out, full}}
+     */
+    setOnShow(id, out) {
+      const w = walkState(state);
+      if (!Array.isArray(w.display)) w.display = [];
+      if (!isShelvable(id) || !collectedFinds(state).has(id)) return { ok: false, out: false, full: false };
+      const at = w.display.indexOf(id);
+      if (out) {
+        if (at >= 0) return { ok: true, out: true, full: false };
+        if (w.display.length >= BALANCE.walk.find.onShow) return { ok: false, out: false, full: true };
+        w.display.push(id);
+      } else {
+        if (at < 0) return { ok: true, out: false, full: false };
+        w.display.splice(at, 1);
+      }
+      onChange();
+      return { ok: true, out: !!out, full: false };
+    },
     get activeToy() {
       const inv = state.inventory || {};
       const id = typeof inv.activeToy === 'string' ? inv.activeToy : 'ball';
