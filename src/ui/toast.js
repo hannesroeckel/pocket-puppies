@@ -19,10 +19,37 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, smooth } from '../engine/draw.js';
-import { drawText } from './text.js';
+import { drawText, measure } from './text.js';
 import { type } from './tokens.js';
 
 const U = BALANCE.ui.toast;
+
+/** the type the stack is drawn in — one definition, used by both paths below */
+const STYLE = () => ({ ...type('labelMd', { weight: 700 }) });
+
+/**
+ * HOW FAR THE STACK MUST RISE to clear `avoid`, or 0. Its own function because
+ * the probe a gate uses and the draw a player sees have to agree exactly — a
+ * harness that recomputes the layout is checking itself.
+ */
+function liftFor(g, baseY, avoid, text) {
+  if (!avoid || !(avoid.w > 0) || !(avoid.h > 0)) return 0;
+  const box = measure(g, text, STYLE());
+  const halfW = box.w / 2 + U.padX;
+  const cx = BALANCE.view.W / 2;
+  /* BOTH AXES, OR IT IS NOT COVERING ANYTHING. The first version compared only
+     the vertical bands, so a ball sitting at x 310 — off to the right of a
+     centred 185-unit toast that never touched it — still pushed the stack 65
+     units up the screen. Moving out of the way of something you were not on top
+     of is its own defect: the message ends up somewhere unexpected for no
+     reason a player could ever see. */
+  if (cx + halfW <= avoid.x || cx - halfW >= avoid.x + avoid.w) return 0;
+  const top = baseY - box.h / 2 - U.padY;
+  const bottom = baseY + box.h / 2 + U.padY;
+  const clear = U.avoidGap;
+  if (bottom <= avoid.y - clear || top >= avoid.y + avoid.h + clear) return 0;
+  return Math.max(0, Math.min(U.avoidMaxLift, bottom - (avoid.y - clear)));
+}
 
 export function createToasts() {
   const items = [];
@@ -39,6 +66,21 @@ export function createToasts() {
       while (items.length > U.maxStack) items.shift();
     },
     clear() { items.length = 0; },
+    /**
+     * WHERE A TOAST WOULD LAND, without drawing one. For the placement gate:
+     * "the defect is placement, not readability", so the thing that has to be
+     * asserted is a rectangle, and it comes from the same `liftFor` and the
+     * same `measure` the real draw uses.
+     */
+    probe(g, baseY, avoid, text) {
+      const lift = liftFor(g, baseY, avoid, text);
+      const box = measure(g, text, { ...STYLE(), x: BALANCE.view.W / 2, y: baseY - lift, anchor: 'free' });
+      return {
+        x: box.x0 - U.padX, y: box.y0 - U.padY,
+        w: box.w + U.padX * 2, h: box.h + U.padY * 2,
+        lift: +lift.toFixed(2),
+      };
+    },
     get count() { return items.length; },
     /** what is on screen right now — the legibility gate reads this */
     get texts() { return items.map((i) => i.text); },
@@ -53,9 +95,25 @@ export function createToasts() {
      *   room passes the nav's top edge, which is itself derived from the safe
      *   inset — and `drawText` clamps into the safe band on top of that, so a
      *   caller who gets this wrong can no longer push a toast off screen.
+     * @param avoid an optional rect `{x, y, w, h}` the stack must not cover —
+     *   the thing the message is ABOUT. See below.
      */
-    draw(g, baseY) {
+    draw(g, baseY, avoid) {
       if (!items.length) return;
+      /* ---- A MESSAGE MUST NOT OBSCURE ITS OWN SUBJECT (queue item 5) -----
+         "the 'Biscuit is full' toast sits directly over the bowl it refers
+         to", and in Play a toast covered the very ball it named. Both were
+         perfectly legible — `ui/text.js` guarantees that — so no contrast gate
+         could see it: the defect is placement, and the only thing that knows
+         the subject's rect is the caller.
+
+         The whole stack lifts as one, by exactly the overlap plus a margin, so
+         the messages never reorder or jump about relative to each other. It
+         lifts UP because everything a toast talks about is at the bottom of the
+         screen (the bowls, the ball, the nav) and the room above him is empty
+         wall — and it is bounded, because a toast that climbs onto his face to
+         get out of the way of a bowl has solved nothing. */
+      baseY -= liftFor(g, baseY, avoid, items[0].text);
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const u = it.life / it.dur;

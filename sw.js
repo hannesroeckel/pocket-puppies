@@ -109,6 +109,10 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.12.0: A TOAST NO LONGER COVERS THE THING IT IS TALKING ABOUT. `ui/toast.js`,
+   `scenes/room.js` and the toast tunables move; no new module and no schema
+   change. A phone holding 8.11.0 still puts "Biscuit is full" on top of the bowl.
+
    8.11.0: FOUR MORE THINGS IN THE SHOP, EACH OF WHICH DOES SOMETHING. No new
    module and no schema change, but `state/balance.js`, `dog/care.js`,
    `state/time.js`, `dog/toy.js`, `scenes/props.js` and `ui/shop.js` all move, and
@@ -156,7 +160,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.11.0';
+const VERSION = '8.12.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

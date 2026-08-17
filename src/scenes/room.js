@@ -305,6 +305,9 @@ export function createRoomScene() {
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
   let shop = null, kennel = null, tricks = null, collection = null;
   let roomCv = null, ovCv = null;
+  /* the last view wrapper handed to draw(). Text cannot be measured without
+     one, and the toast probe is asked outside of a draw. */
+  let lastG = null;
   /* CONTENTED PANTING (research §1.9). Driven off the rig's own `drive.pant`
      channel rather than by a clip, because panting is a STATE he is in, not an
      event that happens. Sparse and jittered: this is the only sound in the game
@@ -657,8 +660,12 @@ export function createRoomScene() {
         toasts.show(`${capitalise(P.they)} ${P.has} gone after it`);
         return;
       }
-      hud.setHint('Flick the ball up-screen');
-      toasts.show('Flick the ball up — never sideways');
+      /* ONE MESSAGE, NOT TWO. This set a hud hint AND a toast that said the
+         same thing in different words, at the same moment, and the toast landed
+         on the ball it was naming (docs/FEEDBACK-QUEUE.md 5). The hint is the
+         one to keep: it lives at the top of the screen, it stays up while she
+         works out what to do, and it cannot cover anything. */
+      hud.setHint('Flick the ball up-screen — never sideways');
       return;
     }
     /* NO "COMING SOON" ANY MORE (GIFT-READY quality item 2.3). Every id in
@@ -910,6 +917,31 @@ export function createRoomScene() {
       x: SH.at[0] - T[3], y: SH.at[1] - T[0],
       w: (SH.max - 1) * SH.step + T[1] + T[3], h: T[0] + T[2],
     };
+  }
+
+  /**
+   * THE RECT A TOAST MUST KEEP OFF (queue item 5).
+   *
+   * Care first: while she is feeding or watering him the bowl IS the subject,
+   * and "Biscuit is full" sitting on top of it was the reported defect. Then
+   * the ball, but only while it is lying about being interactive — once he has
+   * it in his mouth or is chasing it, a message is about HIM and the ball is
+   * moving anyway, so following it would make the stack jitter.
+   *
+   * Deliberately not the dog: he is most of the screen, and a toast that will
+   * not overlap him has nowhere left to be.
+   */
+  function toastSubject() {
+    const d = care && care.debug;
+    if (d && (d.mode === 'feed' || d.mode === 'water') && d.bowlAt) {
+      const B = BALANCE.ui.toast.bowlRect;
+      return { x: d.bowlAt[0] - B[0], y: d.bowlAt[1] - B[1], w: B[0] * 2, h: B[1] + B[2] };
+    }
+    if (toy && toy.toy && !toy.busy && !toy.toy.held) {
+      const T = BALANCE.ui.toast.toyRect;
+      return { x: toy.toy.x - T[0], y: toy.toy.y - T[1], w: T[0] * 2, h: T[1] * 2 };
+    }
+    return null;
   }
 
   /** is a virtual point inside a rect? */
@@ -1717,6 +1749,7 @@ export function createRoomScene() {
     },
 
     draw(a, g) {
+      lastG = g;
       const c = g.ctx;
       const view = a.view;
 
@@ -1843,7 +1876,10 @@ export function createRoomScene() {
       if (!naming.active && !care.modal && !train.modal && !reunion.active
         && !walk.modal && !contest.modal && !install.modal
         && !shop.modal && !kennel.modal) nav.draw(g);
-      toasts.draw(g, nav.y - 22);
+      /* WHAT THE MESSAGE IS ABOUT, if anything: the bowl she is using, or the
+         ball if it is loose on the floor. The room is the only layer that knows
+         which of them is the current subject, so it is the room that says. */
+      toasts.draw(g, nav.y - 22, toastSubject());
       /* the map is a full-surface overlay, so it goes over the nav — and the
          absence panel and the find card go over everything but the sheet */
       walk.drawOver(g);
@@ -2159,6 +2195,16 @@ export function createRoomScene() {
     /* the two stage-9 panels, exposed for the same reason every layer above is:
        a gate drives the real thing or it is not driving anything */
     get tricks() { return tricks; },
+    get toasts() { return toasts; },
+    get hud() { return hud; },
+    /* the two halves of the toast placement rule, for tools/toastgate.py: what
+       the message is about, and where it would land. Both go through the real
+       code path — `probe` shares `liftFor` and `measure` with the live draw. */
+    toastSubject,
+    probeToast(text, avoid) {
+      return lastG ? toasts.probe(lastG, nav.y - 22, avoid, text) : null;
+    },
+    navAction: (a, n) => navAction(a, n),
     get collection() { return collection; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     openShop() { openShop(); return shop.isOpen; },
