@@ -133,3 +133,73 @@ in-motion poses (sitting, lying, mid-trick in profile).
    than any plan here.
 3. Then v2. ✅ Reference sheets are now in hand, so the first real step is
    `silhouette.side` for the schnoodle.
+
+---
+
+## The build sequence, audited — 2026-08-13
+
+Written after the queue was cleared, and **deliberately without starting the rig.** The reason is
+the reason this document already gives: v2 is the largest task in the project, it cannot be
+verified in one sitting, and a half-built second rig in the tree is worse than none — `git push` is
+the deploy and she is playing this on her Home Screen. So this section is the plan with real
+numbers against it, and the code is untouched.
+
+### What the audit found
+
+| fact | measured |
+|---|---|
+| the seam | **one line**: `dog/rig.js:219`, `const F = breed.silhouette.front;` |
+| what it reads | **six shapes**: `body`, `bib`, `head`, `muzzle`, `ear`, `earInner` |
+| `silhouette.side` | **absent, and documented as absent** — `dog/breeds.js:20` still says "stage 4 adds the side rig", which is the note stage 4 left when it reframed walks instead |
+| clips that would need porting | **26** registered (20 in `anim/index.js`, 6 in `anim/tricks.js`) |
+| clips that touch geometry | **none.** They write joints — `earBack` means "ears back" whichever way he is facing |
+| the renderer | `dog/draw.js`, **2,343 lines**, painting from `silhouette.front` |
+| the rig | `dog/rig.js`, 683 lines, 38 springs |
+
+**The good news is the seam is real.** One line, six shapes, and no clip anywhere knows what a
+breed looks like. The reframing that dodged the side rig in stage 4 did not leave a mess behind it.
+
+**The bad news is that the seam is not where the work is.** `silhouette.side` is a data addition —
+18 outlines, six per breed, and the reference sheets for the Schnoodle are already in `refs/`. What
+it hands to is a **2,343-line renderer written for one camera**: the bib, the fur clumping, the ear
+lobes with their shadow ridges, the eye catchlights, the muzzle block, the markings pass and the
+per-frame occlusion split from ARCHITECTURE 19 are all front-view painting. A `silhouette.side`
+with nothing to draw it is a data file nobody reads.
+
+### The order to do it in, and the gate for each step
+
+Each step is shippable on its own and none of them breaks the front rig, which is the constraint
+that matters: she is playing the frontal game right now.
+
+1. **`silhouette.side` for the Schnoodle, and nothing that reads it.** Six outlines drawn against
+   `refs/schnoodle-turnaround-v2.png`, plus a harness page that draws the raw shapes at rest.
+   *Gate:* the outlines close, they sit inside their boxes, and `dog/dogalone.py` proves the FRONT
+   dog is byte-identical — a data addition must be invisible.
+2. **A side renderer, at rest only.** No gait, no clips: one standing profile that reads as the same
+   animal as the front view. This is the honest size of the job, and it is where a week goes.
+   *Gate:* renders of front and side side by side, on all three breeds, looked at — and the
+   proportions rule from the reference-sheet note above enforced (our leg length, not the sheet's).
+3. **The pose channels, one at a time.** `sit`, `down`, `headLift`, `earBack`, `tailWag` — the
+   channels the 26 clips already write. Port them in the order the idle director uses them.
+   *Gate:* every clip driven at 0.0/0.5/1.0 blend on the side rig with no NaN, no part detaching,
+   and a render per clip.
+4. **The gait.** Contact → down → passing → up, with foot placement, weight shift, and the ear and
+   tail lag that makes the frontal rig feel alive. The walk sheet in `refs/` is a bound, not a walk
+   (recorded above), so the timing is authored, not traced.
+   *Gate:* foot-slip measured against ground speed — the one number that says a gait is real rather
+   than a slide — plus frame cost, because this runs alongside scrolling scenery.
+5. **The walk scene.** Scrolling room→street, the leash, him pulling toward things, stopping to
+   sniff, meeting another dog. It slots INSIDE the absence beat that already exists: the route map,
+   the discovery and the return-with-loot all stay exactly as they are.
+   *Gate:* the walk still survives a full app close (the stage-4 promise), and the reframed beats
+   still fire when she skips the side view.
+
+### What I would not do
+
+- **Do not touch `dog/draw.js`'s front path.** Add `drawSide` beside it. The front dog is the gift,
+  it has been through four bowl fixes and a design pass, and it is on her phone.
+- **Do not port the trick clips to the side rig at all**, at least not first. Tricks are performed
+  to camera and the frontal rig suits them (SCOPE's reason for choosing it). A side rig is for
+  *walking*, which is what was actually asked for.
+- **Do not start it while anything in `docs/FEEDBACK-QUEUE.md` is open.** As of today nothing is,
+  which is the first time that has been true.
