@@ -2286,7 +2286,32 @@ export const BALANCE = {
        `padX`/`padY` and `step` are the pill's geometry; the plate's ALPHA is
        not here any more because it is no longer a number anyone chooses — the
        helper solves it against the worst possible background. */
-    toast: { dur: 1.9, fade: 0.32, y: 118, maxStack: 3, size: 13.5, padX: 15, padY: 7, step: 34 },
+    /* ---- TOASTS, AND KEEPING OFF THE THING THEY ARE TALKING ABOUT ------
+       Queue item 5: "the 'Biscuit is full' toast sits directly over the bowl it
+       refers to", and in Play a toast covered the very ball it named. Both were
+       perfectly legible, which is why no contrast gate could see it — the defect
+       is placement, and the only layer that knows the subject is the caller.
+
+       `avoidGap` is the clearance the stack keeps from the subject's rect;
+       `avoidMaxLift` is how far it will move to get it. The cap matters more
+       than the gap: a toast that climbs onto his face to avoid a bowl has not
+       solved anything, so past this it is better to overlap the prop a little
+       than to land somewhere absurd.
+
+       `bowlRect` and `toyRect` are half-extents around each thing's own draw
+       position — [halfWidth, above, below] for a bowl, which is drawn from its
+       base, and [halfWidth, halfHeight] for the ball. */
+    toast: {
+      dur: 1.9, fade: 0.32, y: 118, maxStack: 3, size: 13.5, padX: 15, padY: 7, step: 34,
+      avoidGap: 10, avoidMaxLift: 96,
+      /* MEASURED OFF THE RENDER, not guessed. The first pair were [34, 30, 12],
+         which is a third of the width the bowl is actually drawn at — the toast
+         cleared it anyway, so the gate passed while the rect was describing
+         something much smaller than the thing it was protecting. A placed bowl
+         spans about 95 units either side of its centre and stands ~34 above its
+         base point. The ball is 16 units of radius plus its shadow. */
+      bowlRect: [95, 34, 14], toyRect: [22, 22],
+    },
     /* STAGE 9 CUT THE NAV FROM EIGHT PILLS TO FIVE (Care/Play/Train/Walk/More).
        Eight across 390 left 40.5 units each — under the 44 tap-target
        guideline, and stage 6 shipped it knowing that. Five give 68.4:

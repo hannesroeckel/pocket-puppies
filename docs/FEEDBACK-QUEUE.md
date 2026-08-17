@@ -212,7 +212,7 @@ gap is longer.
 > Schema v7; every dog's clock is seeded from the app clock so the migration cannot invent a gap.
 > ARCHITECTURE 22.
 
-## 5. Toasts land on top of the thing they are describing
+## 5. Toasts land on top of the thing they are describing ✅ FIXED on `feature/toast-placement` (cache 8.12.0)
 
 Noticed in two places, so it is a pattern rather than a one-off:
 
@@ -229,6 +229,20 @@ position), and de-duplicate the Play hint/toast pair down to one message.
 
 Reported by the stage agent as deliberately out of scope, since deduplicating touches
 toy/hint sequencing rather than a token.
+
+> **Fixed.** The toast stack takes the rect of the thing the message is about and lifts clear of it
+> — the whole stack as one, upward, bounded at 96 units, and only when it actually overlaps on
+> **both** axes. The room supplies the subject (the bowl while she is feeding, the ball while it is
+> lying on the floor), because it is the only layer that knows which of them the message is about.
+> And the Play pair is one message now: the hud hint carries the whole sentence and the toast is
+> gone.
+>
+> Both halves of this were invisible to every existing gate, exactly as you said — the text was
+> always legible. Measured with a new one: the bowl case overlapped by 68 square units before and 0
+> after, the ball by 600 before and 0 after. Two of my own mistakes on the way: it first moved for
+> things it was not on top of (vertical bands only), and the bowl's rect was a third of the width
+> the bowl is actually drawn at, so the check passed while protecting something much smaller than
+> the bowl. ARCHITECTURE 25.
 
 ---
 

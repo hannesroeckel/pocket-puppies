@@ -2949,3 +2949,85 @@ wrong. Ids are asked first now, and the kind branches are the fallback they were
   prevent. The right home for it is a decor row in `economy.unlocks`, not a row in here.
 - **Nothing new is wearable.** A bandana and a bow were on his list; `dog.wear.accessory` exists but
   nothing renders an accessory, so they would be a promise of something invisible.
+
+---
+
+## 25. A message must not obscure its subject (`feature/toast-placement`) — as built
+
+Queue item 5, and the reason it took a new gate rather than a fix: **both reported cases were
+perfectly legible.** `ui/text.js` guarantees contrast, so every text gate on this project passed
+them. The defect is *placement*, which nothing was asking about.
+
+Cache **8.12.0**. No schema change.
+
+### 25.1 The stack lifts off its subject, and only if it is on it
+
+`toasts.draw(g, baseY, avoid)` takes the rect of the thing the message is about. If the stack's box
+overlaps it **on both axes**, the whole stack rises by exactly the overlap plus `avoidGap`, capped
+at `avoidMaxLift` 96.
+
+- **The whole stack, as one.** Three toasts keep their spacing and their order; nothing reorders or
+  jumps relative to anything else.
+- **Up, not down.** Everything a toast talks about is near the bottom of the screen — the bowls, the
+  ball, the nav — and the room above him is empty wall.
+- **Bounded.** A toast that climbs onto his face to get out of the way of a bowl has solved nothing,
+  so past the cap it is better to overlap a little than to land somewhere absurd.
+
+Only the room knows what the subject *is*, so `toastSubject()` lives there: the bowl while she is
+feeding or watering him, otherwise the ball if it is lying about being interactive (not while he is
+carrying or chasing it — then the message is about *him*, and following a moving ball would make the
+stack jitter). Deliberately **not the dog**: he is most of the screen, and a toast that will not
+overlap him has nowhere left to be.
+
+### 25.2 Two of my own bugs, both caught by the gate
+
+1. **It moved for things it was never on top of.** The first version compared only the vertical
+   bands, so a ball resting at x 310 — well to the right of a centred 185-unit toast that never
+   touched it — pushed the stack 65 units up the screen. Moving out of the way of something you
+   were not covering is its own defect: the message ends up somewhere unexpected for no reason a
+   player could see.
+2. **The bowl's rect was a third of the bowl.** `bowlRect` was `[34, 30, 12]` — 68 units wide
+   against a bowl that is drawn about 190 wide. The toast cleared it anyway, so the gate passed
+   while the rect was describing something much smaller than the thing it was protecting. Measured
+   off the render and corrected to `[95, 34, 14]`.
+
+And one in the gate: its "before" case had no defect in it. It dragged the bowl from a guessed
+`(300, 700)`, grabbed nothing, and left the bowl in its resting slot at x 66, where a centred toast
+never covered it — so "without the rule the toast lands on the bowl" reported **0 square units of
+overlap** and was correct to. It now drags from `care.debug.bowlAt` and asserts `placed` first.
+
+### 25.3 One message, not two
+
+Tapping **Play** set a hud hint *and* a toast that said the same thing in different words, in the
+same frame — and the toast landed on the ball it was naming. The hint is the one to keep: it lives
+at the top of the screen, it stays up while she works out what to do, and it cannot cover anything.
+So it now carries the whole sentence and the toast is gone.
+
+### 25.4 What was measured (`py tools/toastgate.py [--shots]`)
+
+**13 checks, 0 failures.** Every "after" claim is paired with a "before" that reproduces the
+reported overlap, because a placement gate that cannot show the defect is not measuring the fix.
+
+| check | result |
+|---|---|
+| the bowl, before | the toast overlapped it by **68 square units** with the rule withheld |
+| the bowl, after | **0**, having lifted 85 units — inside the 96 cap |
+| the ball, before | **600 square units** of overlap |
+| the ball, after | **0**, lifted 69 |
+| a subject the size of the screen | lift stops at the cap and the toast stays on screen |
+| three toasts | order and spacing preserved through the lift |
+| tapping Play | zero toasts, one hint, and the hint says the whole thing |
+| looked at | `review/toast-bowl.png` |
+
+### 25.5 Left imperfect
+
+- **Only two things are ever subjects.** The bowl and the ball, because those are the two that were
+  reported. A walk find dropped on the rug, the leash during the prepare beat and the treat during
+  training are all things a message could sit on, and none of them is registered. The mechanism
+  takes any rect, so each is one line in `toastSubject()` when somebody notices.
+- **The lift is instant, not sprung.** The stack jumps to its lifted position the frame the subject
+  appears. In practice the subject appears at the same moment as the toast, so there is nothing to
+  see — but a bowl placed *while* a toast is up will make it hop.
+- **It cannot move sideways.** A subject in the middle of the screen and a short toast could simply
+  sit beside each other. Lifting is one rule that works everywhere, which is worth more than a
+  cleverer one that has two cases to get wrong.
