@@ -177,7 +177,7 @@ Proposed, each with a real effect:
 > **Decor is still out**, as this note demanded: it stays on the care-point ladder, so coins cannot
 > buy a nicer room. ARCHITECTURE 24.
 
-## 3. Paw-shake as a direct interaction — needs confirmation from him
+## 3. Paw-shake as a direct interaction ✅ BUILT on `feature/paw-shake` (cache 8.13.0)
 
 > "for tricks it should be possible to shake the paw of the dog as a move"
 
@@ -191,6 +191,22 @@ Two possibilities, and I've asked which:
 - He meant a *direct* interaction (tap his paw, he offers it) → new, and a nice idea. Note his
   paws are currently a **bad** petting zone (rubbing them makes him pull away), so a
   handshake affordance would need to coexist with that without muddling the sweet/bad model.
+
+> **Answered, all three ways.** (1) `shake` always existed and is now **listed** with its gesture,
+> so it can be found without waiting for a ghost hint — see item 1b. (2) It does respond: the gate
+> teaches all eight tricks through real gesture paths. (3) The direct interaction you meant did not
+> exist, and now does: **a tap on his paw and he gives it to you**, playing the same `trick.shake`
+> clip he performs on cue.
+>
+> Your worry about the sweet/bad model was the right one, and it is resolved by gesture rather than
+> by moving the zone: **rubbing** a paw still makes him pull it away (−0.082 mood, unchanged), and a
+> **tap** is a handshake (+0.010). Two different things to do with a paw, two different answers.
+> He offers it whether or not he has learned the trick, because a puppy paws at you long before it
+> means anything.
+>
+> One bug on the way, which is why the mood is quoted: the first version sat below the bad-touch
+> dent, so taking his paw cost him 0.05 and then gave back 0.012 — a handshake that made him less
+> happy than being left alone. ARCHITECTURE 26.
 
 ## 4. Per-dog reunion timing ✅ FIXED on `feature/per-dog-time` (cache 8.9.0)
 

@@ -1187,6 +1187,26 @@ export function createRoomScene() {
           onSpawn: (kind, lx, ly) => spawn(kind,
             rig.x + lx * rig.s + rng.range(-9, 9),
             rig.y + ly * rig.s + rng.range(-7, 7)),
+          /* ---- HE GIVES YOU HIS PAW (queue item 3) --------------------
+             `dog/pet.js` decides that a TAP on a paw is a handshake rather than
+             a poke and does the looking-down half; this plays the shake itself,
+             because whether he has a `shake` to play is a training question and
+             the petting layer has no business knowing about tricks.
+
+             The clip is the one stage 3 already tuned, so a handshake she asked
+             for by tapping and one he performed on cue are the same animation —
+             which is the point. He offers it whether or not he has LEARNED the
+             trick: a puppy paws at you long before it means anything, and
+             discovering that is nicer than being told. */
+          onPawShake: () => {
+            idle.cancel(1.4);
+            idle.play('trick.shake');
+            app.audio.play('perk');
+            const h = rig.headWorld();
+            for (let i = 0; i < (app.reduced ? 2 : 4); i++) {
+              spawn('heart', h.x + rng.range(-22, 22), h.y + rng.range(-18, 8));
+            }
+          },
           onTap: (zid, clip, kind) => {
             idle.cancel(rng.span(BALANCE.idle.gapAfterTap));
             if (clip) idle.play(clip);

@@ -29,6 +29,10 @@ WHAT IT ASSERTS, and why each one is here rather than being taken on trust:
      wrong one; and Done stays inside the safe area at every inset a shipping
      phone reports.
 
+  F  HIS PAW, OUTSIDE A LESSON. A tap on a paw is a handshake and plays the
+     shake clip; RUBBING one is still a bad spot; the muzzle is untouched. Queue
+     item 3, and the thing that had to not break is the sweet/bad model.
+
   E  IT IS LOOKED AT. Four renders, because two confident numeric gates have
      passed on this project while the screen was visibly wrong (GIFT-READY §8).
 
@@ -317,7 +321,37 @@ def main():
             c3.close()
             notes.append("PASS  renders written to review/")
 
-        # ---- F. the two standing invariants this branch could have broken ----
+        # ---- F. HIS PAW, OUTSIDE A LESSON (queue item 3) -------------------
+        # The trick always existed; taking his paw in the room did not. The one
+        # thing that had to not break is the sweet/bad model: a tap is an offer
+        # to shake, a RUB is still a bad spot, and the two must not blur.
+        def one(action):
+            c2, p2 = page(b, inset=40)
+            boot(p2, url)
+            p2.evaluate("() => __pp.app.game.setFlag('installNever', true)")
+            p2.evaluate("() => __pp.skipIntro('Pip')")
+            p2.evaluate("() => __pp.step(1/60, 30)")
+            m0 = p2.evaluate("() => __pp.app.game.moodLevel")
+            if action:
+                p2.evaluate(action)
+            clip = p2.evaluate("() => __pp.loop.scene.idle.current")
+            m1 = p2.evaluate("() => __pp.app.game.moodLevel")
+            c2.close()
+            return round(m1 - m0, 5), clip
+
+        ctrl, _ = one(None)
+        paw, pawClip = one("() => __pp.tap({ zone: 'paw' })")
+        muz, muzClip = one("() => __pp.tap({ zone: 'muz' })")
+        rub, _ = one("() => __pp.stroke({ zone: 'paw', amp: 26, steps: 30 })")
+        check(pawClip == "trick.shake", "tapping his paw plays the shake", pawClip)
+        check(paw > ctrl, "and it pleases him rather than costing him mood",
+              "%+.4f against a control of %+.4f" % (paw, ctrl))
+        check(rub < ctrl - 0.02, "rubbing a paw is STILL a bad spot",
+              "%+.4f" % rub)
+        check(muz < ctrl - 0.02 and muzClip == "sneeze",
+              "and the muzzle is still a bad spot too", "%+.4f, %s" % (muz, muzClip))
+
+        # ---- G. the two standing invariants this branch could have broken ----
         # THE REACH ASSERTION (ARCHITECTURE 20). The trick-list pill is a new
         # interactive rect and the list is a new full surface, so the per-frame
         # audit that no prop's hit area intersects the nav bar is re-read here

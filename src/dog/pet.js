@@ -386,6 +386,43 @@ export function createPetting(rig, opts = {}) {
       if (hooks.onTapAffection) {
         hooks.onTapAffection(BALANCE.affection.tapGain * zg, zid);
       }
+
+      /* ---- A TAP ON A PAW IS A HANDSHAKE, NOT A POKE (queue item 3) -------
+         "for tricks it should be possible to shake the paw of the dog as a
+         move." The trick exists and always did — `shake`, guide `pawWiggle` —
+         but taking his paw OUTSIDE a lesson did nothing except annoy him,
+         because the paw is a bad spot and a tap on a bad spot is irritation.
+
+         The queue's worry about this was the right one: "his paws are currently
+         a bad petting zone (rubbing them makes him pull away), so a handshake
+         affordance would need to coexist with that without muddling the
+         sweet/bad model." So it is resolved BY GESTURE, not by moving the zone.
+         RUBBING a paw still makes him pull it away — that is the stroke path
+         and it is untouched. A TAP is a different thing to do with a paw, and
+         the natural answer to it is to give it to you.
+
+         The physical reaction is here because the body belongs to this layer;
+         the CLIP is the room's, because knowing whether he can shake on cue is
+         a training question (scenes/room.js `onPawShake`).
+
+         IT RUNS BEFORE THE MOOD BRANCH BELOW, and that is not cosmetic: the
+         first `kind === 'bad'` test in this method pays the bad-touch dent, so
+         a version of this block sitting under it charged him -0.05 for having
+         his paw taken and then handed back +0.012. Measured as a net LOSS of
+         mood for a handshake, which is the opposite of the intent. */
+      if (zid === 'paw') {
+        if (hooks.onMood) hooks.onMood(BALANCE.mood.tapGain * zg, zid);
+        /* looks down at the hand, ears up, and takes it */
+        s.earBack.kick(-2.0);
+        s.eyeOpen.kick(-1.2);
+        s.headLift.kick(-8);
+        s.tilt.kick(0.7);
+        mood.content.kick(2.4);
+        mood.glow.kick(2.0);
+        if (hooks.onPawShake) hooks.onPawShake(zid);
+        return;
+      }
+
       if (kind === 'bad') {
         if (hooks.onMoodDent) hooks.onMoodDent(BALANCE.mood.badTouch, zid);
       } else if (hooks.onMood) {
