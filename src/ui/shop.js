@@ -30,7 +30,7 @@ import { Spring } from '../engine/spring.js';
 import { drawText } from './text.js';
 import { INK, SURF, R, PRESS, type } from './tokens.js';
 import { tactile, createPresses } from './surface.js';
-import { drawBone, drawBall, drawBrush, drawSoap } from '../scenes/props.js';
+import { drawBone, drawBall, drawBrush, drawSoap, drawSack } from '../scenes/props.js';
 
 const W = BALANCE.view.W;
 const H = BALANCE.view.H;
@@ -125,10 +125,24 @@ function glyphFor(id, kind) {
   if (id === 'bone') {
     return (c, x, y) => { c.save(); c.translate(x, y); c.scale(0.62, 0.62); drawBone(c, 0, 0, -0.25); c.restore(); };
   }
-  if (kind === 'toy') return (c, x, y) => drawBall(c, x, y, 0.46, 0);
-  if (kind === 'wear') return (c, x, y) => collarGlyph(c, x, y, id);
+  /* ---- BY ID FIRST, THEN BY KIND -------------------------------------
+     The kind branches used to come first, so the rope tug — a `toy` — was
+     drawn by the generic ball glyph and appeared on the shelf as a striped
+     ball. Rendering it is what showed that; nothing about the row was wrong.
+     Every id-specific glyph now gets asked before the fallbacks, and the
+     fallbacks stay exactly what they were for anything unnamed. */
   if (id === 'brushSoft') return (c, x, y) => drawBrush(c, x, y - 2, 0.5, -0.3);
   if (id === 'soapOat') return (c, x, y) => drawSoap(c, x, y, 0.6, 0.2);
+  /* the four stage-9 rows. Each borrows the art the game already has for the
+     thing itself, so a row on the shelf and the object in the room are the same
+     drawing — the comb is the brush held at a different angle, and the good
+     kibble is the sack the food comes out of. */
+  if (id === 'combCurly') return (c, x, y) => drawBrush(c, x, y - 2, 0.44, 0.5);
+  if (id === 'soapRose') return (c, x, y) => drawSoap(c, x, y, 0.6, -0.25);
+  if (id === 'kibbleGood') return (c, x, y) => drawSack(c, x, y + 2, 0.5, -0.2);
+  if (id === 'ropeTug') return (c, x, y) => drawBall(c, x, y, 0.62, 0, undefined, 'ropeTug');
+  if (kind === 'toy') return (c, x, y) => drawBall(c, x, y, 0.46, 0);
+  if (kind === 'wear') return (c, x, y) => collarGlyph(c, x, y, id);
   /* a treat: a little biscuit */
   return (c, x, y) => {
     c.save(); c.translate(x, y);

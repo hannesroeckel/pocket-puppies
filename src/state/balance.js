@@ -599,6 +599,20 @@ export const BALANCE = {
       chewBase: 0.30, chewPerEnergy: 0.10,
       boredBase: 0.26, boredPerTired: 0.34,
     },
+    /* ---- AND WHAT HE IS PLAYING WITH TILTS IT (queue item 2) -------------
+       The roll used mood, trust and energy and knew nothing about the object,
+       so every toy played identically and "a new toy" was a new silhouette and
+       nothing else. These are multipliers on the three weights, defaulting to
+       1, so a toy that is not listed behaves exactly as everything did before.
+
+       A rope tug is for tugging: he brings it back less and settles down to
+       chew it more, which is the point of owning one rather than a strictly
+       better ball. A stick is the opposite — sticks are for fetching. */
+    kinds: {
+      ropeTug: { fetch: 0.55, chew: 1.9, bored: 0.9 },
+      stick: { fetch: 1.25, chew: 0.9, bored: 0.9 },
+      squeaky: { fetch: 0.9, chew: 1.4, bored: 0.8 },
+    },
     chewDur: [2.6, 4.6],
     /* if she doesn't get it back, the dog eventually fetches it unasked —
        which is also one of the research's named bids for attention */
@@ -1536,6 +1550,36 @@ export const BALANCE = {
           note: 'Plain, and it suits him' },
         { id: 'collarGreen', kind: 'wear', name: 'A green collar', cost: 35,
           note: 'A bit smarter' },
+        /* ---- FOUR MORE THINGS, AND EVERY ONE OF THEM DOES SOMETHING ------
+           Queue item 2, under the rule the queue itself sets: "every item must
+           do something. Stage 6 cut two unlock rows for being empty, on the
+           principle that an earned reward that does nothing is worse than one
+           never promised. Do not add anything cosmetic-but-inert."
+
+           So each of these hooks into a system that already exists, and the
+           gate asserts the EFFECT rather than the row:
+
+             kibbleGood  feeding fills more of him (dog/care.js)
+             combCurly   brushing raises gloss faster than the soft brush does,
+                         and it is the only tool that helps a CURLY coat
+             soapRose    the gloss it leaves fades slower (state/time.js), which
+                         is what makes it show up in an obedience score days
+                         later — grooming is marked (SCOPE stage 5)
+             ropeTug     a toy with its own odds: he would rather tug it than
+                         give it back, which is "different odds of return, so
+                         play varies" from the item
+
+           DECOR IS STILL NOT IN HERE. He asked for room decoration too, and
+           stage 6 deliberately kept decor on the CARE-POINT ladder so coins
+           cannot buy a nicer room. Unchanged. */
+        { id: 'kibbleGood', kind: 'tool', name: 'The good kibble', cost: 65,
+          note: 'A proper meal — it fills him up' },
+        { id: 'combCurly', kind: 'tool', name: 'A detangling comb', cost: 80,
+          note: 'For a curly coat the brush cannot reach' },
+        { id: 'soapRose', kind: 'tool', name: 'Rose soap', cost: 70,
+          note: 'His coat keeps its shine for days' },
+        { id: 'ropeTug', kind: 'toy', name: 'A rope tug', cost: 50,
+          note: 'He would rather tug it than give it back' },
         { id: 'collarTag', kind: 'wear', name: 'A collar with a tag', cost: 90,
           note: 'His name on a little brass disc' },
       ],
@@ -1543,6 +1587,15 @@ export const BALANCE = {
          purpose: a tool may be a nicer way to do the thing, never a reason to
          have waited to do it. */
       brushGloss: 1.35,         // gloss per stroke, multiplier
+      /* ---- WHAT THE STAGE-9 TOOLS ARE WORTH -------------------------
+         Each is a multiplier on a thing that already existed, so the
+         effect is measurable rather than described. `combCurly` is the
+         biggest of the three because it is the only one gated on the
+         coat: two of the three breeds are curly and the soft brush was
+         tuned on the Shiba. */
+      kibbleFill: 1.45,      // hunger restored per mouthful of the good kibble
+      combGloss: 1.7,        // brushing a CURLY coat with the comb
+      soapGlossKeep: 0.55,   // multiplier on gloss decay per hour
       soapMood: 0.16,           // extra mood from a bath, absolute
       /* a treat: a real beat, not an inventory decrement. He gets the reward
          clip, a mood lift, and it is worth NO care points — being pleased is
@@ -2308,7 +2361,15 @@ export const BALANCE = {
        SET DOWN (`bowl-set`), a refusal is him huffing (`huff`), a treat is a
        `crunch`, and a collar going on makes him `perk` up. */
     shop: {
-      pad: 14, headH: 62, rowH: 58, rowGap: 6,
+      /* ROW HEIGHT CAME DOWN FROM 58 TO 54 SO TWELVE ROWS STILL FIT.
+         The no-scroll rule above is the constraint, and it is arithmetic, not
+         taste: header 62 + 12 x 54 + a 40-unit Done + 8 of gap is 758, against
+         a floor of 804 on the target phone (844 less its 40-unit home bar). At
+         the old 58 the twelfth row put Done at 798 and left six units, which is
+         not a margin. Thirteen rows do not fit at any row height worth reading,
+         so the catalogue is full: the next thing added has to replace
+         something. */
+      pad: 14, headH: 62, rowH: 54, rowGap: 6,
       chipW: 62, chipH: 28,
       flash: 0.28,              // the press highlight, seconds
       sfx: {

@@ -141,7 +141,7 @@ its height — another reason the bound must be derived rather than typed in.
 > `y = 792` was worse than the flinch drop at 82%. "Bring him home" during a walk was also
 > losing 37 of its 46 units to the bar, so tapping it opened Training; that is fixed too.
 
-## 2. More to buy in the shop
+## 2. More to buy in the shop ✅ FIXED on `feature/shop-stock` (cache 8.11.0)
 
 Current stock is 8: chew bone 55, biscuits 25, good treats 60, softer brush 70, oatmeal soap
 45, blue collar 35, green collar 35, collar with tag 90.
@@ -162,6 +162,20 @@ Proposed, each with a real effect:
 > deliberately kept decor on the **care-point** ladder so she cannot buy her way to a nicer
 > room — "sell objects for coins, gate content on care points". Add decor to the care-point
 > unlocks instead. Changing that rule needs an explicit decision, not a quiet drift.
+
+> **Fixed.** Four rows, each with an effect the gate measures rather than a note that describes one:
+> **the good kibble** (a bowl fills 1.45× as much of him), **a detangling comb** (1.7× gloss on a
+> curly coat, and deliberately nothing extra on the Shiba — `fur.type`, not a breed-id check),
+> **rose soap** (gloss fades at 0.55× per hour away, which is what makes it show up in an obedience
+> score days later, since grooming is marked), and **a rope tug** (he brings it back less and settles
+> down to tug it more — the first toy in the game that plays differently at all).
+>
+> Twelve rows now, and the shop still does not scroll: row height came down 58 → 54 so header + 12
+> rows + Done = 758 against a 804 floor. **The catalogue is full** — the next thing added has to
+> replace something.
+>
+> **Decor is still out**, as this note demanded: it stays on the care-point ladder, so coins cannot
+> buy a nicer room. ARCHITECTURE 24.
 
 ## 3. Paw-shake as a direct interaction — needs confirmation from him
 
