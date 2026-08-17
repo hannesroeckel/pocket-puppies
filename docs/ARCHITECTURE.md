@@ -3031,3 +3031,77 @@ reported overlap, because a placement gate that cannot show the defect is not me
 - **It cannot move sideways.** A subject in the middle of the screen and a short toast could simply
   sit beside each other. Lifting is one rule that works everywhere, which is worth more than a
   cleverer one that has two cases to get wrong.
+
+---
+
+## 26. He gives you his paw (`feature/paw-shake`) — as built
+
+Queue item 3, which asked a question before it asked for anything: *"for tricks it should be
+possible to shake the paw of the dog as a move."* Three possible readings were recorded, and two of
+them are now answered:
+
+1. **He had not found the trick.** `shake` has existed since stage 3 — order 3, guide `pawWiggle`.
+   It was invisible because nothing in the game listed the tricks; the trick list (ARCHITECTURE 21)
+   fixes that, and `shake` is on it with its gesture spelled out.
+2. **He tried it and it did not respond.** It responds: `tools/traingate.py` teaches all eight
+   tricks through real gesture paths, `shake` among them.
+3. **He meant a direct interaction — tap his paw, he offers it.** That did not exist. It does now.
+
+Cache **8.13.0**. No schema change.
+
+### 26.1 Resolved by gesture, not by moving the zone
+
+The item flagged the risk itself: *"his paws are currently a bad petting zone (rubbing them makes
+him pull away), so a handshake affordance would need to coexist with that without muddling the
+sweet/bad model."*
+
+So the paw stays a **bad** zone and nothing about stroking changes. What changed is that a **tap**
+is not a rub:
+
+| gesture on a paw | before | now |
+|---|---|---|
+| rub / stroke | pulls it away, mood down | **unchanged** — pulls it away, mood down |
+| tap | irritation (a poke on a bad spot) | he looks down, ears up, and **gives you his paw** |
+
+Two different things to do with a paw, two different answers, and the sweet/bad model is untouched
+— a bad zone is about *rubbing*, which is what it always meant.
+
+`dog/pet.js` owns the physical half (the look down, the ears, the pleased kick) because it owns the
+body. `scenes/room.js` plays the clip, because whether he can shake is a *training* question and the
+petting layer has no business knowing about tricks. The clip is `trick.shake` — the one stage 3
+already tuned — so a handshake she asked for and one he performed on cue are the same animation.
+
+**He offers it whether or not he has learned the trick.** A puppy paws at you long before it means
+anything, and discovering that is nicer than being told.
+
+### 26.2 The bug: it charged him for the handshake
+
+The first version was inserted above the *second* `kind === 'bad'` test in `tapReact` — the one that
+picks the body's reaction — and the *first* one, four lines earlier, had already paid the bad-touch
+mood dent. So a handshake cost **−0.05** and then handed back **+0.012**, and taking his paw made
+him measurably less happy than not touching him at all. Caught by measuring the mood delta against
+a no-touch control rather than by reading the diff.
+
+### 26.3 What was measured (`py tools/traingate.py`, section F)
+
+**63 checks, 0 failures** (four new).
+
+| check | result |
+|---|---|
+| tap a paw | plays `trick.shake` |
+| …and the mood | **+0.0102** against a control of **0.0000** |
+| rub a paw | **−0.0816** — still a bad spot |
+| tap the muzzle | **−0.0517** and a sneeze — the other bad spots are untouched |
+
+### 26.4 Left imperfect
+
+- **He does not put the paw *in* her hand.** `trick.shake` lifts and wiggles the paw where the rig
+  puts it, not where her finger is. The rig has no reach-to-a-point, and giving it one is the
+  side-profile-rig class of work.
+- **Nothing is learned from it.** A tapped handshake is not a rep: it does not go in the trick
+  ledger and it will not improve his `shake`. That is deliberate — practice is the ritual (cue,
+  guide, reward), and letting a tap count would make the training screen the slower way to do the
+  same thing — but it does mean the two paths never meet.
+- **It has no cooldown of its own.** Tapping his paw repeatedly plays the clip repeatedly; the
+  general poke/overstimulation model is what eventually damps it, and that model was tuned for
+  jabbing a nose rather than for shaking a paw.
