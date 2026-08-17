@@ -109,6 +109,14 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.9.0: THE SAVE TRACKS TIME PER DOG (schema v7). Needs now decay for EVERY
+   dog rather than only the one in the room, and the reunion runs on the longer
+   of two gaps — how long the app was shut, and how long since she was last with
+   THIS dog. A phone holding 8.8.0 keeps a second dog frozen in time and greets a
+   fortnight-neglected dog flatly, so this must go out as a new cache. The
+   migration seeds every dog's clock from the app clock, which is the only
+   seeding that cannot invent a gap and fire a reunion nobody earned.
+
    8.8.0: THE TRAINING SCREEN SAYS WHAT IT CONTAINS. `src/ui/tricklist.js` is a
    NEW MODULE and MUST appear in PRECACHE below — `scenes/room.js` imports it
    unconditionally, so a phone that took this generation without it would fail to
@@ -129,7 +137,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.8.0';
+const VERSION = '8.9.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

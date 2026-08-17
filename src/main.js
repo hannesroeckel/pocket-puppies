@@ -971,13 +971,26 @@ async function boot() {
     peekFinds(progress) { return game.walkFinds(progress); },
     walkState() { return loop.scene.walk ? loop.scene.walk.debug : null; },
 
-    /** fake an absence: rewind lastSeenAt, re-run the decay, replay the greeting */
-    fakeAway(hours = 9) {
-      state.lastSeenAt = Date.now() - hours * 3600e3;
+    /**
+     * Fake an absence: rewind the clocks, re-run the decay, replay the greeting.
+     *
+     * AN ABSENCE IS AN ABSENCE FROM EVERY DOG. The per-dog `lastSeenAt` is what
+     * the reunion runs on now, so rewinding only the app clock would fake a
+     * visit that never happened — she would have been away nine hours and yet
+     * have somehow seen him a moment ago. `dogs: false` is for the one case
+     * that is genuinely different: she has been playing daily WITH THE OTHER
+     * DOG, so the app is fresh and this one has been waiting.
+     */
+    fakeAway(hours = 9, { dogs = true } = {}) {
+      const at = Date.now() - hours * 3600e3;
+      state.lastSeenAt = at;
+      if (dogs) for (const d of state.dogs) d.lastSeenAt = at;
       const el = applyElapsed(game, Date.now());
       app.elapsed = el;
       return el;
     },
+    /** how long since she was last with a dog, in hours */
+    gapFor(id) { return game.gapHoursFor(id || game.dog.id); },
     /** replay the reunion at an explicit intensity, without waiting 8 hours */
     reunion(intensity = 0.8, hours = 12) {
       return loop.scene.playReunion ? loop.scene.playReunion(intensity, hours) : false;
