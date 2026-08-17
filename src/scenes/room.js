@@ -36,6 +36,7 @@ import { createInstall } from '../ui/install.js';
 import { createShop } from '../ui/shop.js';
 import { createKennel } from '../ui/kennel.js';
 import { createTrickList } from '../ui/tricklist.js';
+import { createCollection } from '../ui/collection.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
 /* THE REACHABLE PLAY AREA: the bound every interactive prop is clamped to, and
@@ -302,7 +303,7 @@ export function createRoomScene() {
   let care = null, toy = null, reunion = null, naming = null;
   let train = null, voice = null, walk = null, contest = null;
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
-  let shop = null, kennel = null, tricks = null;
+  let shop = null, kennel = null, tricks = null, collection = null;
   let roomCv = null, ovCv = null;
   /* CONTENTED PANTING (research §1.9). Driven off the rig's own `drive.pant`
      channel rather than by a clip, because panting is a STATE he is in, not an
@@ -734,6 +735,7 @@ export function createRoomScene() {
        the one moment in stage 6 that is a one-shot. */
     if (kennel && (kennel.modal || kennel.busy)) return 'kennel';
     if (shop && shop.modal) return 'shop';
+    if (collection && collection.modal) return 'collection';
     if (install && install.modal) return 'install';
     return '';
   }
@@ -896,9 +898,32 @@ export function createRoomScene() {
    * grows, and it is the slow-drip decor reward research §1.10 asks for.
    * Drawn live rather than baked, because it changes.
    */
+  /**
+   * THE SILL'S HIT RECT, derived from where the things are actually drawn.
+   * The shelf has moved once already, and a tap target kept in step by hand is
+   * the same class of defect as the ball behind the nav bar (ARCHITECTURE 20).
+   */
+  function sillRect() {
+    const SH = BALANCE.walk.shelf;
+    const T = BALANCE.ui.collection.tapPad;
+    return {
+      x: SH.at[0] - T[3], y: SH.at[1] - T[0],
+      w: (SH.max - 1) * SH.step + T[1] + T[3], h: T[0] + T[2],
+    };
+  }
+
+  /** is a virtual point inside a rect? */
+  function inRect(r, x, y) {
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
   function drawSill(c) {
     const SH = BALANCE.walk.shelf;
-    const items = Array.from(app.game.findCollection()).slice(-SH.max);
+    /* WHAT SHE HAS PUT OUT, not the last seven of everything. The room used to
+       draw `findCollection().slice(-max)`, so the eighth find silently pushed
+       the first one off the shelf and there was no way to say which seven you
+       wanted (docs/FEEDBACK-QUEUE.md 6). */
+    const items = app.game.onShow();
     if (!items.length) return;
     for (let i = 0; i < items.length; i++) {
       const x = SH.at[0] + i * SH.step;
@@ -1258,6 +1283,17 @@ export function createRoomScene() {
         copy: train.COPY,
         pron: () => app.game.pron,
       });
+      /* ---- THE COLLECTION (queue item 6) ----------------------------
+         Opened by tapping the sill his things stand on. It reads its three
+         lists straight out of state/game.js, so what is on the shelf in the
+         room and what the panel says is on the shelf are the same array. */
+      collection = createCollection({
+        game: app.game, reduced: app.reduced,
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        nameOf: (id) => walk.COPY.findName(id).replace(/^an? /, ''),
+        metName: (met) => (walk.COPY.met[met] || met).replace(/^an? /, ''),
+      });
       /* ---- WALKS (stage 4) ------------------------------------------
          Four beats, no gait cycle, and the absence beat is a pure function of
          the wall clock so it survives the app being killed (state/walks.js). */
@@ -1494,6 +1530,7 @@ export function createRoomScene() {
       if (shop) shop.stop();
       if (kennel) { kennel.stop(); }
       if (tricks) tricks.stop();
+      if (collection) collection.stop();
     },
 
     resize(a) {
@@ -1506,6 +1543,7 @@ export function createRoomScene() {
       if (shop) shop.setInset(view.safe.bottom / view.vs);
       if (kennel) kennel.setInset(view.safe.bottom / view.vs);
       if (tricks) tricks.setInset(view.safe.bottom / view.vs);
+      if (collection) collection.setInset(view.safe.bottom / view.vs);
       if (naming) naming.resize(view);
     },
 
@@ -1641,6 +1679,7 @@ export function createRoomScene() {
          arbiter exists to stop being made one `if` at a time. */
       if (tricks.isOpen && !train.modal) tricks.stop();
       tricks.update(dt);
+      collection.update(dt);
       /* THE REWARD LANDS IN THE WORLD, on the frame she earns it. `rugBlue` is
          the only unlock that changes the prebuilt room art, so this is the one
          place that has to notice. */
@@ -1815,6 +1854,7 @@ export function createRoomScene() {
          the same time as training — the ordering here is what that claim looks
          like if it is ever wrong. */
       tricks.draw(g);
+      collection.draw(g);
       sheet.draw(g);
       /* the shop and the kennel sit ABOVE the sheet and BELOW the install card,
          which is the same order surfaceOwner() puts them in */
@@ -1878,6 +1918,15 @@ export function createRoomScene() {
       }
       if (capture === 'tricks') { capture = ''; if (ev.type !== 'down') return; }
 
+      /* THE COLLECTION, and it consumes everything while it is up — the same
+         rule every full surface in here is given. */
+      if (collection.isOpen) {
+        collection.pointer(ev);
+        capture = collection.isOpen ? 'collection' : '';
+        return;
+      }
+      if (capture === 'collection') { capture = ''; if (ev.type !== 'down') return; }
+
       if (ev.type === 'down') {
         if (sheet.isOpen) {
           capture = 'sheet';
@@ -1923,6 +1972,15 @@ export function createRoomScene() {
           capture = 'dog';
           a.game.noteTouch();
           pet.down(l0.x, l0.y, ev.x, ev.y);
+          return;
+        }
+        /* THE SILL OPENS THE COLLECTION. Before the nav pills, because it sits
+           well above them, and before the dog, because it is up on the wall
+           where no petting stroke starts. `walk.COPY.shelfSome` was written
+           for this tap in stage 4 and had never been wired to anything. */
+        if (!walk.away && collection && inRect(sillRect(), ev.x, ev.y)) {
+          capture = 'collection';
+          collection.start();
           return;
         }
         if (hud.hit(ev.x, ev.y)) { capture = 'hud'; hud.pressed = true; hud.showNeeds(); return; }
@@ -2071,6 +2129,7 @@ export function createRoomScene() {
         shop: shop ? shop.debug : null,
         kennel: kennel ? kennel.debug : null,
         tricks: tricks ? tricks.debug : null,
+        collection: collection ? collection.debug : null,
         wear: rig.wear || '',
         rug: rugShown,
         navIds: nav ? nav.items.map((i) => i.id) : [],
@@ -2097,6 +2156,10 @@ export function createRoomScene() {
     get install() { return install; },
     get shop() { return shop; },
     get kennel() { return kennel; },
+    /* the two stage-9 panels, exposed for the same reason every layer above is:
+       a gate drives the real thing or it is not driving anything */
+    get tricks() { return tricks; },
+    get collection() { return collection; },
     /* drivers the verification harness needs; see window.__pp in main.js */
     openShop() { openShop(); return shop.isOpen; },
     openKennel() { openKennel(); return kennel.isOpen; },

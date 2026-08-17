@@ -801,9 +801,26 @@ export const BALANCE = {
       tierAt: [0, 0.46, 0.84],
       /* past `perDay` walks the top tier stops appearing */
       overCapTier: 1,
-      /* a `toy` find only pays out as a new toy once; after that it is a
-         pleasant duplicate and the coin value goes up instead */
+      /* ---- A DUPLICATE IS COINS, WHATEVER IT IS -------------------------
+         This paid out for a duplicate TOY only, so a second daisy, pebble or
+         photo was worth nothing and did nothing: "some finds are real and some
+         are litter, with nothing telling her which"
+         (docs/FEEDBACK-QUEUE.md 6). SCOPE stage 5 already says coins come from
+         "contest placings; selling walk finds" — this is that, and it means
+         every single thing he carries home is either a new thing on the shelf
+         or a few coins in the purse. Nothing is ever inert. */
       dupCoins: 3,
+      /* ...and the FIRST of a kind still comes first. Owned finds are weighted
+         down rather than excluded: the woods should still mostly hand back
+         woods things, and a collection that refuses to give her a second
+         conker stops feeling like a place and starts feeling like a checklist.
+         At 0.45 a full collection still pays coins on every walk. */
+      ownedWeight: 0.45,
+      /* how many things may stand on the sill at once. The rest live in the
+         box; which is which is HER choice (ui/collection.js), which is the
+         other half of item 6 — "the room should be hers to arrange, not a
+         floor that silently fills". */
+      onShow: 7,
       /* coins in his collar / dropped in the street. Stage 5 spends these. */
       coins: { per: [2, 10], route: { park: 1.0, high: 1.7, river: 0.85, woods: 1.05 } },
       /* the running collection kept in state.walks.found */
@@ -2410,6 +2427,38 @@ export const BALANCE = {
         river: { at: [286, 424], r: [66, 50] },
         woods: { at: [96, 442], r: [62, 54] },
       },
+    },
+    /* ---- THE COLLECTION (ui/collection.js) -----------------------------
+       Opened by tapping the window sill, which is where his things already
+       stand — the affordance is the shelf itself rather than a sixth pill in
+       a nav bar the design pass just cut to five.
+
+       `slotH` carries a glyph and its name; `cols` at 4 gives a slot 84 units
+       wide, which is what "somebody's lost glove" needs at labelSm before it
+       ellipsises. The album's rows are single-line, so they are shorter. */
+    collection: {
+      pad: 14, headH: 52, gap: 10, labelH: 22,
+      /* THREE columns, not four. At four a slot is 84 units wide and the
+         longest name in the find table shrank to the type floor and ellipsised
+         anyway; at three it is 115 and every name fits. `slotH` carries a glyph
+         ABOVE its name — they were six units apart at the bottom of the slot,
+         which drew the type straight through the bell. */
+      slotH: 78, slotGap: 8, cols: 3, glyph: 0.92,
+      /* the name's band at the bottom of a slot, and the glyph's anchor above
+         it. A find is drawn from about 20 units ABOVE its anchor to 11 below
+         (scenes/props.js, and `drawSill` puts its contact shadow at +11), so
+         the anchor is near the base and 'centre it' is the wrong instinct.
+         Two rounds of nudging drew the type through the bell before this was
+         measured rather than guessed. */
+      nameBand: 20, glyphDrop: 30,
+      albumRowH: 40, emptyH: 30, closeH: 42, bottomPad: 12,
+      flash: 0.28,
+      /* the sill's own hit rect in the room, which is what opens all this.
+         Derived from `walk.shelf` rather than typed again — the shelf moved
+         once already, and a tap target that has to be kept in step by hand is
+         the same class of defect as the ball behind the nav bar. */
+      tapPad: [18, 22, 22, 16],
+      sfx: { open: 'cue', close: 'pat-soft', put: 'bowl-set' },
     },
     /* the find card that names what he brought home */
     findCard: { y: 148, w: 260, h: 96, r: 20, dur: 4.6, fade: 0.42 },

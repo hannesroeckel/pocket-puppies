@@ -2733,3 +2733,124 @@ exactly as the old build would have, and the clocks diverge from there.
   advance the wall clock, but worth remembering if a swap ever becomes something she does after a
   long absence inside one session.
 - **Nothing here has been on the phone.** She has two dogs only if she has saved 400 care points.
+
+---
+
+## 23. The collection (`feature/find-collection`) — as built
+
+Queue item 6, which was two complaints wearing one coat: **the room had no storage, and most
+finds had no purpose.** Walks worked — he goes out and comes back carrying something — but only
+the four toy finds were ever usable, and the room drew the last seven distinct finds and silently
+dropped the rest. So the collection filled up and then began losing things out of the back, and
+"some finds are real and some are litter, with nothing telling her which".
+
+Cache **8.10.0**, schema **v8**, new module `src/ui/collection.js`.
+
+### 23.1 Every find now answers "what is this for"
+
+| kind | count | purpose |
+|---|---|---|
+| toy | 4 | he fetches it — already true, untouched |
+| photo | 4 | a dog he met, named in the album with **where** they met |
+| flower / keep / gift | 9 | it is nice to look at, and she chooses whether it is out |
+| **any duplicate** | — | a few coins |
+
+The duplicate rule is the one that retires the word "litter". `rollFinds` paid `dupCoins` only for
+a duplicate **toy**, so a second daisy or a second photo of the same beagle was worth precisely
+nothing — and SCOPE stage 5 had already said coins come from "contest placings; selling walk
+finds". Now every duplicate sells, which means the second walk down the same road pays *more* than
+the first (measured: 10 coins → 16).
+
+Fresh finds still come first: an owned find is weighted to `ownedWeight` 0.45 rather than removed.
+Removing them would make a completed collection stop paying out and would have the woods hand back
+things the woods do not have.
+
+### 23.2 The sill is hers to arrange
+
+`walks.display` is the list of what is standing on the window sill, in her order, capped at
+`onShow` 7. Tapping the sill in the room opens the panel; tapping a thing puts it away, tapping a
+thing in the box puts it out. A full sill **refuses politely** rather than pushing the oldest thing
+off the end, which is the behaviour that made the old room feel like a floor filling up.
+
+A new find goes out by itself if there is room, so she never has to open a panel to have a room
+worth looking at — but it never displaces anything. Toys and photos are deliberately not shelvable:
+a toy lives on the rug because that is where a toy is, and a photo is in the album. Before this
+they took ornament slots, which is why nine finds could fill a seven-slot shelf and leave nothing
+visible from the last walk.
+
+`walk.COPY.shelfEmpty` / `shelfSome` were written for this tap in **stage 4** and had never been
+wired to anything at all.
+
+### 23.3 The album
+
+`metDogs` walks the dated log and `unlocks.items` together, so a meeting older than the 40-entry
+log cap is still in the album; each row names the dog and the route he met them on. The queue asked
+for exactly this and said why: "an album of dogs he met is a lovely thing; an anonymous flower on
+the rug is not."
+
+### 23.4 A dead `setInset`, found by asking a panel what it knew
+
+The gate checks Done against the safe area at four insets. Chasing a failure there turned up
+something bigger: **`loop.resize()` was never called after `mount`**, and `scene.resize` is the only
+thing that hands the safe-area inset to a panel. So `setInset` had been dead for the whole session
+for `ui/sheet.js`, `ui/shop.js`, `ui/kennel.js` and `ui/tricklist.js` — on a phone held one way up,
+nothing ever fires `resize`. Every one of them clamps *against* the inset rather than laying out
+from it, which is why it never looked broken: the failure is a Done button or a bottom row up to 40
+units lower than it should be, and it only bites on a notched phone. One `loop.resize()` after
+mount fixes all of them.
+
+The gate's own inset lever was wrong in the same shape, and worse, because it silently turned every
+"at inset 40" claim in this project into "at inset 0": it set the probe's padding from an init
+script on `DOMContentLoaded`, and a **module script is deferred**, so `main.js` runs first with
+`readyState === 'interactive'` and had already measured the probe. `tools/_drive.py` now sets the
+padding and dispatches a real `resize`, then asserts the game read the value back.
+
+### 23.5 Three defects found by rendering it
+
+1. **"ON THE SILL" was drawn on top of the stitched divider** — the section label was positioned
+   relative to the shelf below it rather than to the header above it.
+2. **Every name in the box was painted through its glyph.** A find is drawn from about 20 units
+   *above* its anchor to 11 below (`drawSill` puts the contact shadow at +11), so the anchor is near
+   the base and "centre it in the slot" is the wrong instinct. Nudged twice, then measured.
+3. **The panel was full-height like the shop**, which with two things in the box left two thirds of
+   the screen as an empty cream field and Done stranded in the middle of it. It is now as tall as
+   its contents, clamped to the screen — a real bottom sheet.
+
+And one in the harness: the boot veil is lifted by a **CSS transition**, which runs on real time
+and does not care that rAF is stubbed, so a prompt screenshot caught the splash still half over the
+game. It is removed now rather than faded.
+
+### 23.6 What was measured (`py tools/findsgate.py [--shots]`)
+
+**28 checks, 0 failures.**
+
+| check | result |
+|---|---|
+| duplicates | the same route walked twice pays **more** the second time; non-toy duplicates are among what pays |
+| the sill | fills to 7 by itself and stops; the overflow waits in the box; a full sill refuses |
+| toys and photos | never take an ornament's slot |
+| arranging | put away → in the box; put back → on the shelf; the room draws exactly that |
+| the album | every dog he met, named |
+| the tap | tapping the sill opens the panel with the same arrangement the room shows |
+| insets **0 / 20 / 40 / 80** | the panel is told the inset (0/20/40/80 read back) and Done is inside the safe area at all four |
+| v7 → v8 | seeds `display` with the seven things the room was already drawing |
+| v1…v8 | all migrate to the current schema |
+| the other gates | traingate 59/59, timegate 20/20 |
+| looked at | `review/collection.png`, `review/collection-room.png` |
+
+### 23.7 Left imperfect
+
+- **A name in the box sits close under its glyph.** Legible and no longer overlapping, but the
+  bell's clapper nearly touches the type. The glyphs were drawn for a shelf 16 units tall, not for
+  a labelled slot, and giving them a proper bounding box is a `scenes/props.js` job rather than a
+  layout tweak.
+- **Nothing is wearable.** A red ribbon and a little brass bell are obvious collar accessories, and
+  `dog.wear.accessory` and `inventory.accessories` already exist — but nothing renders an accessory
+  yet, so making them wearable would promise something invisible. Deliberately left; it is the
+  natural next thing if item 6 gets a second pass.
+- **Selling is automatic, not a choice.** A duplicate becomes coins at the moment he brings it
+  home; she never decides to sell a keepsake. That is deliberate — a "sell this thing he found you"
+  button is a different game — but it does mean the coins arrive without a story.
+- **The sill is one shelf.** Nine ornaments and seven slots means two things are always in the box.
+  A second surface (the mantel, the floor by the bed) is where this goes next, and it belongs on
+  the care-point decor ladder rather than here.

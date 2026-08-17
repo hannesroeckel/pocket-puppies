@@ -109,6 +109,19 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.10.0: EVERY FIND HAS A HOME AND A PURPOSE (schema v8). `src/ui/collection.js`
+   is a NEW MODULE and MUST appear in PRECACHE below — `scenes/room.js` imports it
+   unconditionally, so a phone that took this generation without it would fail to
+   resolve the import offline and show a blank screen. The room now draws what she
+   has PUT OUT rather than the last seven of everything, and a duplicate find of
+   any kind pays coins, so a phone holding 8.9.0 keeps a shelf that silently drops
+   things out of the back. `py tools/check-precache.py` now expects 54 entries.
+
+   Note the version is 8.10.0 and not 8.9.1: this is a schema bump and a new
+   surface, not a patch. String comparison is never used on these — the cache name
+   is matched exactly and old generations are deleted by prefix — so a two-digit
+   minor is safe.
+
    8.9.0: THE SAVE TRACKS TIME PER DOG (schema v7). Needs now decay for EVERY
    dog rather than only the one in the room, and the reunion runs on the longer
    of two gaps — how long the app was shut, and how long since she was last with
@@ -137,7 +150,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.9.0';
+const VERSION = '8.10.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -202,6 +215,7 @@ const PRECACHE = [
   './src/ui/shop.js',
   './src/ui/kennel.js',
   './src/ui/tricklist.js',
+  './src/ui/collection.js',
   /* stage 9, the design-system pass. `tokens.js` is imported by every module in
      this directory, so of the 51 entries it is the single most expensive one to
      forget. */

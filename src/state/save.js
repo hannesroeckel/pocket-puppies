@@ -12,7 +12,7 @@
    ========================================================================== */
 import BALANCE from './balance.js';
 import { SCHEMA_VERSION, newState, DIRT_REGIONS, newTrick, trickLevelFromReps } from './game.js';
-import { FIND_BY_ID, walkState } from './walks.js';
+import { FIND_BY_ID, walkState, SHELVABLE } from './walks.js';
 import { contestState } from './contest.js';
 import { dayIndex } from './time.js';
 /* The ONE remaining read of breed aptitude in the codebase, and it exists
@@ -340,6 +340,40 @@ export const MIGRATIONS = {
       if (!Number.isFinite(+d.lastSeenAt) || +d.lastSeenAt <= 0) d.lastSeenAt = seed;
     }
     s.v = 7;
+    return s;
+  },
+
+  /* ---- v7 -> v8 : the sill is hers to arrange (queue item 6) -----------
+     `walks.display` is the list of finds standing on the window sill, in her
+     order. Before it, the room drew the last seven distinct finds and silently
+     dropped everything older — a collection that fills up and then starts
+     losing things out of the back.
+
+     SEEDED WITH WHAT THE ROOM WAS ALREADY SHOWING, which is the only seeding
+     that does not move her furniture: the same seven things stay exactly where
+     they were, and the box quietly gains everything the old room had already
+     stopped drawing. Toys and photos are deliberately not seeded — a toy lives
+     on the rug and a photo is in the album, and both of those were already
+     true; this only stops them taking a shelf slot from an ornament. */
+  8: (s) => {
+    if (!s.walks || typeof s.walks !== 'object') s.walks = {};
+    if (!Array.isArray(s.walks.display)) {
+      const owned = [];
+      const seen = new Set();
+      const push = (id) => {
+        if (typeof id !== 'string' || seen.has(id)) return;
+        const f = FIND_BY_ID[id];
+        if (!f || !SHELVABLE.has(f.kind)) return;
+        seen.add(id); owned.push(id);
+      };
+      const log = Array.isArray(s.walks.found) ? s.walks.found : [];
+      for (const it of log) push(it && (typeof it === 'string' ? it : it.id));
+      const items = s.unlocks && Array.isArray(s.unlocks.items) ? s.unlocks.items : [];
+      for (const id of items) push(id);
+      /* the room drew the LAST seven, so that is what carries over */
+      s.walks.display = owned.slice(-(BALANCE.walk.find.onShow || 7));
+    }
+    s.v = 8;
     return s;
   },
 };

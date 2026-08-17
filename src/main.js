@@ -375,6 +375,16 @@ async function boot() {
 
   if (fresh) game.log('born', 'came home');
   await loop.mount(scenes.room, { reunion: elapsed.reunion && !fresh });
+  /* ---- ONE RESIZE AFTER THE SCENE EXISTS ------------------------------
+     `resize()` above runs at boot, before the scene is built, so `loop.resize()`
+     had nothing to hand the safe-area inset to; and after that it only fired on
+     a real window resize or an orientation change. On a phone held one way up,
+     that is never — so `setInset` was DEAD for the whole session, for the
+     sheet, the shop, the kennel and both stage-9 panels. It was invisible
+     because every one of them clamps against the inset rather than laying out
+     from it, so the failure is a Done button or a bottom row 40 units lower
+     than it should be, which only bites on a notched phone. */
+  loop.resize();
   loop.start();
   saver.schedule();
 

@@ -25,7 +25,7 @@ WHAT IT ASSERTS:
   E  A SWAP IS STILL JUST A SWAP when it has not been long, and switching does
      not manufacture a reunion out of nothing.
 
-  F  OLD SAVES SURVIVE. v1..v7 all migrate, keep their name, bond and coins,
+  F  OLD SAVES SURVIVE. Every older version migrates to the current schema, keep their name, bond and coins,
      and — the migration's one real risk — do NOT fire a spurious full-intensity
      reunion for a dog she was playing with a minute before she updated.
 
@@ -189,7 +189,12 @@ def main():
             gaps: got.dogs.map((d) => +((now - d.lastSeenAt) / 60000).toFixed(1)),
           };
         }""")
-        check(older["v"] == 7, "a v6 save migrates to v7", older)
+        # AGAINST `SCHEMA_VERSION`, NOT AGAINST 7. Pinning the number here meant
+        # this gate failed the moment the next migration landed, which is a gate
+        # that has to be edited on every bump — and edited gates get edited wrong.
+        now_v = pg.evaluate("async () => (await import('/src/state/game.js')).SCHEMA_VERSION")
+        check(older["v"] == now_v, "a v6 save migrates to the current schema",
+              "reached v%s of v%s" % (older["v"], now_v))
         check(older["name"] == "Pip" and older["coins"] is not None,
               "and keeps her name and her coins", older)
         check(all(g < 6 for g in older["gaps"]),
@@ -200,15 +205,15 @@ def main():
         walked = pg.evaluate("""async () => {
           const m = await import('/src/state/save.js');
           const out = {};
-          for (let v = 1; v <= 7; v++) {
+          for (let v = 1; v <= 8; v++) {
             const s = JSON.parse(JSON.stringify(__pp.app.game.state));
             s.v = v;
             try { out[v] = m.migrate(s).v; } catch (e) { out[v] = 'threw: ' + e.message; }
           }
           return out;
         }""")
-        check(all(v == 7 for v in walked.values()),
-              "v1..v7 all migrate to v7 through the real table", walked)
+        check(all(v == now_v for v in walked.values()),
+              "every older save migrates to v%s through the real table" % now_v, walked)
 
         check(not errors, "no page errors and no console warnings", errors[:4])
         b.close()
