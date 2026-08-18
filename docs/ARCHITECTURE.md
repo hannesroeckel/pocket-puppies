@@ -3201,3 +3201,209 @@ them moves its number. Two things fell out of writing those self-tests:
   obvious and was not written.
 - **No gate runs in CI, because there is no CI.** A `git push` is the deploy; nothing stands between
   a broken tree and her phone except somebody running these.
+
+---
+
+## 28. The suite runs as one command, and it runs somewhere else too (`feature/gate-suite`)
+
+No product change. Nothing in `/src` is touched, `sw.js` does not move and the cache does not bump.
+Three things, all of them owed by §27.6: the last missing gate, a runner, and a CI job.
+
+### 28.1 `tools/breedproof.py` — the last cited-but-missing gate
+
+`C:\tmp\pp8\breedproof.py` was the final orphan in §27.1's table, and its claim is §17.2's: the
+eating geometry is derived from **shares of each dog's own proportions** rather than from absolute
+units measured on the Shiba, so it has to hold for breeds nobody has drawn.
+
+It mutates the breed table in the live page (`(await import('/src/dog/breeds.js')).BREEDS[id]
+.proportions`), remounts the room through `app.nav.go('room')` so `createRig` rebuilds `dims` from
+it, and drives a real feed and a real water action a frame at a time. It reads the numbers
+`dog/draw.js` actually draws from — `pose.headY + dims.headHH` against `pose.bodyY + pose.bodyHH`,
+converted to room space the same way `care.debug.soleLiveY` is — and asserts that **the head never
+sinks into the belly** on any frame.
+
+Three things about how it is built that were not obvious before writing it:
+
+- **It drives the live rig rather than calling `__pp.solveFor()`.** `solveFor` exists and runs the
+  real solve against arbitrary proportions, but it is a *pure solve*: it answers what the arithmetic
+  decided, not what the renderer drew. §18.2's defect was exactly those two disagreeing while both
+  were internally consistent, so a gate that only asks the solve is asking the wrong half.
+- **The gate has to prove the rig took the mutation, and the first version of that check was
+  wrong.** It compared `bodyHH`, `headHH`, `legLen` and `headRoom`, and the two **muzzle**
+  distortions failed it while visibly working — `muzzleW/H` never pass through `resolveDims` at all;
+  `solveEatGeometry` reads `proportions.muzzleH` straight off the breed object. The check now
+  compares the whole of `rig.dims` plus the muzzle box **read back through `rig.breed`**, which is
+  the only thing that actually proves the rig is holding the mutated object.
+- **Restore everything before distorting anything.** The first cut restored only the keys it was
+  about to change, so the nine distortions accumulated silently down the list and case nine was
+  measuring cases one-through-nine at once. Every number looked plausible throughout, which is how
+  that class of bug survives; §27.4's "derive it, do not type it" has a sibling, which is "reset it,
+  do not assume it".
+
+**It can fail, and it is run the other way round to prove it** (§27.4). Two injected faults must be
+caught and one control must *not* be:
+
+| injected fault | worst clearance | |
+|---|---|---|
+| *(none)* | **+32.017** | over 553 eating frames |
+| `anchors.neckOverlap × 8` | **−17.858** | **caught** — a breed whose neck swallows its own chest takes head-to-belly room *negative* (−8 standing), so there is no budget to spend and the head is already inside the chest. A pure breed-data fault, through the same mutate-and-remount path the gate uses. |
+| `headDownShare = headMaxShare = 1.35` | **−37.343** | **caught** — spending 135% of a 100% budget, which is §17.2's failure mode stated as plainly as it can be |
+| `feed.bobDepth × 20` **(control)** | **+30.562** | **holds** — a 20× bite costs 1.455 units of clearance and then *stops*, because `maxHeadDrop()` catches it at apply time |
+
+The control is the part worth keeping. §17.2 records that budgeting the bob at *solve* time left one
+chest with 0.8 units of clearance and that the fix was to clamp the total at *apply* time; the
+`bobDepth` ladder is the positive evidence that the apply-time clamp is in the path and load-bearing,
+rather than the assertion passing because nothing ever pushes on it. **So the head-vs-belly number is
+asserted, not demoted** — unlike §27.3's floor gap, this one moves, in both directions, for the right
+reasons.
+
+**Measured — `tools/breedproof.py`, 358 checks, 0 failures.** 3 breeds × (as-authored + 9
+distortions) × feed and water = **60 care actions, 44,190 frames with a bowl on screen, 32,130 of
+them eating frames**, every frame stepped and read, none sampled. 7.5 minutes.
+
+- Worst head-to-belly clearance anywhere in the sweep: **+12.869** (shiba, `squatBody`, feed). The
+  three shipping breeds as authored: **31.1 / 33.5 / 32.1** (feed), **30.3 / 32.5 / 31.2** (water).
+- At the shipping `bobDepth` the worst *eating* frame is one of the first ~20, while the stoop spring
+  is still arriving — not the deepest bite. The gate prints a second column that skips the first 60
+  eating frames so the bite regime is visible separately, because a single minimum hides which of
+  the two is binding. The bite only becomes the worst frame once `bobDepth` is raised.
+- **`scaleRange` is `[1.1, 2.2]` and the solved raw scale ranges from 0.0159 to 4.227 across the
+  distortions.** 38 of the 60 runs clamp. Per breed, over the nine distortions on feed: **shiba 7 of
+  9, cockapoo 6 of 9, schnoodle 6 of 9** — §18.6 records six of nine, and the agreement is
+  encouraging rather than evidential, because the distortion *magnitudes* here are this file's and
+  not the lost file's.
+- Where the scale clamps, `care.debug.scaleClamped` is true on **every** on-screen frame, and where
+  it fits it is false on every frame — including all three shipping breeds as authored, which is the
+  half `bowlgate.py` already covered. §18.6's "the clamp is a loud failure rather than a silent
+  fallback" is now checkable rather than recorded.
+- **He still gets to the food in all 60 runs**, clamped or not. A clamped scale is a badly-placed
+  bowl, not a hung action, and conflating the two would make the loud-clamp check unfalsifiable.
+
+### 28.2 `tools/gates.py` — eleven gates, one table
+
+Each gate runs as a **subprocess**, not an import: they all `sys.exit()` out of `main()`, several
+keep module-level mutable state, two are `async` with their own `asyncio.run`, and `bowlpixels.py`
+can take a browser process down with it (§27.2). A gate that dies has to be survivable.
+
+**The exit code is the truth and the printed text is parsed only for counts.** All eleven agree on
+the exit code and disagree on everything else, so three summary formats are parsed rather than nine
+working files edited: `"N passed, M failed"`, `"ALL PASS"`/`"FAILED"`, and `check-precache`'s
+`"OK: N entries"`.
+
+Two places where §27.4's rule about sample size applies to the *summariser*:
+
+- **`bowlpixels` and `bowlperf` publish no check count**, so the table prints `(none)` and the
+  headline total says out loud that it is over the other nine only. Writing 1, or leaving the column
+  blank, would both read as a number.
+- **`check-precache`'s 54 is 54 precache entries, not 54 assertions.** It is one check over 54 files.
+  Folding it into a checks total would inflate the headline by 54 for free, so it carries its own
+  unit and the total only adds up rows whose unit is `checks`.
+
+`--only name[,name]`, `--fast` (drops `bowlpixels`; `breedproof` runs one breed, feed only — and the
+table says so on every fast run), `--list`, `--echo`. `--list` also names any `tools/*gate.py` that
+is missing from the roster: the roster is written out by hand because ordering and the `--fast`
+marking are judgements a glob cannot make, but a glob can notice a gate nobody wired up, which is
+how §27's ten gates went uncommitted for months.
+
+**The runner was tested against gates that lie, die and do not exist**, because a runner that
+reports green over a crash is worse than no runner:
+
+| stub | reported |
+|---|---|
+| prints `"999 passed, 0 failed"`, exits 3 | **FAIL**, and the 999 is excluded from the headline total |
+| `os._exit(1)` with no output at all | **FAIL**, `(no output at all)` |
+| file does not exist | **FAIL**, `no such file` |
+
+### 28.3 CI, and the honest limit of it
+
+`tools/_drive.py`'s `browser()` resolved the *system* Chrome and nothing else, because this machine
+cannot download a Playwright build — §27.2's whole subject. In CI the reverse holds. It now prefers
+Playwright's own chromium and falls back to a system Chrome or Edge, so the same gate files run in
+both places with no flag, and the existing comment's explanation is corrected rather than deleted.
+`.github/workflows/gates.yml` runs `--fast` on push and PR and the full suite nightly and on manual
+dispatch.
+
+**Two bugs in that one small change, both found by running it rather than by reading it:**
+
+- **The fallback cannot be a `try`/`except` around `launch()`.** `bowlperf.py` and `bowlpixels.py`
+  drive the *async* api, where `launch()` returns a coroutine that raises nothing until it is
+  awaited — so the first version worked for the eight sync gates and silently never fired for those
+  two, which are precisely the two §27.2 caught being unrunnable. The suite caught it mid-run. It is
+  a synchronous path test now, which behaves the same under both apis.
+- **The path test named a different file from the launch.** `chromium.executable_path` reports the
+  *chromium* build; a default headless `launch()` prefers the separate *headless shell* build. So
+  the probe could report the browser present and the launch then fail — a probe that lies, which is
+  the entire subject of §27. It launches the probed path explicitly now.
+
+The bundled-chromium branch **cannot be run for real on this machine**, so it was faked: a directory
+junction from `%LOCALAPPDATA%\ms-playwright\chromium-1234\chrome-win64` to the system Chrome install.
+`bundled()` then resolved and **`toastgate` (sync api) and `bowlperf` (async api) both passed through
+that branch**; with the junction removed, `bundled()` returns `None` and `bowlperf` still passes on
+the fallback. Both branches are therefore exercised, but the *real* bundled build has still never run
+here — only in CI, where the workflow's own "check the browser is really there" step is what makes
+its absence a clear failure instead of eleven separate ones.
+
+**CI here is a signal, not a gate, and that is stated in the workflow rather than implied.** This
+repo deploys by GitHub Pages from a branch, so **a `git push` *is* the deploy** — the files are live
+on her phone before the workflow has finished installing Python. Nothing in that file can stop a
+broken tree reaching the player; it can only say so a few minutes later. §27.6 recorded the position
+as "nothing stands between a broken tree and her phone except somebody running these", and a green
+tick is very good at looking like it changed that. What changed is that "somebody running these" is
+now automatic and leaves a record.
+
+### 28.4 Measured
+
+The whole suite, one command, on the dev machine (system Chrome):
+
+| gate | result | wall |
+|---|---|---|
+| `check-precache` | 54 entries, matches the tree | 0.2s |
+| `toastgate` | 13 / 13 | 5.0s |
+| `timegate` | 20 / 20 | 4.5s |
+| `findsgate` | 28 / 28 | 8.8s |
+| `shopgate` | 26 / 26 | 41.7s |
+| `reachgate` | 45 / 45 | 55.3s |
+| `traingate` | 63 / 63 | 151.6s |
+| `bowlperf` | ALL PASS | 57.7s |
+| `bowlgate` | 69 / 69 | 70.8s |
+| `breedproof` | **358 / 358** | 448.9s |
+| `bowlpixels` | ALL PASS | 706.2s |
+| **11 gates** | **622 / 622 checks, 0 failures** | **1550.5s (25.8 min)** |
+
+`sw.js` `VERSION` unchanged; `PRECACHE` unchanged and verified (54 entries, matches the tree). The
+new files are `tools/breedproof.py`, `tools/gates.py` and `.github/workflows/gates.yml`; the edits
+are to `tools/_drive.py` and to the browser-launch comments in `bowlperf.py` and `bowlpixels.py`.
+
+### 28.5 Left imperfect
+
+- **The head-vs-belly assertion has slack set by `headMaxShare`, and only the clamp defends it.**
+  Whenever a dog's head-to-belly room is positive, the apply-time clamp makes the clearance at least
+  `(1 − headMaxShare)` of that room, so the assertion is an inequality with structural slack rather
+  than an independent measurement. It is not zero by construction — both injected faults drive it
+  negative and the `bobDepth` control moves it — but what it really watches is that *the rendered
+  pose obeys the solved budget*. A bias path in `care.js` that forgot `maxHeadDrop()` is exactly
+  what it would catch, and that is a narrower claim than "the head is never in the belly for any
+  reason".
+- **Nobody has looked at a distorted dog.** All 60 runs are numbers. §18.5's distinction between
+  *looked at* and *only measured* puts every one of these firmly in the second column, and §18.5
+  already listed "the six clamped distortion cases" there. A `--shots` flag would be cheap and was
+  not written.
+- **The six-of-nine agreement with §18.6 is a coincidence until proven otherwise.** The clamp count
+  depends entirely on the distortion magnitudes, which were chosen here and are not recoverable from
+  the lost file. Landing on 7/6/6 is reassuring and is not the same measurement.
+- **The real bundled chromium has never run on this machine**, only a junction pointing at the system
+  Chrome (28.3). The first genuine CI run is also the first real test of that branch.
+- **`bowlperf` asserts milliseconds and CI runners are slower and noisier than a laptop.** §27.5's
+  1.6–1.7 ms median is a dev-machine number. If the nightly starts failing on timing alone, the
+  right fix is to stop asserting wall-clock budgets on a shared runner, not to raise the threshold
+  until it is green.
+- **`--fast` is what push and PR actually run**, so the routine signal is nine gates plus a
+  one-breed `breedproof`, not the suite in 28.4. The table prints that on every fast run, but it is
+  worth writing down here too: the common case is the smaller claim.
+- **26 minutes is too long to run before every commit**, which means in practice it will be run
+  before some of them. That is what the nightly job is for, and it is a worse instrument than a
+  fast suite somebody actually runs.
+- **CI cannot block a bad tree from reaching the player** (28.3). Making it able to would mean
+  deploying from a workflow instead of from a branch, which converts a deploy that cannot break into
+  one that can. Deliberately not done: this suite is not yet trusted enough to be given that power.
+- Blocker 1.7 (the real-phone pass) is still untouched, and nothing here touches it.
