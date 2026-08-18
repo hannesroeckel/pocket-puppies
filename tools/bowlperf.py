@@ -11,7 +11,7 @@ the action where the split is live, at DPR 2 and DPR 3.
 
 Usage:  py tools/bowlperf.py [breeds]
 """
-import sys, os, json, asyncio, functools, http.server, socketserver, threading, pathlib
+import sys, pathlib as _pl, os, json, asyncio, functools, http.server, socketserver, threading, pathlib
 
 ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
 BUDGET = {"workMedian": 4.0, "workP95": 8.0}   # 60fps is 16.7ms; baseline was 1.7 / 2.3
@@ -72,6 +72,17 @@ async def measure(pg, base, breed, mode, label, out):
     return s
 
 
+
+# ---- LAUNCHING A BROWSER -------------------------------------------------
+# `p.chromium.launch()` wants Playwright's OWN Chromium build. This machine
+# cannot download one (the network refuses it), so every committed gate here
+# was as unrunnable as the ones that were never committed at all. `_drive.py`
+# resolves the SYSTEM Chrome or Edge instead, and that is the only difference.
+def _launch(p):
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import _drive
+    return _drive.browser(p)
+
 async def main():
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     breeds = argv[0].split(",") if argv else ["schnoodle"]
@@ -80,7 +91,7 @@ async def main():
 
     out, errs, ext = {}, [], []
     async with async_playwright() as p:
-        br = await p.chromium.launch()
+        br = await _launch(p)
         for dpr in (2, 3):
             for scheme in ("light", "dark"):
                 for reduced in (False, True):

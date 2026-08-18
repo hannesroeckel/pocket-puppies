@@ -124,7 +124,7 @@ Usage
 
 Exit code 0 = every frame of every action passed.
 """
-import sys, os, json, asyncio, functools, http.server, socketserver, threading, pathlib
+import sys, pathlib as _pl, os, json, asyncio, functools, http.server, socketserver, threading, pathlib
 
 ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
 PORT = 8823
@@ -850,6 +850,17 @@ def judge(rows, marks, old, narrow=False):
     return res
 
 
+
+# ---- LAUNCHING A BROWSER -------------------------------------------------
+# `p.chromium.launch()` wants Playwright's OWN Chromium build. This machine
+# cannot download one (the network refuses it), so every committed gate here
+# was as unrunnable as the ones that were never committed at all. `_drive.py`
+# resolves the SYSTEM Chrome or Edge instead, and that is the only difference.
+def _launch(p):
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import _drive
+    return _drive.browser(p)
+
 async def main():
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     old = "--old" in sys.argv
@@ -869,8 +880,16 @@ async def main():
            ", NO getTransform (fallback path)" if nogt else "",
            ", PRE-§19.7 VESSEL (the control for assertion B)" if narrow else ""))
     async with async_playwright() as p:
-        br = await p.chromium.launch()
         for breed in breeds:
+            # ---- A FRESH BROWSER PER BREED ------------------------------------
+            # One browser for all three crashed the tab partway through the
+            # second breed ("Target crashed" inside an evaluate), and a single
+            # breed on its own passed every time. Closing the CONTEXT was already
+            # being done; it is the browser PROCESS that does not give the memory
+            # back — each breed holds three DPR-3 390x844 ImageData buffers plus a
+            # replay canvas, which is tens of megabytes of pixels per action.
+            # Relaunching costs a second and makes the full run possible at all.
+            br = await _launch(p)
             ctx = await br.new_context(viewport={"width": 390, "height": 844},
                                        device_scale_factor=dpr, is_mobile=True,
                                        has_touch=True,
@@ -915,7 +934,7 @@ async def main():
                           % (k, c["phase"], c["bowlAlpha"], c["maskPx"],
                              c["torsoInMask"], c["backOverTorso"], c["defect"]))
             await ctx.close()
-        await br.close()
+            await br.close()
     out["consoleErrors"] = errs
     out["allPass"] = ok and not errs
     tag = "old" if old else ("narrow" if narrow else ("fix-nogt" if nogt else "fix"))

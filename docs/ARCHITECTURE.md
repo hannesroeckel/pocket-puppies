@@ -3105,3 +3105,99 @@ a no-touch control rather than by reading the diff.
 - **It has no cooldown of its own.** Tapping his paw repeatedly plays the clip repeatedly; the
   general poke/overstimulation model is what eventually damps it, and that model was tuned for
   jabbing a nose rather than for shaking a paw.
+
+---
+
+## 27. The gates are in the repo, and two of them could not fail
+
+No product change. `sw.js` does not move and the cache does not bump — nothing in
+`/src` is touched by any of this.
+
+Ten gate scripts are cited through ARCHITECTURE 16–20 as the proof of the bowl, the floor, the
+occlusion split, the breed independence and the reachable play area. **None of them was ever
+committed**, they lived in `C:\tmp\pp7`, `pp8` and `pp11`, and they are gone from this machine. So
+for months the position was: the numbers were real when they were taken, and nobody — including
+whoever took them — could take them again.
+
+### 27.1 What was actually missing, and what only looked missing
+
+| cited | status |
+|---|---|
+| `pp11\reachgate.py` | **rewritten** as `tools/reachgate.py` |
+| `pp8\bowl3.py`, `pp8\floor1.py` | **rewritten** as `tools/bowlgate.py`, with a large caveat (27.3) |
+| `pp8\occl.py` | **not rewritten, and does not need to be** — `tools/bowlpixels.py` is committed and supersedes it entirely |
+| `pp8\stage6.py` | superseded by `tools/shopgate.py` |
+| `pp7\bowl.py`, `pp7\bowl2.py`, `pp7\perfab.py` | superseded by `bowlpixels.py` / `bowlperf.py` |
+| `pp8\audio8.py`, `pp8\breedproof.py` | still missing. Audio needs an ear (closed by GIFT-READY §9.1 instead) and breed independence is worth rebuilding next |
+
+### 27.2 Two committed gates could not be launched at all
+
+`tools/bowlpixels.py` and `tools/bowlperf.py` were in the repo and unrunnable: both call
+`p.chromium.launch()`, which wants Playwright's own Chromium build, and this network refuses to
+download one. So *"the gate is committed"* and *"the gate can be run"* had quietly come apart. Both
+now resolve the system Chrome through `tools/_drive.py`, which is a one-line change each.
+
+`bowlpixels.py` then crashed the tab partway through the second breed — `Target crashed` inside an
+evaluate, while a single breed passed every time. It was already closing its context per breed; it
+is the browser **process** that does not give the memory back, and each breed holds three DPR-3
+390×844 `ImageData` buffers plus a replay canvas. A fresh browser per breed costs a second and makes
+the full run possible at all. **Both now pass: `bowlpixels.py` ALL PASS across three breeds ×
+feed/water, `bowlperf.py` ALL PASS at DPR 2 and 3, light and dark, normal and reduced motion.**
+
+### 27.3 The bowl's floor check is zero by construction — the third time
+
+§18.2 replaced the discredited `bowlFloorY` comparison with one against `soleLiveY`, "the bottom
+edge of the paw `dog/draw.js` is drawing THIS FRAME". Rebuilding that check produced a gap of
+**exactly 0.000 on every frame, of every action, of every breed, at every inset**, which is the
+signature this project has already been burned by twice. So it was tested the only way that settles
+it — by breaking the game on purpose, mid-action:
+
+| injected fault | resulting gap |
+|---|---|
+| `dims.pawScale × 1.5` — **the exact historical defect (§18.2)** | 0.000 |
+| `rig.place.y + 12` | 0.000 |
+| `rig.sy = 1.08` | 0.000 |
+
+Three faults, one of them the very bug whose absence hid the second bowl defect, and the number
+never moved: both sides resolve against the same `rig.floorV` at draw time, so the comparison is an
+identity. **It is therefore reported and never asserted**, exactly as `bowlFloorY` is, and
+`tools/bowlgate.py` runs that injection itself so nobody can mistake it for a check again.
+
+The conclusion is worth stating plainly: **geometry cannot verify the bowl's depth through the
+published numbers.** The only check that can fail is pixels, and it is `bowlpixels.py` — which is
+the argument that file's own header has been making since stage 8.
+
+### 27.4 Every new gate proves it can fail
+
+The lesson above is now a rule. `tools/reachgate.py` injects a prop **inside the nav bar** and
+requires `liveHits` to notice; `tools/bowlgate.py` injects three faults and reports that none of
+them moves its number. Two things fell out of writing those self-tests:
+
+- **The injection point had to be derived, not typed.** y 782 is the historical defect's value at
+  inset 40; at inset 80 the bar sits higher, so 782 falls *below* it, the audit correctly reported
+  zero, and the gate called that a failure. Deriving the point from `reach.bottom` is §20's own
+  lesson, applied to the thing testing §20.
+- **A gate must not claim a bigger sample than it takes.** The reach exercise audits ~1,146 frames
+  per inset; §20.5's sweep took ~2,900. The threshold records what this one actually drives.
+
+### 27.5 What was measured
+
+| gate | result |
+|---|---|
+| `tools/reachgate.py` | **45 checks, 0 failures.** `liveHits` 0 at insets 0/20/40/80 over ~1,146 audited frames each, through throw → chase → return → flinch-drop → dragged-to-843, both resting bowls and two walk finds. The flinch case is pickable with a real pointer at every inset, and no tap reaches the nav. An injected prop inside the bar is caught at all four. |
+| `tools/bowlgate.py` | **69 checks, 0 failures.** Feed and water × 3 breeds × insets 0/40, every frame of every action: the scale is never clamped, he reaches the eating phase, wash still takes dirt off and brushing still raises the coat. The base-vs-sole gap is reported, not asserted, plus the three-fault injection. |
+| `tools/bowlpixels.py` | **ALL PASS**, 3 breeds × feed/water, DPR 3 — now runnable |
+| `tools/bowlperf.py` | **ALL PASS**, median 1.6–1.7 ms — now runnable |
+
+### 27.6 Left imperfect
+
+- **`breedproof.py` is still missing.** §18.6 cites nine synthetic proportion distortions proving
+  the eating geometry holds for breeds nobody has drawn; six of nine clamp. `bowlgate.py` asserts
+  the clamp never fires for the three real breeds, which is the shipping case but not the claim.
+- **`bowlgate.py`'s honest content is thinner than its length suggests.** With A demoted to a
+  report, what it really asserts is that the action completes, the scale is unclamped, and wash and
+  brush still work. That is worth having, and it is not the floor check it was rebuilt to be.
+- **Nothing runs the suite as one command.** Six gates, six invocations, ~25 minutes. A runner is
+  obvious and was not written.
+- **No gate runs in CI, because there is no CI.** A `git push` is the deploy; nothing stands between
+  a broken tree and her phone except somebody running these.
