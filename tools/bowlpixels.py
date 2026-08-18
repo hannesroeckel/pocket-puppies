@@ -852,10 +852,17 @@ def judge(rows, marks, old, narrow=False):
 
 
 # ---- LAUNCHING A BROWSER -------------------------------------------------
-# `p.chromium.launch()` wants Playwright's OWN Chromium build. This machine
-# cannot download one (the network refuses it), so every committed gate here
-# was as unrunnable as the ones that were never committed at all. `_drive.py`
-# resolves the SYSTEM Chrome or Edge instead, and that is the only difference.
+# A bare `p.chromium.launch()` wants Playwright's OWN Chromium build. This
+# machine cannot download one (the network refuses it), so every committed gate
+# here was as unrunnable as the ones that were never committed at all (§27.2).
+# `_drive.browser()` now takes the bundled build WHEN IT IS THERE — which is the
+# case in CI, where `playwright install` works and no system Chrome sits at a
+# predictable path — and falls back to the system Chrome or Edge, which is the
+# case here. Same file, same numbers, either way; that is the only difference.
+#
+# NOTE FOR ANYONE EDITING `_drive.browser`: this gate is ASYNC. `launch()` gives
+# back a coroutine that raises nothing until it is awaited, so a fallback built
+# out of try/except around the launch would never fire for this file.
 def _launch(p):
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import _drive
