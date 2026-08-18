@@ -7,3 +7,7 @@
 # Working scratch
 /tools/__pycache__/
 *.pyc
+
+# A subagent's git worktree lands here — a complete second copy of the tree,
+# inside the tree. Never committed, and tools/check-precache.py skips it too.
+/.claude/worktrees/

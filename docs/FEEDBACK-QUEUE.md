@@ -314,6 +314,13 @@ the same buttercup forever.
 > the scene mounted, so `setInset` had been **dead for the sheet, the shop, the kennel and the
 > trick list** for the whole session on a phone that is never rotated. ARCHITECTURE 23.
 
+> **Follow-up, 2026-08-18 — the last inert find is gone.** The two `gift` finds (the brass bell and
+> the red ribbon) are **wearable** now: `dog.wear.accessory` had been in the save since stage 1 with
+> nothing writing it and nothing drawing it. They go on his collar — or on his bare neck, since a
+> found ribbon must not wait on a 90-point collar — from a WEAR chip on their tile in the
+> collection. So every one of the seventeen finds now does something: four are fetched, four are in
+> the album, two are worn, and the rest are displayed or sold. ARCHITECTURE 29.
+
 ## 7. The other dog does not get hungry while she is away from it ✅ FIXED on `feature/per-dog-time` (cache 8.9.0)
 
 > "when switching between dog, it seems like one just picks up where one left the dog, although

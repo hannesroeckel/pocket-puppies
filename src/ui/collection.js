@@ -66,6 +66,11 @@ export const COPY = {
   nothingYet: (P) => `${P.they === 'they' ? 'They have' : (P.they === 'he' ? 'He has' : 'She has')} not found anything yet`,
   hintTakeWalk: () => 'Take him for a walk and he will bring something back',
   full: () => 'The sill is full — put something away first',
+  /* the chip on a wearable find. "Worn" rather than "Take off", because the
+     chip is a STATE she toggles and not a command — the same reason the shop
+     says OWNED rather than "buy again". */
+  wear: () => 'Wear',
+  worn: () => 'Worn',
 };
 
 /** where the four routes are, in words, for the album */
@@ -89,6 +94,7 @@ export function createCollection(opts = {}) {
   /* resolved on open and after every change: three lists and nothing derived
      at draw time, so the layout and the hit test cannot disagree */
   let sill = [], box = [], album = [];
+  let canWear = new Set(), worn = '';
 
   const pad = CL.pad;
 
@@ -98,6 +104,14 @@ export function createCollection(opts = {}) {
     sill = game.onShow();
     box = game.inBox();
     album = game.album();
+    /* WHAT HE CAN WEAR, AND WHAT HE IS WEARING. The two `gift` finds — the
+       brass bell and the red ribbon — are the only finds that go on his collar,
+       and until the accessory slot was drawn they were the two with no purpose
+       at all (ARCHITECTURE 23.7). A wearable thing can be on the sill, in the
+       box, or on the dog, and the third is not exclusive with the other two:
+       he wears it, and the shelf keeps its place. */
+    canWear = new Set(game.accessories ? game.accessories() : []);
+    worn = game.wornAccessory || '';
   }
 
   /* ---- LAYOUT ---------------------------------------------------------
@@ -142,6 +156,13 @@ export function createCollection(opts = {}) {
       w: cw, h: CL.slotH - CL.slotGap,
     };
   }
+  /** the little WEAR / WORN chip on a wearable tile, or null */
+  function wearChip(r, id) {
+    if (!canWear.has(id)) return null;
+    const w = CL.chipW, h = CL.chipH;
+    return { x: r.x + r.w - w - 4, y: r.y + 4, w, h, id };
+  }
+
   /** the i-th thing standing on the sill, laid out along it */
   function sillSlot(i) {
     const r = sillRect();
@@ -202,6 +223,16 @@ export function createCollection(opts = {}) {
          drag: a drag on a phone-sized grid is a way to drop things by accident,
          and there is nothing here worth the precision. */
       for (let i = 0; i < sill.length; i++) {
+        const q = wearChip(sillSlot(i), sill[i]);
+        if (q && hit(q, ev)) {
+          press(sill[i]);
+          game.equipAccessory(worn === sill[i] ? '' : sill[i]);
+          sound(CL.sfx.wear);
+          refresh();
+          return true;
+        }
+      }
+      for (let i = 0; i < sill.length; i++) {
         if (hit(sillSlot(i), ev)) {
           press(sill[i]);
           game.setOnShow(sill[i], false);
@@ -211,6 +242,20 @@ export function createCollection(opts = {}) {
         }
       }
       const by = boxTop();
+      /* THE CHIP IS TESTED BEFORE THE TILE IT SITS ON. Otherwise tapping "Wear"
+         would put the thing away instead, which is the same class of mistake as
+         a toast covering its own subject: the control that is on top has to be
+         the control that answers. */
+      for (let i = 0; i < box.length; i++) {
+        const q = wearChip(slotRect(by, i), box[i]);
+        if (q && hit(q, ev)) {
+          press(box[i]);
+          game.equipAccessory(worn === box[i] ? '' : box[i]);
+          sound(CL.sfx.wear);
+          refresh();
+          return true;
+        }
+      }
       for (let i = 0; i < box.length; i++) {
         if (hit(slotRect(by, i), ev)) {
           press(box[i]);
@@ -269,6 +314,20 @@ export function createCollection(opts = {}) {
         c.fill();
         drawFind(c, sill[i], q.x + q.w / 2, q.y + q.h - 12 + dy, CL.glyph, i);
         c.restore();
+        const wq = wearChip(q, sill[i]);
+        if (wq) {
+          const on = worn === sill[i];
+          c.save();
+          tactile(c, { x: wq.x, y: wq.y, w: wq.w, h: wq.h, r: R.full,
+                      p: 0, face: on ? SURF.chipStrong : SURF.chip, fade: a });
+          c.restore();
+          drawText(g, on ? COPY.worn() : COPY.wear(), {
+            ...type('labelSm', { weight: 800 }),
+            x: wq.x + wq.w / 2, y: wq.y + wq.h / 2, anchor: 'free', align: 'center',
+            ink: on ? INK.onStrong : INK.body, over: on ? SURF.chipStrong : SURF.chip,
+            fade: a, maxWidth: wq.w - 4,
+          });
+        }
       }
       if (!sill.length) {
         drawText(g, COPY.sillEmpty(), {
@@ -315,6 +374,20 @@ export function createCollection(opts = {}) {
            Measured against the glyph's real extent, not nudged again. */
         drawFind(c, box[i], q.x + q.w / 2, q.y + f.dy + q.h - CL.nameBand - 8, CL.glyph, i);
         c.restore();
+        const wq = wearChip(q, box[i]);
+        if (wq) {
+          const on = worn === box[i];
+          c.save();
+          tactile(c, { x: wq.x, y: wq.y + f.dy, w: wq.w, h: wq.h, r: R.full,
+                      p: 0, face: on ? SURF.chipStrong : SURF.chip, fade: a });
+          c.restore();
+          drawText(g, on ? COPY.worn() : COPY.wear(), {
+            ...type('labelSm', { weight: 800 }),
+            x: wq.x + wq.w / 2, y: wq.y + f.dy + wq.h / 2, anchor: 'free', align: 'center',
+            ink: on ? INK.onStrong : INK.body, over: on ? SURF.chipStrong : SURF.chip,
+            fade: a, maxWidth: wq.w - 4,
+          });
+        }
         drawText(g, nameOf(box[i]), {
           ...type('labelSm', { weight: 600, track: 0 }),
           x: q.x + q.w / 2, y: q.y + f.dy + q.h - CL.nameBand / 2 - 2, anchor: 'free', align: 'center',
@@ -379,6 +452,20 @@ export function createCollection(opts = {}) {
         open, weight: +slide.x.toFixed(3),
         sill: sill.slice(), box: box.slice(),
         album: album.map((m) => ({ met: m.met, route: m.route, times: m.times })),
+        canWear: Array.from(canWear), worn,
+        /* the WEAR chips' own rects. Published because a gate has to be able to
+           tap the control rather than sweep the screen looking for it, and
+           because the thing being asserted is that the CHIP answers and not the
+           tile underneath it — which needs both rects to be known. */
+        /* and the tiles themselves, for the same reason */
+        slots: sill.map((id, i) => ({ id, ...sillSlot(i) }))
+          .concat(box.map((id, i) => ({ id, ...slotRect(boxTop(), i) })))
+          .map((q) => ({ id: q.id, x: +q.x.toFixed(1), y: +q.y.toFixed(1),
+                         w: +q.w.toFixed(1), h: +q.h.toFixed(1) })),
+        chips: sill.map((id, i) => wearChip(sillSlot(i), id))
+          .concat(box.map((id, i) => wearChip(slotRect(boxTop(), i), id)))
+          .filter(Boolean)
+          .map((q) => ({ id: q.id, x: +q.x.toFixed(1), y: +q.y.toFixed(1), w: q.w, h: q.h })),
         close: closeRect(),
       };
     },

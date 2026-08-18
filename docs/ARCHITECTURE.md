@@ -3201,3 +3201,110 @@ them moves its number. Two things fell out of writing those self-tests:
   obvious and was not written.
 - **No gate runs in CI, because there is no CI.** A `git push` is the deploy; nothing stands between
   a broken tree and her phone except somebody running these.
+
+---
+
+## 29. He can wear what he finds (`feature/wear-finds`) — as built
+
+`dog.wear.accessory` has been in the save since **stage 1** and `inventory.accessories` since stage
+6, and between them they did nothing at all: no code wrote the slot and no code drew it. That is
+why the little brass bell and the red ribbon he brings home from the high street were the two finds
+left with no purpose after the collection landed — recorded in 23.7 as "nothing is wearable... so
+making them wearable would promise something invisible".
+
+Cache **8.14.0**. No schema change: the field was always there.
+
+### 29.1 What may go in it is what he FOUND
+
+Not a shop row. The catalogue is full at twelve (24.3) and a bought bow would need a thirteenth. The
+two `gift` finds are the wearable ones, so the slot is earned by walking rather than paid for — and
+it is the one category the queue left open for a find: *"playable, wearable, displayable, sellable,
+or a keepsake with a stated purpose"*. This is the wearable one, finally.
+
+`equipAccessory` refuses anything she has not brought home, and refuses it in the **mutator** rather
+than in the panel, so a hand-edited or imported save cannot dress him in something that never came
+home. One at a time: two things hanging off one collar is a jumble at 16 units, and the slot was
+always singular.
+
+### 29.2 Drawn inside the collar's own transform
+
+Four lines rather than forty, because that frame already sits on the published neck joint, already
+takes its width from `dims`, and already follows the head down into the bowl. An accessory placed
+there inherits every one of those properties instead of re-deriving them and getting one of them
+wrong on one breed.
+
+And it is drawn by **`drawFind`** — the same function that draws the bell on the window sill and in
+the collection — so the thing he is wearing and the thing she found are one drawing. Two bells that
+drift apart is the class of defect `BALANCE.train.roster` and `silhouette.front` both have notes
+about.
+
+**It does not need a collar.** A found ribbon must not be invisible until she has earned the
+90-care-point collar, so the block runs when either is set and the band itself is drawn only for a
+real collar.
+
+### 29.3 Per-accessory placement, because rendering it showed one shared offset was wrong
+
+Both started at 0.30 of the collar's half-width below the neck joint. The bell hangs *below* the
+chest ruff and read perfectly; the ribbon — wider, flatter — was drawn at the same point and was
+**almost entirely swallowed by the fur**, a pink smudge with a bow's outline somewhere inside it. A
+bow sits lower and bigger than a bell dangles: `bell {s: 0.42, y: 0.30}`, `ribbon {s: 0.62, y: 0.52}`.
+
+### 29.4 The WEAR chip, and why it is tested before the tile
+
+A wearable find's tile in the collection gets a small **WEAR / WORN** chip. It says *Worn* rather
+than *Take it off* because it is a state she toggles, not a command — the same reason the shop says
+OWNED rather than "buy again".
+
+The chip is hit-tested **before** the tile it sits on. Otherwise tapping WEAR would put the thing
+away instead, which is the same species of mistake as a toast covering its own subject: the control
+that is on top has to be the control that answers. The panel publishes both rects (`chips`, `slots`)
+so the gate can tap the control rather than sweep the screen looking for it — and so that "the chip
+answers, not the tile" is assertable at all.
+
+### 29.5 Measuring a drawing on a living dog (`py tools/weargate.py`)
+
+**17 checks, 0 failures.** Asserted on device pixels rather than on state, because "the slot is set"
+is precisely what was already true for years while nothing appeared on screen.
+
+Getting that measurement honest took three attempts, and the failures are the useful part:
+
+1. **A hash of the neck region, required to return to its old value.** The dog is alive: he breathes
+   and the idle director moves him, so two samples ninety frames apart differ whatever he is or is
+   not wearing.
+2. **A magnitude against a per-sample noise floor.** Better, and still wrong: the floor swung
+   between **140 and 10,644** changed pixels between runs, because an idle clip fires and a head
+   tilt moves the whole neck region. Suppressing idle and letting the springs settle got it down to
+   ~500 — but `afterRemoval` came back as large as the signal, i.e. six frames of breathing swamped
+   a bell.
+3. **Redrawing at frozen time.** `stepFixed` clamps a zero dt to a fallback but keeps a tiny one, so
+   a step of **1e-6 seconds draws a frame while advancing the animation by nothing measurable**. The
+   delta between two of those is the accessory and only the accessory.
+
+| measured | result |
+|---|---|
+| the bell, worn | **356 pixels** changed in a 173×156 box, against a noise floor of **0** |
+| the ribbon, worn | **530 pixels**, noise floor **0** |
+| either, removed | **0 pixels** differ from bare |
+| with no collar earned | 336 pixels — visibly there |
+| refusals | a flower, a stick, a photo, junk, a collar id, and a gift she has not found: all refused, no coins or state moved |
+| persistence | survives a reload; per dog, not per save |
+| the chip | wears it, does not put the tile away, toggles off on a second tap, and the tile underneath still puts it away |
+| looked at | `review/wear-bell.png`, `review/wear-ribbon.png`, `review/collection.png` |
+
+One more thing worth recording: the `willReadFrequently` console warning this gate provokes is the
+**gate's own**, from reading the canvas back to count pixels. Listening for it would be asserting on
+the instrument, so it is filtered by name and everything else still fails the run.
+
+### 29.6 Left imperfect
+
+- **The ribbon is subtle.** It reads as a bow at the base of his chest ruff, and it is honestly the
+  size a small ribbon on a puppy would be, but it is much quieter than the bell. Making it obvious
+  would mean drawing it over the ruff rather than under it, which is a layering change in
+  `dog/draw.js` rather than a placement one.
+- **Only two things are wearable**, because only two finds are `gift`. A bandana and a bow were on
+  his list for the shop; they still are not in it, because the catalogue is full.
+- **Nothing else notices.** He does not jingle when he moves with the bell on, the obedience judge
+  does not remark on it, and grooming does not interact with it. A bell that made a sound on the
+  bolt of a reunion would be lovely and is a `engine/sfx.js` job.
+- **The kennel does not show it.** `roster()` reports each dog's collar and not the accessory, so
+  the card for a dog wearing a ribbon looks the same as one who is not.

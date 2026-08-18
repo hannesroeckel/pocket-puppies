@@ -2366,6 +2366,21 @@ export const BALANCE = {
        lie in the one place the player is deciding. `collarRed` is the EARNED
        one (90 care points); the rest are bought. */
     wear: {
+      /* ---- A FOUND ACCESSORY, ON HIS COLLAR -----------------------------
+         `drawFind` draws these at shelf size — about 24 units for a bell — and a
+         24-unit bell on a 28-unit collar band is a cowbell, so they are scaled
+         down to about the size of the `collarTag` disc the same block draws.
+
+         PER ACCESSORY, BECAUSE THEY HANG DIFFERENTLY. One shared offset put both
+         at 0.30 of the collar's half-width below the neck joint, and rendering it
+         showed why that is wrong: the bell hangs BELOW the chest ruff and reads
+         perfectly, while the ribbon — wider, flatter — was drawn at the same
+         point and almost entirely swallowed by the fur. A bow sits lower and
+         bigger; a bell dangles. `y` is a share of the collar's half-width. */
+      accessory: {
+        bell: { s: 0.42, y: 0.30 },
+        ribbon: { s: 0.62, y: 0.52 },
+      },
       collarRed: '#c9563f',
       collarBlue: '#5d90ad',
       collarGreen: '#7ba36a',
@@ -2538,13 +2553,16 @@ export const BALANCE = {
          measured rather than guessed. */
       nameBand: 20, glyphDrop: 30,
       albumRowH: 40, emptyH: 30, closeH: 42, bottomPad: 12,
+      /* the WEAR chip on a wearable find's tile. Small: it shares a 115-unit
+         slot with a glyph and a name, and it is the third thing in there. */
+      chipW: 44, chipH: 20,
       flash: 0.28,
       /* the sill's own hit rect in the room, which is what opens all this.
          Derived from `walk.shelf` rather than typed again — the shelf moved
          once already, and a tap target that has to be kept in step by hand is
          the same class of defect as the ball behind the nav bar. */
       tapPad: [18, 22, 22, 16],
-      sfx: { open: 'cue', close: 'pat-soft', put: 'bowl-set' },
+      sfx: { open: 'cue', close: 'pat-soft', put: 'bowl-set', wear: 'perk' },
     },
     /* the find card that names what he brought home */
     findCard: { y: 148, w: 260, h: 96, r: 20, dur: 4.6, fade: 0.42 },
