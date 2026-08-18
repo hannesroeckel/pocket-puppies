@@ -6,10 +6,21 @@ browser at the design viewport, with `requestAnimationFrame` stubbed and
 `Date.now` pinned, so every frame comes from an explicit step and nothing in
 the save ledger advances with wall-clock time while a check is thinking.
 
-The browser is the SYSTEM Chrome rather than a Playwright-managed build: this
-machine cannot download one (the corporate network refuses), and the thing
-being checked is canvas geometry and canvas type, which any recent Chromium
-draws identically.
+THE BROWSER IS WHICHEVER CHROMIUM IS ACTUALLY AVAILABLE, and the order of
+preference is now the other way round from how this file started.
+
+It used to resolve the SYSTEM Chrome and nothing else, because this development
+machine cannot download a Playwright-managed build — the corporate network
+refuses — and §27.2 records two committed gates that were unrunnable here for
+exactly that reason. In CI the opposite is true: a GitHub runner has no Chrome
+installed at a path anybody can predict, but `playwright install --with-deps
+chromium` works, and that is the supported thing.
+
+Neither environment can be made to look like the other, so `browser()` tries
+Playwright's own bundled chromium FIRST and falls back to a system Chrome or
+Edge. That way the same gate files run in both places without a flag, and the
+reason it is safe to accept either is unchanged: what these gates check is canvas
+geometry and canvas type, which any recent Chromium draws identically.
 """
 import functools, http.server, socketserver, threading, pathlib, os
 
@@ -40,11 +51,54 @@ def serve(root=ROOT):
     return "http://127.0.0.1:%d" % srv.server_address[1]
 
 
-def browser(p):
+def bundled(p):
+    """
+    The path Playwright would use for its own chromium, if that build is really
+    on disk — otherwise None.
+
+    IT IS A PATH TEST, NOT A TRY/LAUNCH, and that is not a style preference.
+    `bowlperf.py` and `bowlpixels.py` drive the ASYNC api, where
+    `p.chromium.launch()` returns a COROUTINE and raises nothing at all until the
+    caller awaits it — so wrapping the launch in `try/except` here would work
+    perfectly for the eight sync gates and silently never fire for the two async
+    ones, which are exactly the two §27.2 caught being unrunnable. Asking
+    `executable_path` for a path and asking the filesystem whether it exists
+    behaves identically under both apis and does not start a process to find out.
+
+    `executable_path` is a property that can raise on some driver states, hence
+    the guard; a machine with no bundled build simply reports a path that is not
+    there (`...\\ms-playwright\\chromium-NNNN\\chrome-win64\\chrome.exe`), which
+    is the case on the development machine this suite was written on.
+    """
+    try:
+        exe = p.chromium.executable_path
+    except Exception:                            # noqa: BLE001 — treated as absent
+        return None
+    return exe if exe and os.path.exists(exe) else None
+
+
+def browser(p, **kw):
+    """
+    Playwright's own chromium FIRST, a system Chrome or Edge second.
+
+    The bundled build wins when it is present because its version is pinned by
+    the install step and so a CI result is reproducible against it. The dev
+    machine has no bundled build and never will, so it falls through to the
+    system browser it has always used, at the cost of one `os.path.exists`.
+
+    Returns whatever `launch` returns — a Browser under the sync api, an
+    awaitable under the async one — so both kinds of caller are unchanged.
+    """
+    if bundled(p):
+        return p.chromium.launch(**kw)
     for exe in CHROME:
         if os.path.exists(exe):
-            return p.chromium.launch(executable_path=exe)
-    raise SystemExit("no system Chrome or Edge found")
+            return p.chromium.launch(executable_path=exe, **kw)
+    raise SystemExit(
+        "no browser: Playwright's bundled chromium is not installed, and no "
+        "system Chrome or Edge was found.\n"
+        "  In CI:   pip install playwright && playwright install --with-deps chromium\n"
+        "  Locally: install Chrome, or add its path to tools/_drive.py CHROME.")
 
 
 def page(b, inset=0, dpr=2, reduced=False, dark=True):

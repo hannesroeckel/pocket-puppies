@@ -1,0 +1,114 @@
+# =============================================================================
+# .github/workflows/gates.yml — run the gate suite on every push and PR.
+#
+# WHAT THIS IS FOR, STATED HONESTLY UP FRONT: **CI here is a signal, not a
+# gate.** This repository deploys by GitHub Pages from a branch, so a `git push`
+# IS the deploy — the new files are live before this workflow has finished
+# installing Python. Nothing in this file can stop a broken tree reaching the
+# player; it can only tell you, a few minutes later, that you broke it.
+#
+# That is worth having and it is worth being clear about, because §27.6 recorded
+# the real state of affairs as "a `git push` is the deploy; nothing stands
+# between a broken tree and her phone except somebody running these", and a
+# green tick is very good at looking like it changed that. It did not. What it
+# changes is that "somebody running these" is now automatic and has a record.
+#
+# If it ever needs to be a real gate, that is a different change: deploy from a
+# workflow that runs the suite first and publishes the artifact only on success,
+# instead of from a branch. Deliberately not done here — it converts the deploy
+# from something that cannot break into something that can, and this suite is
+# not yet trusted enough to be given that power.
+#
+# WHY --fast. The full suite is ~19 minutes of wall time on the machine it was
+# developed on, of which `bowlpixels.py` is about half: it reads back DPR-3
+# ImageData for three breeds x two actions and needs a fresh browser process per
+# breed to survive at all (§27.2). A shared CI runner is slower still. `--fast`
+# drops `bowlpixels` and runs `breedproof` over one breed, feed only — see the
+# summary table it prints, which says so on every run rather than leaving a
+# reader to assume the whole suite ran. The nightly job below runs the lot.
+#
+# WHY IT INSTALLS A BROWSER RATHER THAN USING THE RUNNER'S. `tools/_drive.py`
+# used to resolve the SYSTEM Chrome, because the development machine cannot
+# download a Playwright build. In CI the opposite holds, so `browser()` now
+# prefers Playwright's own chromium and falls back to a system one. Installing
+# it here is what makes the first branch of that the one CI takes, and it is why
+# the numbers are reproducible against a pinned browser version.
+# =============================================================================
+name: gates
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # 03:17 UTC, an odd minute on purpose: the top of the hour is the busiest
+    # slot on shared runners and a queued job is a job that times out.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run's answer worthless.
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    # The full suite is ~19 minutes locally and a runner is slower; 45 gives the
+    # nightly room without letting a hung browser burn an hour.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # `--with-deps` pulls the shared libraries headless chromium needs on a
+      # bare ubuntu image (libnss3, libatk, ...). Without it the browser
+      # installs and then will not start, which reads as a gate failure rather
+      # than as a missing package.
+      - name: install playwright and a chromium to drive
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install --with-deps chromium
+
+      # Belt and braces: if the install silently produced nothing, say THAT
+      # rather than letting eleven gates each report "no browser" separately.
+      - name: check the browser is really there
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          from playwright.sync_api import sync_playwright
+          import _drive
+          with sync_playwright() as p:
+              got = _drive.bundled(p)
+              print('bundled chromium:', got or 'ABSENT')
+              if not got:
+                  raise SystemExit('playwright install did not leave a chromium behind')
+          PY
+
+      # push / PR: the fast suite. nightly + manual: everything.
+      - name: run the gates
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python tools/gates.py
+          else
+            python tools/gates.py --fast
+          fi
+
+      # bowlpixels and bowlperf write their measurements to tools/*.json as they
+      # go. Kept on failure so a red run can be read without reproducing it, and
+      # `if: always()` because the interesting case is precisely the one where
+      # the step above exited non-zero.
+      - name: keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-measurements-${{ github.run_id }}
+          path: |
+            tools/bowlperf.json
+            tools/bowlpixels-*.json
+          if-no-files-found: ignore
+          retention-days: 14
