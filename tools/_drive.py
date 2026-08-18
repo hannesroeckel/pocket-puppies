@@ -89,8 +89,22 @@ def browser(p, **kw):
     Returns whatever `launch` returns — a Browser under the sync api, an
     awaitable under the async one — so both kinds of caller are unchanged.
     """
-    if bundled(p):
-        return p.chromium.launch(**kw)
+    own = bundled(p)
+    if own:
+        # LAUNCH THE EXACT FILE THAT WAS PROBED, by path, rather than letting a
+        # bare `launch()` choose. They are not the same browser.
+        #
+        # `chromium.executable_path` reports the CHROMIUM build:
+        #     ms-playwright\chromium-NNNN\chrome-win64\chrome.exe
+        # but a default headless `launch()` prefers the separate HEADLESS SHELL
+        # build:
+        #     ms-playwright\chromium_headless_shell-NNNN\chrome-headless-shell.exe
+        # which is a different download. Probing one and launching the other is a
+        # probe that can lie — and it did: an earlier cut of this function
+        # reported the bundled build present and then failed inside `bowlperf.py`
+        # with "Executable doesn't exist at ...chrome-headless-shell.exe". Naming
+        # the path closes the gap: whatever `bundled()` found is what runs.
+        return p.chromium.launch(executable_path=own, **kw)
     for exe in CHROME:
         if os.path.exists(exe):
             return p.chromium.launch(executable_path=exe, **kw)
