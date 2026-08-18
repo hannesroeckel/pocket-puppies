@@ -21,7 +21,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # — see .gitignore — so it is not even in the repo GitHub Pages serves, and
 # precaching it would put megabytes of PNG a player never sees into the install
 # AND fail that all-or-nothing install on any clone that doesn't have it.
-EXCLUDE_DIRS = {"review", "tools", ".git", "docs", "refs"}
+# ANY DOTTED DIRECTORY, not just `.git`. A Claude Code subagent working in this
+# repo gets a git worktree under `.claude/worktrees/<id>/`, which is a COMPLETE
+# SECOND COPY of the tree living inside the first one — so this walk found every
+# file twice and reported all 54 of them as missing from PRECACHE, while the
+# actual precache list was perfectly correct. The checker was right about what it
+# saw and wrong about where it looked.
+EXCLUDE_DIRS = {"review", "tools", "docs", "refs"}
+
+
+def _skip(name):
+    return name in EXCLUDE_DIRS or name.startswith(".")
 EXCLUDE_FILES = {"spike-a-2d.html", "spike-b-pixel.html", "spike-c-3d.html", "sw.js"}
 
 sw = (ROOT / "sw.js").read_text(encoding="utf-8")
@@ -37,7 +47,7 @@ for p in ROOT.rglob("*"):
     if not p.is_file():
         continue
     rel = p.relative_to(ROOT)
-    if rel.parts[0] in EXCLUDE_DIRS or rel.name in EXCLUDE_FILES:
+    if _skip(rel.parts[0]) or rel.name in EXCLUDE_FILES:
         continue
     if p.suffix.lower() in (".js", ".html", ".webmanifest", ".png"):
         on_disk.add(rel.as_posix())

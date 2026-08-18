@@ -1648,6 +1648,9 @@ export function createRoomScene() {
       /* what he is wearing, told to the rig once a frame. A bought or earned
          collar is only a reward if it is ON him in the room. */
       rig.wear = game.worn;
+      /* the found accessory travels the same way the collar does: one line here,
+         and dog/draw.js draws it inside the collar's own transform */
+      rig.wearAccessory = game.wornAccessory;
       rig.base(mood, dt);
       /* the idle director is skipped while he is OUT: an invisible dog quietly
          playing clips would still spawn particles and call for sounds */
@@ -2187,6 +2190,7 @@ export function createRoomScene() {
         tricks: tricks ? tricks.debug : null,
         collection: collection ? collection.debug : null,
         wear: rig.wear || '',
+        wearAccessory: rig.wearAccessory || '',
         rug: rugShown,
         navIds: nav ? nav.items.map((i) => i.id) : [],
         navUnavailable: nav ? nav.items.filter((i) => i.available === false).map((i) => i.id) : [],

@@ -109,6 +109,12 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.14.0: HE CAN WEAR WHAT HE FINDS. `state/game.js`, `dog/draw.js`,
+   `scenes/room.js`, `ui/collection.js` and the wear tunables move; no new module
+   and no schema change — `dog.wear.accessory` has been in the save since stage 1
+   and was never written to. A phone holding 8.13.0 has a bell and a ribbon it
+   cannot put on him.
+
    8.13.0: HE GIVES YOU HIS PAW. `dog/pet.js` and `scenes/room.js` move; no new
    module and no schema change. A phone holding 8.12.0 answers a tap on his paw
    with irritation, which is the defect.
@@ -164,7 +170,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.13.0';
+const VERSION = '8.14.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

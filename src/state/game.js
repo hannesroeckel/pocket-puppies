@@ -1484,6 +1484,55 @@ export function createGame(state, opts = {}) {
     },
 
     /* ==================================================================
+       THE ACCESSORY SLOT, WHICH NOTHING EVER DREW
+
+       `dog.wear.accessory` has existed since stage 1 and `inventory.accessories`
+       since stage 6, and between them they did nothing: no code wrote the slot
+       and no code drew it. That is why the little brass bell and the red ribbon
+       he brings home from the high street were the two finds with no purpose
+       left after the collection landed (ARCHITECTURE 23.7).
+
+       WHAT MAY GO IN IT IS WHAT HE FOUND. Not a shop row — the catalogue is
+       full at twelve (24.3) and a bought bow would need a thirteenth. These are
+       the two `gift` finds, so the slot is earned by walking rather than paid
+       for, which is also the only category the queue left open for finds:
+       "playable, wearable, displayable, sellable, or a keepsake with a stated
+       purpose". This is the wearable one, finally.
+       ================================================================== */
+    /** the gift finds he could wear, whether or not he is wearing one */
+    accessories() {
+      const owned = collectedFinds(state);
+      return BALANCE.walk.finds
+        .filter((f) => f.kind === 'gift' && owned.has(f.id))
+        .map((f) => f.id);
+    },
+    /** what is on his collar right now, or '' */
+    get wornAccessory() {
+      const d = dog();
+      return (d.wear && typeof d.wear.accessory === 'string') ? d.wear.accessory : '';
+    },
+    /**
+     * Put one on, or take it off with ''. One at a time: two things hanging off
+     * one collar is a jumble at 16 units, and the slot was always singular.
+     * @returns true if it was applied
+     */
+    equipAccessory(id) {
+      const d = dog();
+      if (!d.wear || typeof d.wear !== 'object') d.wear = { collar: null, accessory: null };
+      if (id === '' || id === null || id === undefined) {
+        d.wear.accessory = null; onChange(); return true;
+      }
+      if (typeof id !== 'string') return false;
+      /* HE CANNOT WEAR SOMETHING HE HAS NOT FOUND. Checked here rather than in
+         the panel, so an imported or hand-edited save cannot dress him in
+         something that never came home. */
+      if (api.accessories().indexOf(id) < 0) return false;
+      d.wear.accessory = id;
+      onChange();
+      return true;
+    },
+
+    /* ==================================================================
        THE KENNEL — stage 6. CARE POINTS ONLY, AND NO PRICE ANYWHERE.
        ================================================================== */
     /** the roster, with just enough for a surface to draw a card each */

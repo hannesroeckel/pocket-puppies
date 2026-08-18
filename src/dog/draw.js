@@ -18,6 +18,11 @@
      3. Proportions are puppy: see dog/breeds.js.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
+/* ONE DRAWING, TWO PLACES. `drawFind` is what puts a bell on the window sill;
+   using it again for the bell on his collar means there is one bell in the
+   codebase. scenes/props.js does not import this module, so this direction is
+   safe. */
+import { drawFind } from '../scenes/props.js';
 import {
   TAU, clamp, lerp, pt, ell, crClosed, ribbon, resampleClosed, loopNormals, mix, rgba,
 } from '../engine/draw.js';
@@ -2149,8 +2154,12 @@ export function createDogRenderer(rig) {
        and the Shiba all get a collar on the neck rather than three hand-placed
        ones. It also follows the head DOWN into the bowl, because the neck
        joint does — which is the difference between a collar and a sticker. */
+    /* the accessory hangs off the collar, but she may not have earned a collar
+       yet — a found ribbon must not be invisible until 90 care points. So the
+       collar block runs when EITHER is set, and the band itself is drawn only
+       for a real collar. */
     const wearId = rig.wear || '';
-    if (wearId) {
+    if (wearId || rig.wearAccessory) {
       const wc = BALANCE.ui.wear[wearId] || BALANCE.ui.wear.collarRed;
       const nx = P.neckX, ny = P.neckY;
       /* the head pulls the collar with it: sit it a little below the neck
@@ -2161,12 +2170,36 @@ export function createDogRenderer(rig) {
       c.save();
       c.translate(cx, cy);
       c.rotate(Math.atan2(dx, -dy) * 0.35 + P.bodyRot * 0.4);
-      c.fillStyle = 'rgba(60,32,18,0.30)';
-      ell(c, 0, 2.4, hw * 1.02, hw * 0.30); c.fill();
-      c.fillStyle = wc;
-      ell(c, 0, 0, hw, hw * 0.29); c.fill();
-      c.fillStyle = 'rgba(255,255,255,0.20)';
-      ell(c, -hw * 0.16, -hw * 0.07, hw * 0.52, hw * 0.09); c.fill();
+      if (wearId) {
+        c.fillStyle = 'rgba(60,32,18,0.30)';
+        ell(c, 0, 2.4, hw * 1.02, hw * 0.30); c.fill();
+        c.fillStyle = wc;
+        ell(c, 0, 0, hw, hw * 0.29); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.20)';
+        ell(c, -hw * 0.16, -hw * 0.07, hw * 0.52, hw * 0.09); c.fill();
+      }
+      /* ---- WHAT HE FOUND, ON THE COLLAR (queue item 6's last loose end) ----
+         Drawn INSIDE the collar's own transform, which is the whole reason this
+         is four lines rather than forty: that frame already sits on the
+         published neck joint, already takes its width from `dims`, and already
+         follows the head down into the bowl. An accessory placed here inherits
+         every one of those properties instead of re-deriving them and getting
+         one of them wrong on one breed.
+
+         And it is drawn by `drawFind` — the SAME function that draws the bell on
+         the window sill and in the collection — so the thing he is wearing and
+         the thing she found are one drawing. The alternative is two bells that
+         drift apart, which is the class of defect BALANCE.train.roster and
+         `silhouette.front` both have notes about. */
+      const accId = rig.wearAccessory || '';
+      if (accId) {
+        const A = (BALANCE.ui.wear.accessory || {})[accId] || { s: 0.42, y: 0.30 };
+        c.save();
+        c.translate(0, hw * A.y);
+        c.scale(A.s, A.s);
+        drawFind(c, accId, 0, 0, 1, 0);
+        c.restore();
+      }
       if (wearId === 'collarTag') {
         c.fillStyle = '#e0b23f';
         c.beginPath(); c.arc(0, hw * 0.34, hw * 0.17, 0, TAU); c.fill();
