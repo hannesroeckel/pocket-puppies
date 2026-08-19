@@ -3513,3 +3513,101 @@ the instrument, so it is filtered by name and everything else still fails the ru
 - **The kennel does not show it.** `roster()` reports each dog's collar and not the accessory, so
   the card for a dog wearing a ribbon looks the same as one who is not.
 
+---
+
+## 30. Decor on the care ladder (`feature/decor`) — as built
+
+The request that was redirected twice and met neither time. He asked for room decoration; both
+times it was correctly kept **out of the shop** — *"sell objects for coins, gate content on care
+points"*, so coins must never buy a nicer room — and both times the redirection was written down
+and then not acted on. The ladder was left holding a single decor row, so the honest description of
+the state was not "declined" but "agreed and not done".
+
+Cache **8.15.0**. No schema change: unlocks are derived from `carePoints` and were never stored.
+
+### 30.1 The ladder now paces
+
+| at | what | kind |
+|---|---|---|
+| 90 | a red collar | wear |
+| **150** | **a paper garland** | **decor** |
+| 220 | a soft blue rug | decor |
+| 400 | a Cockapoo puppy | breed |
+| **650** | **a portrait of him** | **decor** |
+| 1100 | the good treats | stock |
+
+Something lands every couple of days of attentive play, and **nothing crowds the Cockapoo at 400**,
+which is the milestone the whole ladder is built around. The garland is deliberately the cheapest
+thing on it after the collar: it is the first change to the ROOM rather than to him.
+
+`bedBasket` and `roomSeaside` were cut in stage 6 *"rather than deferred... they can come back when
+there is something to draw"* (17.5). That is the bar these two clear — each is drawn, and each
+visibly changes the baked art on the frame it is earned.
+
+### 30.2 A garland is a catenary, not a row of triangles
+
+The string is `cosh`, normalised so both ends sit at the pins, and each flag hangs at **the angle
+the string is going at that point**. Those two facts are the whole difference between bunting and a
+row of triangles pinned to a straight line, and they cost four lines. The colours are the rug's
+coral, cream and teal — a garland is exactly the sort of thing that would have been made out of the
+same paper as everything else in the room.
+
+### 30.3 The portrait is of *him*, and that is the point
+
+The picture on the shelf has been a generic animal face since stage 1. At 650 it becomes the dog in
+the room: painted from `breed.palette.coat` / `.cream` / `.coatShade`, with ears that hang or stand
+according to `breed.ear`. **Switching dogs repaints it** — a Schnoodle's portrait is warm auburn and
+the Shiba's is orange-tan — because it reads the same data `dog/draw.js` paints him from, so nothing
+has to be kept in step by hand.
+
+`drawShelf` stays a pure art function that knows nothing about breeds: the sitter is resolved in the
+scene, where the game is reachable, and handed in as three colours and a boolean. The generic
+picture's original values are the fallback, verbatim, so an un-earned room draws exactly what it
+always drew.
+
+### 30.4 One signature, because three flags are three chances to forget one
+
+`rugShown` was a single string when the rug was the only unlock touching the prebuilt art. Three of
+them is three chances to miss a rebuild, and the failure is **silent** — an earned reward that never
+appears, which is the exact complaint stage 6 cut two rows over. So the room records the whole
+signature it baked (`rug | garland | portrait:breedId`) and compares it, and the toast is chosen by
+asking which *part* moved:
+
+- earning the garland says so;
+- earning the portrait says so, by name if he has one;
+- **switching dogs repaints the portrait and says nothing**, because she did not just earn anything.
+
+### 30.5 What was measured (`py tools/decorgate.py [--shots]`)
+
+**15 checks, 0 failures.** Asserted on the pixels of the *baked room canvas* — the thing the unlock
+is supposed to change — which is free of the dog, the props and the animation that made measuring
+the accessory such a nuisance (29.5).
+
+| check | result |
+|---|---|
+| the garland | **13,343 pixels** of the wall change, in a 780×160 box |
+| the portrait | **7,468 pixels** of the shelf change, in a 240×220 box |
+| below the threshold | neither is unlocked, and neither is drawn |
+| ten million coins | buys neither, at any price; the purse does not move the ladder |
+| earned mid-session | rebuilds the room with no remount, and names the thing that arrived |
+| switching dogs | repaints the portrait (coat `#b4703f` → `#e9954f`) and announces nothing |
+| the ladder | ascending: 90, 150, 220, 400, 650, 1100 |
+| looked at | `review/decor-none.png`, `review/decor-all.png` |
+
+One bug the gate found, and it is a real one to know about: **`__pp.switchDog` only moves
+`activeDogId`.** The rig is built in `scenes/room.js`'s `enter`, and `state/game.js` says so
+directly — *"mutating the id under a live scene would leave one dog's rig wearing another dog's
+state"*. A gate that skipped the remount read the first dog's palette back and blamed the portrait.
+
+### 30.6 Left imperfect
+
+- **The garland crosses the window.** It is strung wall to wall at a fixed height, so its middle
+  flags hang over the top panes. It reads as bunting in front of a window, which is a real thing
+  people do, but it was not designed — it is where a straight line between two pins happens to go.
+- **The portrait is a simple face**, not the rig. It shares the breed's colours and ear type and
+  nothing else: no markings, no per-dog jitter, no expression. A real portrait would mean drawing
+  the rig into an offscreen canvas at a small size, which is a much larger and more interesting job.
+- **Nothing else in the room is earnable.** The bed, the shelf, the window and the floor are all
+  fixed. The ladder has room between 650 and 1100 for one more, and the bed is the obvious one.
+- **The decor toasts have never been seen by a human**, only asserted. They fire on the frame the
+  points land, which is a moment no render in this project has ever captured.

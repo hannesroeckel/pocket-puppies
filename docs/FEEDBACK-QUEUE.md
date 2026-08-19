@@ -177,6 +177,14 @@ Proposed, each with a real effect:
 > **Decor is still out**, as this note demanded: it stays on the care-point ladder, so coins cannot
 > buy a nicer room. ARCHITECTURE 24.
 
+> **Follow-up, 2026-08-18 — the decor half is done too.** This note said decor belonged on the
+> care-point ladder rather than in the shop, and that changing that rule "needs an explicit decision,
+> not a quiet drift". The rule stands: coins still cannot buy a room. What was missing was that the
+> ladder only ever had **one** decor row on it, so the redirection had been agreed and not acted on.
+> Two more now — **a paper garland at 150** and, at 650, **a portrait of him**: the picture on the
+> shelf becomes the dog in the room, painted from his own breed palette, so it changes when she
+> switches dogs. Measured at 13,343 and 7,468 changed pixels of the baked room. ARCHITECTURE 30.
+
 ## 3. Paw-shake as a direct interaction ✅ BUILT on `feature/paw-shake` (cache 8.13.0)
 
 > "for tricks it should be possible to shake the paw of the dog as a move"

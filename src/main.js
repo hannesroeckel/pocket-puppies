@@ -1175,6 +1175,22 @@ async function boot() {
     spendCoins: (n) => game.spendCoins(n),
     canAfford: (n) => game.canAfford(n),
     carePoints: () => game.carePoints,
+    /**
+     * SET care points, for verification only.
+     *
+     * `state/game.js` has no setter and should not: points are EARNED, and the
+     * one-way door is what makes "she cannot buy her way to the Cockapoo" true
+     * by construction rather than by policy. So this reaches past the mutators
+     * on purpose, and it lives here — in the harness, beside the other drivers
+     * that fake a clock or an absence — rather than being a method the game
+     * could call by accident.
+     */
+    setCarePoints(n) {
+      const v = Math.max(0, Math.floor(+n || 0));
+      state.player.carePoints = v;
+      saver.schedule();
+      return game.carePoints;
+    },
     addCarePoints: (n) => game.addCarePoints(n),
     awardCare: (kind) => game.awardCare(kind),
     isUnlocked: (id) => game.isUnlocked(id),
