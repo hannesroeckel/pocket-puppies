@@ -48,6 +48,15 @@ import { decayLive, describeGap, reunionIntensity } from '../state/time.js';
 const VW = BALANCE.view.W, VH = BALANCE.view.H, FLOOR = BALANCE.view.floorY;
 const PA = BALANCE.particles;
 
+/* ---- WHAT THE ROOM SAYS WHEN SHE EARNS SOMETHING FOR IT ----------------
+   One line each, in the same register as the rug's: it is about the room being
+   nicer, never about points having been spent. Pronouns from `game.pron`, per
+   the rule the whole project follows. */
+const DECOR_COPY = {
+  garland: (P) => `Little paper flags, for ${P.them}`,
+  portrait: (P, n) => (n ? `${n}, framed` : `A picture of ${P.them}, framed`),
+};
+
 /* Room art palette. Scene art, not a design tunable — see ARCHITECTURE §11. */
 const C = {
   wallA: '#f9e9cd', wallB: '#f1d6ad', wallC: '#e2bb8c',
@@ -144,18 +153,46 @@ function drawWindow(c) {
   }
 }
 
-function drawShelf(c) {
+/**
+ * THE PICTURE ON THE SHELF, and who is in it.
+ *
+ * Unframed it is a generic animal face in the room's own palette — which is
+ * what has hung there since stage 1. At 650 care points it becomes HIM: the
+ * same frame, painted from `breed.palette`, so a Schnoodle's portrait is warm
+ * auburn and a Cockapoo's is pale apricot, and switching dogs changes the
+ * picture on her wall. That is the whole reason this is the decor row worth
+ * having rather than another cushion: it is the one piece of furniture in the
+ * game that is ABOUT somebody.
+ *
+ * @param who null for the generic picture, or `{ coat, patch, ear }`
+ */
+function drawShelf(c, who) {
   const sx = 30, sy = 250, sw = 112;
   c.fillStyle = 'rgba(120,74,44,0.14)'; roundRect(c, sx + 16, sy - 96, 74, 84, 4); c.fill();
   c.fillStyle = '#c98f5f'; roundRect(c, sx + 12, sy - 100, 74, 84, 4); c.fill();
   c.fillStyle = '#fdf4e2'; roundRect(c, sx + 18, sy - 94, 62, 72, 2); c.fill();
   c.fillStyle = '#e9c9a2'; roundRect(c, sx + 22, sy - 90, 54, 64, 2); c.fill();
-  c.fillStyle = '#c98a52';
+  /* the sitter. The generic picture's colours are kept VERBATIM as the fallback
+     — `#c98a52` and `#fdf4e2` are the values that have hung here since stage 1 —
+     so an un-earned room draws exactly what it always drew. That is a claim
+     about this code rather than a measured one: `tools/decorgate.py` asserts
+     that earning it CHANGES the room, not that not-earning it changes nothing. */
+  const coat = (who && who.coat) || '#c98a52';
+  const patch = (who && who.patch) || '#fdf4e2';
+  const earCol = (who && who.ear) || coat;
+  c.fillStyle = coat;
   ell(c, sx + 49, sy - 42, 17, 13); c.fill();
   ell(c, sx + 49, sy - 58, 13, 12); c.fill();
-  c.beginPath(); c.moveTo(sx + 39, sy - 66); c.lineTo(sx + 35, sy - 78); c.lineTo(sx + 45, sy - 71); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(sx + 59, sy - 66); c.lineTo(sx + 63, sy - 78); c.lineTo(sx + 53, sy - 71); c.closePath(); c.fill();
-  c.fillStyle = '#fdf4e2'; ell(c, sx + 49, sy - 52, 6, 5); c.fill();
+  c.fillStyle = earCol;
+  if (who && who.floppy) {
+    /* a doodle's ears hang beside the head rather than standing up */
+    ell(c, sx + 36, sy - 58, 5.5, 10); c.fill();
+    ell(c, sx + 62, sy - 58, 5.5, 10); c.fill();
+  } else {
+    c.beginPath(); c.moveTo(sx + 39, sy - 66); c.lineTo(sx + 35, sy - 78); c.lineTo(sx + 45, sy - 71); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(sx + 59, sy - 66); c.lineTo(sx + 63, sy - 78); c.lineTo(sx + 53, sy - 71); c.closePath(); c.fill();
+  }
+  c.fillStyle = patch; ell(c, sx + 49, sy - 52, 6, 5); c.fill();
   c.fillStyle = '#4a352a';
   ell(c, sx + 44, sy - 60, 1.7, 2.1); c.fill();
   ell(c, sx + 54, sy - 60, 1.7, 2.1); c.fill();
@@ -188,6 +225,68 @@ function drawShelf(c) {
     }
     c.strokeStyle = '#84a179';
   }
+}
+
+/**
+ * A PAPER GARLAND, strung across the wall above the window (150 care points).
+ *
+ * A catenary rather than a straight line, because a string pinned at both ends
+ * hangs — and the flags hang off it at the angle the string is going, which is
+ * the difference between bunting and a row of triangles. Both are one `cosh`
+ * away from each other and only one of them looks like paper.
+ *
+ * The colours are the rug's: coral, cream and teal already exist in this room
+ * and a garland is exactly the kind of thing that would have been made out of
+ * the same paper as everything else.
+ */
+function drawGarland(c) {
+  const x0 = -6, x1 = VW + 6, sag = 34, y0 = 118;
+  const at = (u) => {
+    /* a real catenary, normalised so both ends sit at y0 */
+    const k = 2.2;
+    const ch = (v) => (Math.exp(v) + Math.exp(-v)) / 2;
+    const f = (ch(k * (u * 2 - 1)) - 1) / (ch(k) - 1);
+    return { x: x0 + (x1 - x0) * u, y: y0 + sag * (1 - f) };
+  };
+  /* the string */
+  c.save();
+  c.strokeStyle = 'rgba(120,74,44,0.42)';
+  c.lineWidth = 1.6;
+  c.beginPath();
+  for (let i = 0; i <= 48; i++) {
+    const q = at(i / 48);
+    if (i === 0) c.moveTo(q.x, q.y); else c.lineTo(q.x, q.y);
+  }
+  c.stroke();
+  /* the flags, hanging along the string's own direction */
+  const cols = ['#cf6e58', '#f3e0c2', '#87a89c', '#e0b06a'];
+  const N = 13;
+  for (let i = 0; i < N; i++) {
+    const u = (i + 0.5) / N;
+    const a0 = at(Math.max(0, u - 0.012));
+    const a1 = at(Math.min(1, u + 0.012));
+    const q = at(u);
+    const ang = Math.atan2(a1.y - a0.y, a1.x - a0.x);
+    c.save();
+    c.translate(q.x, q.y);
+    c.rotate(ang);
+    const w = 15, h = 22;
+    c.fillStyle = 'rgba(120,74,44,0.13)';
+    c.beginPath();
+    c.moveTo(-w / 2 + 1.5, 2); c.lineTo(w / 2 + 1.5, 2); c.lineTo(1.5, h + 2);
+    c.closePath(); c.fill();
+    c.fillStyle = cols[i % cols.length];
+    c.beginPath();
+    c.moveTo(-w / 2, 0); c.lineTo(w / 2, 0); c.lineTo(0, h);
+    c.closePath(); c.fill();
+    /* a fold, so it reads as paper rather than as a flat triangle */
+    c.fillStyle = 'rgba(255,255,255,0.18)';
+    c.beginPath();
+    c.moveTo(-w / 2, 0); c.lineTo(0, 0); c.lineTo(0, h);
+    c.closePath(); c.fill();
+    c.restore();
+  }
+  c.restore();
 }
 
 function drawBone(c, bx, by, rot) {
@@ -447,8 +546,30 @@ export function createRoomScene() {
      rebuilding it — once, on the frame the unlock lands, not every frame */
   let rugShown = '';
 
+  /**
+   * WHAT THE BAKED ROOM CURRENTLY DEPENDS ON, as one string.
+   *
+   * `rugShown` was a single flag because the rug was the only care unlock that
+   * changed the prebuilt art. Three of them is three chances to forget one, and
+   * the failure is silent — an earned reward that does not appear, which is the
+   * exact complaint stage 6 cut two rows over (17.5). So the room records the
+   * signature it baked and compares the whole thing.
+   *
+   * The active dog's breed is in here because the portrait is OF him: switching
+   * dogs has to repaint the picture on the wall.
+   */
+  function decorSig() {
+    const g = app && app.game;
+    if (!g) return '';
+    return [
+      g.isUnlocked('rugBlue') ? 'blue' : 'warm',
+      g.isUnlocked('garland') ? 'garland' : '-',
+      g.isUnlocked('portrait') ? 'portrait:' + (g.dog.breedId || '') : '-',
+    ].join('|');
+  }
+
   function buildRoom(view) {
-    rugShown = (app && app.game && app.game.isUnlocked('rugBlue')) ? 'blue' : 'warm';
+    rugShown = decorSig();
     roomRng.reseed(BALANCE.rng.roomSeed);
     roomCv = makeOff(view.cw, view.ch);
     const c = roomCv.getContext('2d');
@@ -469,7 +590,11 @@ export function createRoomScene() {
     c.fillStyle = wf; c.fillRect(x0, FLOOR - 120, w, 120);
 
     drawWindow(c);
-    drawShelf(c);
+    /* the portrait is painted from the dog's own palette, so the sitter is
+       resolved here where the game is reachable and handed in as plain colours —
+       `drawShelf` stays a pure art function that knows nothing about breeds */
+    drawShelf(c, portraitSitter());
+    if (app && app.game && app.game.isUnlocked('garland')) drawGarland(c);
 
     c.save();
     c.beginPath();
@@ -942,6 +1067,28 @@ export function createRoomScene() {
       return { x: toy.toy.x - T[0], y: toy.toy.y - T[1], w: T[0] * 2, h: T[1] * 2 };
     }
     return null;
+  }
+
+  /**
+   * WHO IS IN THE PICTURE ON THE SHELF, as three colours, or null for the
+   * generic animal that has hung there since stage 1.
+   *
+   * Read off `breed.palette` and `breed.ear` — the same data `dog/draw.js`
+   * paints him from — so the portrait is the same colour as the dog in the room
+   * without anything having to be kept in step by hand. A doodle's ears hang;
+   * the Shiba's stand up.
+   */
+  function portraitSitter() {
+    const g = app && app.game;
+    if (!g || !g.isUnlocked('portrait')) return null;
+    const br = rig && rig.breed;
+    if (!br || !br.palette) return null;
+    return {
+      coat: br.palette.coat,
+      patch: br.palette.cream,
+      ear: br.palette.coatShade || br.palette.coat,
+      floppy: br.ear !== 'prick',
+    };
   }
 
   /** is a virtual point inside a rect? */
@@ -1738,10 +1885,20 @@ export function createRoomScene() {
       /* THE REWARD LANDS IN THE WORLD, on the frame she earns it. `rugBlue` is
          the only unlock that changes the prebuilt room art, so this is the one
          place that has to notice. */
-      const wantRug = a.game.isUnlocked('rugBlue') ? 'blue' : 'warm';
-      if (roomCv && wantRug !== rugShown) {
+      const want = decorSig();
+      if (roomCv && want !== rugShown) {
+        const was = rugShown;
         buildRoom(a.view);
-        toasts.show(rugToast(a.game.pron));
+        /* SAY WHICH THING ARRIVED, not "the room changed". The signature knows
+           what moved, so the line can be specific — and a breed switch repaints
+           the portrait without announcing anything, because she did not just
+           earn it. */
+        const part = (i) => (was || '').split('|')[i] !== want.split('|')[i];
+        if (part(1)) toasts.show(DECOR_COPY.garland(a.game.pron));
+        else if (part(2) && want.indexOf('portrait') >= 0
+                 && (was || '').indexOf('portrait') < 0) {
+          toasts.show(DECOR_COPY.portrait(a.game.pron, a.game.isNamed ? a.game.dog.name : ''));
+        } else if (part(0)) toasts.show(rugToast(a.game.pron));
       }
       /* the install card. Its own `eligible()` is the whole cadence policy, and
          it consults the arbiter, so there is nothing to guard here. */
@@ -2219,6 +2376,14 @@ export function createRoomScene() {
     /* the two stage-9 panels, exposed for the same reason every layer above is:
        a gate drives the real thing or it is not driving anything */
     get tricks() { return tricks; },
+    /* ---- THE BAKED ROOM, FOR tools/decorgate.py ---------------------------
+       A care unlock's whole job is to change the prebuilt art, so the gate has
+       to be able to read that canvas, force the rebuild, and ask what was baked.
+       Exposed rather than reconstructed: a gate that redraws the room itself is
+       checking its own arithmetic (§27.3's lesson, one floor up). */
+    get roomCanvas() { return roomCv; },
+    rebuildRoom() { if (app && app.view) buildRoom(app.view); return rugShown; },
+    decorSignature: () => decorSig(),
     get toasts() { return toasts; },
     get hud() { return hud; },
     /* the two halves of the toast placement rule, for tools/toastgate.py: what

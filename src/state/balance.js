@@ -1476,6 +1476,26 @@ export const BALANCE = {
        `bedBasket` and `roomSeaside` are gone rather than deferred. They can
        come back the day something renders them. */
     unlocks: [
+      /* ---- DECOR LIVES HERE AND NOWHERE ELSE (queue item 2) --------------
+         He asked for room decoration twice. Both times it was correctly kept
+         OUT of the shop — "sell objects for coins, gate content on care points",
+         so coins must never buy a nicer room — and both times the redirection
+         was recorded and then not acted on, which left the ladder holding a
+         single decor row (the blue rug) and the request unmet rather than
+         refused. Two more now, and the spacing is the point: something lands
+         every couple of days of attentive play.
+
+           90   a red collar          she looked after him from the start
+           150  a paper garland       the first thing the ROOM gains
+           220  a soft blue rug
+           400  a Cockapoo puppy      the big one, and nothing crowds it
+           650  a portrait of him     the room gains HIM
+           1100 the good treats
+
+         `bedBasket` and `roomSeaside` were cut in stage 6 "rather than
+         deferred... they can come back when there is something to draw"
+         (17.5). That is the bar these two clear: each is drawn, and each
+         visibly changes the baked room art on the frame it is earned. */
       { id: 'collarRed', kind: 'wear', at: 90, name: 'A red collar',
         note: 'For looking after him from the start' },
       /* `swatch` is THE COLOUR OF THE ACTUAL OBJECT, and it exists because the
@@ -1489,10 +1509,14 @@ export const BALANCE = {
          This value is `RUG.blue.a` from scenes/room.js — the colour she will
          actually see on the floor when it lands. Optional: 'stock' has no single
          real colour ("the good treats"), so it keeps its category brown. */
+      { id: 'garland', kind: 'decor', at: 150, name: 'A paper garland',
+        swatch: '#cf6e58', note: 'Little flags across the wall' },
       { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug',
         swatch: '#6f93a8', note: 'The room warms up a little' },
       { id: 'cockapoo', kind: 'breed', at: 400, name: 'A Cockapoo puppy',
         note: 'Someone new, once he is properly settled' },
+      { id: 'portrait', kind: 'decor', at: 650, name: 'A portrait of him',
+        swatch: '#b4703f', note: 'The picture on the shelf becomes him' },
       { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats',
         note: 'The shop starts stocking the nice ones' },
     ],

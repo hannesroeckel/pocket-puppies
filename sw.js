@@ -109,6 +109,12 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.15.0: DECOR ON THE CARE LADDER. Two earned rows that change the baked room
+   art — `state/balance.js` and `scenes/room.js` move; no new module, no schema
+   change (unlocks are DERIVED from `carePoints` and were never stored, which is
+   why trimming or extending that table costs nobody anything they had earned).
+   A phone holding 8.14.0 has a ladder with one decor row on it.
+
    8.14.0: HE CAN WEAR WHAT HE FINDS. `state/game.js`, `dog/draw.js`,
    `scenes/room.js`, `ui/collection.js` and the wear tunables move; no new module
    and no schema change — `dog.wear.accessory` has been in the save since stage 1
@@ -170,7 +176,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.14.0';
+const VERSION = '8.15.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
