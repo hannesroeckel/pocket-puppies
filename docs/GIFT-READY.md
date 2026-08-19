@@ -254,3 +254,36 @@ every deploy** — a phone holding `pp-cache-v8.7.1` serves 8.7.1 for ever other
 `feature/training-clarity` is committed and **not pushed**. It carries cache 8.8.0 and a new
 precached module, so landing it is a real update to a game someone is playing, and it is Hannes's
 call when that happens.
+
+---
+
+## 10. What has been on the phone, and what has not — 2026-08-19
+
+Hannes, this morning: **"it worked yesterday evening on the phone so it seems fine."**
+
+That is the first device confirmation of any of the stage-9 work, and it is worth pinning down what
+it does and does not cover, because five generations went out in two days and only some of them were
+live when he looked.
+
+| generation | what it added | on the phone? |
+|---|---|---|
+| 8.8.0 | the trick list, and lie-down as its own gesture | ✅ yesterday evening |
+| 8.9.0 | per-dog time; every dog gets hungry | ✅ (but see below) |
+| 8.10.0 | the collection, the album, finds that sell | ✅ |
+| 8.11.0 | four more shop rows with real effects | ✅ |
+| 8.12.0 | toasts that keep off their subject | ✅ |
+| 8.13.0 | the paw shake | ✅ |
+| 8.14.0 | wearable finds — the bell and the ribbon | ✅ **this was the live generation** |
+| 8.15.0 | decor: the garland and the portrait | ⬜ **not yet** — deployed 2026-08-19 12:09 UTC |
+
+**Two honest caveats about the ✅ column.** "It worked" is a report that the game runs and is not
+broken, which is exactly what a device pass is for and is the thing no harness here can produce. It
+is not the same as each feature having been exercised: per-dog time (8.9.0) only shows itself with
+**two dogs**, which needs 400 care points, and the collection's album only fills up after walks with
+photos in them. So the strongest claim available is: **nothing in 8.8.0–8.14.0 breaks the game on a
+real installed iPhone**, which is a great deal more than was known yesterday.
+
+**And 8.15.0 has not been looked at.** The garland and the portrait are the two most visible things
+added to this project since the Schnoodle's face, and both were verified in Chromium and in renders
+only. The portrait in particular reads breed data at room-build time, which is the kind of thing that
+is either obviously right or obviously wrong the moment somebody opens it.
