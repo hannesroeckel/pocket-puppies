@@ -2288,6 +2288,12 @@ export function createRoomScene() {
 
       if (ev.type === 'move') {
         if (capture === 'contest') { contest.pointer(ev, local()); return; }
+        /* THE DISC NEEDS MOVE AND UP OR IT CANNOT BE THROWN AT ALL. The flick is
+           a TRAIL of move events and a release; with only `down` routed here she
+           could pick the disc up and nothing else would ever happen. Reported
+           from the phone as "it seems like i cannot flick the disc at all",
+           which is exactly what it was. */
+        if (capture === 'disc') { disc.pointer(ev); return; }
       if (capture === 'walk') { walk.pointer(ev, local()); return; }
         if (capture === 'toy') { toy.pointer(ev, local()); return; }
         if (capture === 'care') { care.pointer(ev, local()); return; }
@@ -2307,6 +2313,7 @@ export function createRoomScene() {
            already open by then, so there is nothing to confirm on release */
         hud.pressed = false;
         if (capture === 'contest') { contest.pointer(ev, local()); capture = ''; return; }
+        if (capture === 'disc') { disc.pointer(ev); capture = ''; return; }
       if (capture === 'walk') { walk.pointer(ev, local()); capture = ''; return; }
         if (capture === 'toy') { toy.pointer(ev, local()); capture = ''; return; }
         if (capture === 'care') { care.pointer(ev, local()); capture = ''; return; }
@@ -2330,6 +2337,7 @@ export function createRoomScene() {
       if (ev.type === 'cancel') {
         nav.pressed = ''; pressedNav = null; hud.pressed = false;
         if (capture === 'contest') contest.pointer(ev, local());
+        else if (capture === 'disc') disc.pointer(ev);
         else if (capture === 'walk') walk.pointer(ev, local());
         else if (capture === 'toy') toy.pointer(ev, local());
         else if (capture === 'care') care.pointer(ev, local());

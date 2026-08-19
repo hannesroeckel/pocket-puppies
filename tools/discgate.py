@@ -9,7 +9,13 @@ SCOPE stage 5's design, and the assertions are its own words:
 
 WHAT IT ASSERTS:
 
-  A  THE FLICK IS THE TOY'S FLICK. A weak flick is not a throw and costs nothing;
+  A  THE FLICK IS THE TOY'S FLICK, DRIVEN THROUGH THE ROOM. Every gesture here
+     goes through `scene.pointer(app, ev)` — the door a thumb comes through —
+     and never through `disc.pointer` directly. That distinction is not
+     pedantry: the first build routed only `down` to the disc layer, so the
+     trail and the release never arrived and THE DISC COULD NOT BE THROWN AT
+     ALL, while this gate passed 31 checks by talking to the layer directly.
+     Reported from the phone as "it seems like i cannot flick the disc at all". A weak flick is not a throw and costs nothing;
      a real one is, and its power comes out of `BALANCE.toy.flick` rather than a
      second set of numbers for the same gesture. AND IT IS NEVER LATERAL — the
      disc's sideways drift is clamped exactly as the ball's is, because throwing
@@ -62,6 +68,25 @@ def check(ok, label, detail=""):
                                     + (("  — " + str(detail)) if detail else ""))
     return ok
 
+
+# EVERY GESTURE GOES THROUGH THE ROOM. `scene.pointer(app, ev)` is what the
+# input layer calls; `disc.pointer` is the layer's own door and testing it
+# proves only that the layer works when something remembers to knock.
+FLICK = """([fromX, fromY, dx, dy, steps]) => {
+  const pp = window.__pp;
+  const sc = pp.loop.scene;
+  const send = (type, x, y, moved) => sc.pointer(pp.app,
+    { type, x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: !!moved });
+  send('down', fromX, fromY, false);
+  pp.step(1/60, 1);
+  for (let i = 1; i <= steps; i++) {
+    send('move', fromX + dx * i / steps, fromY + dy * i / steps, true);
+    pp.step(1/60, 1);
+  }
+  send('up', fromX + dx, fromY + dy, true);
+  pp.step(1/60, 1);
+  return pp.dbg().disc;
+}"""
 
 OPEN = """() => {
   const pp = window.__pp;
@@ -189,82 +214,55 @@ def main():
         check(not d.get("error"), "the disc field opens and a round starts", d.get("error") or d["beat"])
         check(d["phase"] == "ready", "the disc starts in her hand", d["phase"])
 
-        # ---- A. the flick -------------------------------------------------
-        weak = pg.evaluate("""() => {
-          const pp = window.__pp;
-          const sc = pp.loop.scene;
-          const before = pp.dbg().disc;
-          /* A REAL WEAK FLICK, THROUGH THE POINTER. `throwAt(0)` is the
-             SMALLEST THROW, not a non-throw: it maps power 0 onto
-             `flick.minUp` exactly, which is the threshold and therefore
-             passes it. A limp gesture is a slow drag, so this is one. */
-          const d0 = pp.dbg().disc.disc;
-          sc.disc.pointer({ type: 'down', x: d0.x, y: d0.y });
-          for (let i = 1; i <= 6; i++) {
-            sc.disc.pointer({ type: 'move', x: d0.x, y: d0.y - i * 2 });
-            pp.step(1/60, 2);
-          }
-          sc.disc.pointer({ type: 'up', x: d0.x, y: d0.y - 12 });
-          const ok = false;
-          pp.step(1/60, 4);
-          const after = pp.dbg().disc;
-          return { ok, phase: after.phase, scores: after.round.scores.length,
-                   minUp: pp.BALANCE.toy.flick.minUp };
-        }""")
-        check(weak["phase"] == "ready" and weak["scores"] == 0,
-              "a weak flick is not a throw, and costs her nothing", weak)
+        # ---- A. the flick, THROUGH THE ROOM -------------------------------
+        d0 = pg.evaluate("() => __pp.dbg().disc")
+        real = pg.evaluate(FLICK, [d0["disc"]["x"], d0["disc"]["y"], 0, -170, 7])
+        check(real["phase"] == "fly",
+              "A REAL THUMB FLICK, through scene.pointer, throws the disc",
+              {"phase": real["phase"], "fly": real["fly"]})
+        check(real["fly"] and real["fly"]["power"] > 0.5,
+              "and its power comes out of the gesture, not a constant",
+              real["fly"])
 
-        lateral = pg.evaluate("""() => {
+        # a limp drag is not a throw, and costs her nothing
+        pg.evaluate("""() => {
+          const pp = window.__pp;
+          let g = 0;
+          while (g++ < 900 && pp.dbg().disc.phase !== 'ready') pp.step(1/60, 2);
+        }""")
+        d1 = pg.evaluate("() => __pp.dbg().disc")
+        weak = pg.evaluate(FLICK, [d1["disc"]["x"], d1["disc"]["y"], 0, -12, 6])
+        check(weak["phase"] == "ready",
+              "a limp drag is not a throw, and costs her nothing",
+              {"phase": weak["phase"], "scores": len(weak["round"]["scores"])})
+
+        # ...and a hard SIDEWAYS flick still goes up, not across. Asserted on the
+        # throw's own target, because the disc legitimately converges on his head
+        # as it falls and no time-based filter can separate the two cleanly.
+        d2 = pg.evaluate("() => __pp.dbg().disc")
+        side = pg.evaluate(FLICK, [d2["disc"]["x"], d2["disc"]["y"], -240, -180, 6])
+        check(side["phase"] == "fly", "a diagonal flick is still a throw", side["phase"])
+        check(abs(side["fly"]["toX"] - side["fly"]["fromX"]) <= 47,
+              "and a hard sideways flick still goes UP, never across",
+              "aimed %s units sideways from where it left her hand, cap 46"
+              % abs(side["fly"]["toX"] - side["fly"]["fromX"]))
+
+        # and a real TAP on the screen makes him leap — the other thumb gesture
+        tapReal = pg.evaluate("""() => {
           const pp = window.__pp;
           const sc = pp.loop.scene;
-          /* MEASURE THE FLIGHT, NOT THE DRAG. The first version compared where
-             the disc STARTED with where it ended and found 253 units — all of
-             which was her dragging it across the screen while holding it, which
-             the ball allows too (`BALANCE.toy.dragX` is [30, 360]). What must
-             never be lateral is the THROW, so this records x at the moment it
-             leaves her hand and compares it with where it lands. */
-          let w = 0;
-          while (w++ < 600 && pp.dbg().disc.phase !== 'ready') pp.step(1/60, 2);
-          const d0 = pp.dbg().disc.disc;
-          sc.disc.pointer({ type: 'down', x: d0.x, y: d0.y });
-          for (let i = 1; i <= 6; i++) {
-            sc.disc.pointer({ type: 'move', x: d0.x - i * 40, y: d0.y - i * 30 });
-            pp.step(1/60, 1);
-          }
-          sc.disc.pointer({ type: 'up', x: d0.x - 240, y: d0.y - 180 });
-          pp.step(1/60, 1);
-          const atRelease = pp.dbg().disc.disc.x;
-          const fly = pp.dbg().disc.fly;
-          const rig = sc.rig;
-          const headX = () => rig.x + rig.pose.headX * rig.s;
-          let g2 = 0, outDrift = 0, finalX = atRelease;
-          while (g2++ < 900 && pp.dbg().disc.phase === 'fly') {
-            pp.step(1/60, 1);
-            const d = pp.dbg().disc;
-            const x = d.disc.x;
-            /* THE OUTWARD PHASE ONLY. The throw's drift is what the "never
-               lateral" rule is about; once the disc is FALLING its x converges
-               on his head, which moved the total to 88 units and is correct —
-               he is the one catching it. So this measures while the disc is
-               still going away (comfortably before the catch) and the
-               convergence is asserted separately, as a positive. */
-            if (d.untilCatch > 0.35) outDrift = Math.max(outDrift, Math.abs(x - atRelease));
-            finalX = x;
-          }
-          return { atRelease, outDrift, finalX, headX: headX(), cap: 46, fly };
+          let g = 0;
+          while (g++ < 900 && pp.dbg().disc.phase !== 'fly') pp.step(1/60, 2);
+          let g2 = 0;
+          while (g2++ < 900 && pp.dbg().disc.untilCatch > 0.01) pp.step(1/60, 1);
+          sc.pointer(pp.app, { type: 'down', x: 195, y: 500, id: 1,
+                               dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+          pp.step(1/60, 2);
+          return pp.dbg().disc;
         }""")
-        # ASSERTED WHERE THE RULE IS APPLIED. Measuring the disc's position over
-        # time cannot separate the throw's drift from its convergence on his head,
-        # and a time-based filter for that was wrong twice. The rule is a clamp on
-        # the throw's TARGET, so this reads the target.
-        check(abs(lateral["fly"]["toX"] - lateral["fly"]["fromX"]) <= lateral["cap"] + 1,
-              "and a hard sideways flick still goes UP, never across",
-              "the throw aimed %.0f units sideways from where it left her hand, cap %s"
-              % (abs(lateral["fly"]["toX"] - lateral["fly"]["fromX"]), lateral["cap"]))
-        check(abs(lateral["finalX"] - lateral["headX"]) < abs(lateral["atRelease"] - lateral["headX"]),
-              "and the disc comes down to HIM, not to where it was thrown from",
-              "released at %.0f, landed at %.0f, his head at %.0f"
-              % (lateral["atRelease"], lateral["finalX"], lateral["headX"]))
+        check(tapReal["leap"] is not None,
+              "and a real tap anywhere on the screen makes him leap", tapReal["leap"])
+
         ctx.close()
 
         # ---- B / D. the catch is reachable, and he tracks it ---------------

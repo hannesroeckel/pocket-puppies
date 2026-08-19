@@ -109,6 +109,12 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.16.1: THE DISC COULD NOT BE THROWN. `scenes/room.js` routed only `down` to
+   the disc layer, so the flick's trail of `move` events and its `up` never
+   arrived: she could pick the disc up and nothing else could happen. Reported
+   from the phone within minutes of 8.16.0 going out. No new module, no schema
+   change — one branch in each of the move/up/cancel paths.
+
    8.16.0: THE DISC GAME (schema v9). TWO NEW MODULES — `src/dog/disc.js` and
    `src/state/disc.js` — so this generation MUST move and both MUST appear in
    PRECACHE below: `scenes/room.js` and `state/game.js` import them
@@ -188,7 +194,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.16.0';
+const VERSION = '8.16.1';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
