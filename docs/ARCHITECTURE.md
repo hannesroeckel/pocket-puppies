@@ -3611,3 +3611,120 @@ state"*. A gate that skipped the remount read the first dog's palette back and b
   fixed. The ladder has room between 650 and 1100 for one more, and the bed is the obvious one.
 - **The decor toasts have never been seen by a human**, only asserted. They fire on the frame the
   points land, which is a moment no render in this project has ever captured.
+
+---
+
+## 31. The disc game (`feature/disc`) — as built
+
+Stage 5 designed it and did not build it: *"Ship it if budget allows; Obedience is the one that must
+be right."* Obedience got the budget, §15.9 recorded Disc as not built, and the design has been
+sitting in SCOPE ever since. This is that design, built.
+
+Cache **8.16.0**, schema **v9**, two new modules (`src/state/disc.js`, `src/dog/disc.js`).
+
+### 31.1 What she does
+
+1. the disc is in her hand at the bottom of the screen. She **flicks it up-screen** — the same
+   gesture and the same `BALANCE.toy.flick` numbers stage 2 tuned against a real thumb, so there is
+   no second set of constants for one gesture;
+2. it rises away, scaling down, and **hangs** near the top. He tracks it the whole way —
+   `rig.lookAtVirtual` every frame is the entire implementation of *"he tracks it upward from the
+   front"*;
+3. as it falls **toward him** she taps, and he leaps;
+4. inside the window he catches it. Outside it he does not, and the miss still scores.
+
+Five throws to a round, which is two minutes at the outside: SCOPE's *"a session is 90 seconds or 20
+minutes, both valid"* cuts both ways, and a contest she cannot finish in a bus queue is one she will
+not start.
+
+### 31.2 There is no disc ladder, and that is SCOPE's doing
+
+The same document's non-negotiables cut, outright: **"rank ladders per contest type"**. So Obedience
+keeps the one ladder in the game and this is a thing she gets good at: a personal best, a daily count
+for pacing, and coins by band. The recon that preceded this build flagged the line and it changed the
+design — a `contests.disc.classIdx` would have been off-brief by a document nobody had reread.
+
+`MIGRATIONS[9]` reshapes the stage-1 stub accordingly, and **drops `rank` and `wins`** because both
+describe that ladder. Nobody loses anything: nothing ever wrote a non-zero value into either.
+
+### 31.3 What it shares, and what it refuses to share
+
+**Shared, deliberately:** `groomDelta` and `poiseDelta` come straight out of `state/contest.js`.
+Grooming is marked in a contest — the detail that makes the stage-2 care loop earn its place — and it
+would be strange for a bath to count in the ring and not on the field. `poiseDelta` is aptitude-
+agnostic arithmetic, so Disc passes `aptitude.disc`, a per-dog field that has existed since stage 1
+and had never been read by anything. **Per-dog jitter only:** `dog/breeds.js` still carries a
+per-breed `aptitude.disc` and nothing here may ever read it.
+
+**Refused:** `train.perform`. The leap drives `TRICK_POSE.jump` directly on this layer's own clock,
+because a performance puts the obedience roll, `chanceOf` and a latency in front of the jump — right
+for a trial, fatal for a timing game where the leap must happen on the frame she asked for it.
+
+### 31.4 Four things rendering it changed, and one the spring guard caught
+
+The gate went green while the game was wrong three separate times, which is this project's oldest
+lesson arriving again.
+
+1. **The hang and the catch were one number.** `window.at` drove both, so the disc was catchable *at
+   its apex*: he leapt at something 300 units above his head and half a screen away. It scored fine
+   and read as nonsense. They are separate now — `fly.hangAt` 0.42, `window.at` 0.86 — and the gate
+   asserts the disc is **within one leap of his head** when it is catchable (measured: 57 units up,
+   against a 48-unit leap).
+2. **Depth is not height.** Scale was driven off the disc's height, so as it fell back to him it grew
+   back to full size — i.e. it flew away from the camera and then returned *to the camera*, which is
+   not where he is standing. `fly.depthKeep` keeps it far; it lands at his head still small.
+3. **It came down where it was thrown, not to him.** The disc hung and fell 135 units to the right of
+   his head and he caught it without moving. Its x now converges on his head as it falls — which is
+   also why the lateral clamp governs where it goes *up* and he governs where it comes *down*.
+4. **He barely left the rug.** `leap.height` was declared in BALANCE and never applied. It scales the
+   `hop` **target** after the pose writes it, so the spring still does the work: hop reaches **1.34**
+   at the apex now, the body lifts clear and `dog/draw.js`'s shadow shrink sells it for free.
+
+And `makeSprings` refused to construct the layer at all until `field`, `panel` and `flash` were added
+to `BALANCE.springs` — a guard doing exactly its job on the layer's first run.
+
+### 31.5 Two design numbers that came out of measuring
+
+- **`window.at` is 0.86, not 0.90.** At 0.90 the disc lands 0.16s after the window closes — exactly
+  the window's own half-width — so *being late was impossible by construction*: every miss was an
+  early one and "a little late" was dead copy. 0.86 leaves about a fifth of a second of late.
+- **A miss is never a zero.** `score.missCredit` 0.18, scaled by how nearly she had it, because
+  *"losing must never feel like rebuke"* and a flat zero is a telling-off. Measured: a near miss
+  scores more than a wild one, and both score more than nothing.
+
+### 31.6 What was measured (`py tools/discgate.py [--shots]`)
+
+**31 checks, 0 failures.**
+
+| check | result |
+|---|---|
+| the flick | a limp drag is not a throw and costs nothing; the throw aims **36 units** sideways at most against a 46 cap |
+| the catch | **57 units** above his head at the catchable moment, against a **48-unit** leap |
+| he tracks it | the gaze moves on **80** of the flight's frames |
+| the leap | `hop` **1.34** at the apex, driven by `TRICK_POSE.jump` on this layer's clock |
+| timing | on the moment catches; ±0.20s and ±0.30s early do not; the near miss outscores the wild one; never tapping at all still scores |
+| convergence | released at x 90, landed at x **178**, his head at **178** |
+| the ledger | banked once on finishing; walking out mid-round costs nothing; past three rounds it is practice that pays 0 and is never refused; coins only, **zero** care points |
+| the gate | a hungry dog refused with `hunger`, the same reason code the room already routes |
+| the surface | owns it exclusively; refuses to open over the ring, and the ring refuses to open over it |
+| looked at | `review/disc-entry.png`, `disc-flight.png`, `disc-leap.png`, `disc-card.png` |
+
+The More sheet's *"The ring"* row said **"Disc, agility and obedience"** and had said it since stage
+6 — a promise of a cut feature and an unbuilt one, resolving to obedience. There are two rows now and
+each goes where it says.
+
+### 31.7 Left imperfect
+
+- **He does not move to the disc.** He leaps straight up and the disc comes to him, because there is
+  no side-profile rig and no walk cycle — the constraint this whole design was reframed around. It
+  reads as a dog jumping for a disc directly overhead, which is a real thing dogs do, but he will
+  never run for one.
+- **Nobody has played it with a thumb.** Every catch in this write-up was made by `disc.tap()` at a
+  computed moment. Whether ±0.16s *feels* generous or brutal on a real phone is exactly the kind of
+  thing that cannot be known from here, and it is the first number to revisit after she plays.
+- **The disc's flight has no sound of its own.** It borrows the toy's `toy-throw` and the trial's
+  `proud-yip`/`huff`, which is honest reuse but means a catch and a trick sound alike.
+- **No rival, no field, no placing** — by design, but it does mean the card has nothing to compare
+  against except her own best. The best is on the entry panel for that reason.
+- **The field is a dim, not a place.** The trial gets a mat, a spotlight and a judge's board; the disc
+  game gets the room with the lights down. A park would be better and is a scene-art job.

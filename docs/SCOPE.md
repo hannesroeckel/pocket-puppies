@@ -133,7 +133,7 @@ Use stage 3's interfaces: `repertoire()` for a fair trick-and-hold choice, `perf
 bypassed) and suppresses treats and hints, `onPerform` to subscribe, `latency` as the
 stopwatch stopping at `poseAt`, `correct` as `trick === asked`, and `held`/`holdKept`.
 
-### Disc — reframed as catch-and-leap
+### Disc — reframed as catch-and-leap ✅ BUILT (stage 9, ARCHITECTURE 31)
 
 Not a distance fetch; that needs a rig we deliberately didn't build. She flicks the disc
 **up-screen**, he tracks it upward from the front, and she **times a tap for the leap and

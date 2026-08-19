@@ -26,6 +26,7 @@ import { createTraining } from '../dog/train.js';
 import { createVoice } from '../dog/voice.js';
 import { createWalk } from '../dog/walk.js';
 import { createContest } from '../dog/contest.js';
+import { createDisc } from '../dog/disc.js';
 import { capitalise } from '../state/game.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
@@ -400,7 +401,7 @@ export function createRoomScene() {
   let app = null;
   let rig = null, dog = null, idle = null, pet = null;
   let care = null, toy = null, reunion = null, naming = null;
-  let train = null, voice = null, walk = null, contest = null;
+  let train = null, voice = null, walk = null, contest = null, disc = null;
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
   let shop = null, kennel = null, tricks = null, collection = null;
   let roomCv = null, ovCv = null;
@@ -750,7 +751,11 @@ export function createRoomScene() {
       rows: [
         { id: 'shop', label: 'Shop', note: 'Food, toys and something to wear' },
         { id: 'dogs', label: 'Dogs', note: 'Who is home, and who is waiting' },
-        { id: 'ring', label: 'The ring', note: 'Disc, agility and obedience' },
+        /* THE NOTE USED TO SAY "Disc, agility and obedience" AND WAS A LIE:
+           agility is cut and must never be built, and disc did not exist. Now
+           there are two rows and each goes where it says. */
+        { id: 'ring', label: 'The ring', note: 'An obedience trial, in front of a judge' },
+        { id: 'disc', label: 'Disc', note: 'Flick it up and time his jump' },
         { id: 'settings', label: 'Settings', note: 'Sound, name and saving' },
         { id: 'close', label: 'Done' },
       ],
@@ -799,6 +804,28 @@ export function createRoomScene() {
        thing a player can reach — so it says nothing rather than promising a
        feature. Reaching it is a bug, and a silent one is better than a lie. */
     if (!a.nav.go(n.id)) blockedToast('');
+  }
+
+  /**
+   * OPEN THE DISC FIELD — through the arbiter, never a private `if`.
+   *
+   * The same shape `startContest` has, including the toggle-off first: tapping
+   * the row while it is already up should close it rather than refuse itself.
+   */
+  function startDisc() {
+    if (!disc) return false;
+    if (disc.modal) { disc.stop(true); return false; }
+    const blocked = surfaceBlockedFor('disc');
+    if (blocked) { blockedToast(blocked); return false; }
+    if (toy && toy.busy) {
+      const P = app.game.pron;
+      toasts.show(`${capitalise(P.they)} ${P.has} gone after the ball`);
+      return false;
+    }
+    if (care.modal) care.stop();
+    if (train.modal) train.stop();
+    pet.cancel();
+    return disc.start();
   }
 
   /** open the shop — through the arbiter, never a private `if` */
@@ -851,6 +878,12 @@ export function createRoomScene() {
        training all consult `surfaceBlockedFor`, so none of them can open over
        a trial without a single line being added to any of them. */
     if (contest && contest.modal) return 'contest';
+    /* THE DISC FIELD, and it is here rather than behind a private `if` for the
+       same reason the ring is (§14.1): being in this list is what makes the
+       guard work in BOTH directions, so care, training, the walk, the trial and
+       the naming beat all refuse to open over it without a line being added to
+       any of them. */
+    if (disc && disc.modal) return 'disc';
     if (walk && walk.modal) return 'walk';
     if (walk && walk.away) return 'away';
     /* STAGE 7: the install card. LAST in this list on purpose — it is the least
@@ -892,6 +925,10 @@ export function createRoomScene() {
    */
   function blockedToast(owner) {
     if (!owner || owner === 'naming' || owner === 'reunion') return;
+    if (owner === 'disc') {
+      toasts.show(disc.COPY.ringBusy ? disc.COPY.ringBusy(app.game.pron) : 'One thing at a time');
+      return;
+    }
     if (owner === 'walk' || owner === 'away') {
       toasts.show(walk.COPY.awayBusy(app.game.pron));
       return;
@@ -1221,6 +1258,7 @@ export function createRoomScene() {
     if (id === 'shop') { sheet.close(); openShop(); return; }
     if (id === 'dogs') { sheet.close(); openKennel(); return; }
     if (id === 'ring') { sheet.close(); startContest(); return; }
+    if (id === 'disc') { sheet.close(); startDisc(); return; }
     /* not `sheet.close()` first: `openSettings()` swaps the open sheet's rows,
        so More -> Settings is one panel changing its mind rather than a panel
        sliding out and a second sliding in behind it */
@@ -1408,6 +1446,23 @@ export function createRoomScene() {
         },
         onAdopted: (id) => {
           app.nav.go('room', { adopted: true, dogId: id });
+        },
+      });
+      /* ---- THE DISC GAME (stage 9) --------------------------------------
+         A layer in the room, like the trial: there is no `scenes/disc.js`, for
+         the reason ARCHITECTURE 15.1 deviation 1 gives — the dog, the petting
+         field and the room's art are all here, and a scene swap would rebuild
+         all three to draw the same dog on the same rug. */
+      disc = createDisc(rig, {
+        game: app.game, pet, idle, rng, reduced: app.reduced,
+        spawn: (kind, vx, vy) => spawn(kind, vx, vy),
+        sound: (name) => app.audio.play(name),
+        toast: (msg) => toasts.show(msg),
+        /* the shut gate routes to the care action that fixes it, exactly as the
+           trial's does — one router, two contests */
+        onNeed: (reason) => {
+          if (reason === 'hunger') startCare('feed');
+          else if (reason === 'thirst') startCare('water');
         },
       });
       hud = createHud(app.game, { hint: 'Stroke the puppy', getTime: () => time });
@@ -1718,6 +1773,7 @@ export function createRoomScene() {
       if (walk) walk.stop();
       /* an abandoned trial costs nothing and banks nothing (state/contest.js) */
       if (contest) contest.stop(true);
+      if (disc) disc.stop(true);
       /* the microphone must never outlive the scene that asked for it: a live
          mic indicator on a puppy game would be alarming, and correctly so */
       if (voice) voice.abort();
@@ -1767,6 +1823,7 @@ export function createRoomScene() {
       train.update(dt, game.mood);
       walk.update(dt, game.mood);
       contest.update(dt, game.mood);
+      disc.update(dt);
 
       /* NOTHING THE PLAYER CAN TOUCH MAY SIT UNDER THE NAV — asserted here,
          every frame, AFTER the state machines have written this frame's prop
@@ -1818,6 +1875,7 @@ export function createRoomScene() {
       /* ...and so does the trial, which writes almost nothing: the point of a
          trial is that dog/train.js is doing the work */
       contest.apply(dt, mood);
+      disc.apply(dt);
       /* `toy.apply` rewrites rig.x/y/s back to home every idle frame, which
          would fight the return's arrival exactly as it fights the spin.
 
@@ -1832,7 +1890,7 @@ export function createRoomScene() {
          spring back on the way OUT too — `modal` goes false the moment the
          action ends, which would snap the placement home mid-return. */
       if (!reunion.active && !train.busy && !walk.busy && !contest.busy
-          && !care.active) toy.apply(dt, mood);
+          && !disc.busy && !care.active) toy.apply(dt, mood);
       reunion.apply(dt, mood);
       rig.update(dt);
       pet.computeZones();
@@ -1921,11 +1979,11 @@ export function createRoomScene() {
           : (walk.away || walk.modal ? 'walk'
             : (toy.busy ? 'play'
               : ((sheet.isOpen && (sheetKind === 'more' || sheetKind === 'settings'))
-                || shop.modal || kennel.modal || contest.modal ? 'more'
+                || shop.modal || kennel.modal || contest.modal || disc.modal ? 'more'
                 : (sheet.isOpen && sheetKind === 'care' ? 'care' : '')))));
       /* chrome gets out of the way for the beats that need the whole screen */
       hud.visible = !naming.active && !care.modal && !train.modal && !reunion.active
-        && !walk.modal && !contest.modal && !install.modal;
+        && !walk.modal && !contest.modal && !disc.modal && !install.modal;
     },
 
     draw(a, g) {
@@ -1959,6 +2017,7 @@ export function createRoomScene() {
       /* THE RING WASH GOES UNDER HIM. That is what makes the spotlight a
          spotlight: the room dims, and the dog drawn after it does not. */
       contest.drawBack(g);
+      disc.drawBack(g);
 
       /* The resting bowls, hidden while a care action has picked one up. Both
          sit clear of the dog's silhouette — a bowl tucked behind her body is a
@@ -2054,7 +2113,7 @@ export function createRoomScene() {
       train.drawOver(g);
       hud.draw(g, view);
       if (!naming.active && !care.modal && !train.modal && !reunion.active
-        && !walk.modal && !contest.modal && !install.modal
+        && !walk.modal && !contest.modal && !disc.modal && !install.modal
         && !shop.modal && !kennel.modal) nav.draw(g);
       /* WHAT THE MESSAGE IS ABOUT, if anything: the bowl she is using, or the
          ball if it is loose on the floor. The room is the only layer that knows
@@ -2065,6 +2124,7 @@ export function createRoomScene() {
       walk.drawOver(g);
       /* the judge's board, the chips and the result card, likewise */
       contest.drawOver(g);
+      disc.drawOver(g);
       /* THE TRICK LIST, over the training chrome that opened it. Below the
          sheet and everything after it, because none of those can be open at
          the same time as training — the ordering here is what that claim looks
@@ -2161,6 +2221,15 @@ export function createRoomScene() {
         if (contest.owns) {
           contest.pointer(ev, local());
           capture = 'contest';
+          return;
+        }
+        /* THE DISC FIELD, and it consumes EVERYTHING while it is up — including
+           a touch on him. The whole screen is the tap that makes him jump, so
+           anything falling through to the petting field would be both a leap and
+           a stroke on the same touch. */
+        if (disc.owns) {
+          disc.pointer(ev);
+          capture = 'disc';
           return;
         }
         /* THE WALK NEXT while it owns the surface: the leash beat, the map and
@@ -2300,6 +2369,7 @@ export function createRoomScene() {
         train: train.debug,
         walk: walk.debug,
         contest: contest.debug,
+        disc: disc ? disc.debug : null,
         reunion: reunion.debug,
         naming: naming.debug,
         install: install ? install.debug : null,
@@ -2370,6 +2440,7 @@ export function createRoomScene() {
     get voice() { return voice; },
     get walk() { return walk; },
     get contest() { return contest; },
+    get disc() { return disc; },
     get install() { return install; },
     get shop() { return shop; },
     get kennel() { return kennel; },
@@ -2408,6 +2479,7 @@ export function createRoomScene() {
     surfaceOwner() { return surfaceOwner(); },
     stopWalk() { if (walk) walk.stop(); },
     startContest() { return startContest(); },
+    startDisc() { return startDisc(); },
     stopContest() { if (contest) contest.stop(true); },
     playReunion(intensity, hours) {
       if (naming.active) naming.skip();

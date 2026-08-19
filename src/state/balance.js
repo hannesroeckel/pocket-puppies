@@ -631,6 +631,126 @@ export const BALANCE = {
     tease: { window: 6.0, at: 3 },
   },
 
+  /* ==========================================================================
+     THE DISC GAME (stage 9) — catch and leap.
+
+     SCOPE stage 5: "She flicks the disc up-screen, he tracks it upward from the
+     front, and she times a tap for the leap and catch. Score by height and
+     airtime rather than distance zone."
+
+     NO CLASSES, NO RIVALS, NO PLACING. The same document's non-negotiables cut
+     "rank ladders per contest type" outright, so Obedience keeps the one ladder
+     and this is a thing she gets good at. What is here is a personal best, a
+     daily count for pacing, and coins.
+
+     THE FLICK IS THE TOY'S FLICK. `BALANCE.toy.flick` (minUp 210, maxUp 1500)
+     is what stage 2 tuned against a real thumb on the real device, and a second
+     set of numbers for the same gesture is a second thing to get wrong. Only
+     the disc's own flight and the catch window live here.
+     ========================================================================== */
+  disc: {
+    /* how many throws make a round. Five is two minutes at most: SCOPE's "a
+       session is 90 seconds or 20 minutes, both valid" cuts both ways, and a
+       contest she cannot finish in a bus queue is a contest she will not enter. */
+    throws: 5,
+
+    /* ---- THE DISC'S FLIGHT --------------------------------------------
+       Longer and higher than a ball's throw, and it HANGS: `hang` is the share
+       of the flight spent near the apex, which is the part she is timing
+       against. A ball's arc is `hump()` and is over before you can aim at it.
+
+       `vanishY` is deliberately ABOVE the toy's 470: a disc thrown properly
+       goes further, and the catch has to happen while it is still on screen. */
+    fly: {
+      dur: [1.05, 1.70],        // seconds, weak flick -> full flick
+      vanishY: 300,             // the top of its arc at full power
+      hang: 0.30,               // share of the flight held near the apex
+      /* WHERE THE HANG IS CENTRED, as a share of the flight — and it is a
+         DIFFERENT number from `window.at`, which is when the disc is catchable.
+         Driving both from one value put the catch at the apex: he was leaping
+         at a disc 300 units above his head and half a screen away, which
+         scored fine and read as nonsense. The hang is early; the catch is on
+         the way down, when the disc is within a leap of him. */
+      hangAt: 0.42,
+      arc: 44,                  // extra rise on the way, virtual units
+      minScale: 0.46,           // how small it gets at the far end
+      /* HOW MUCH OF ITS DISTANCE THE DISC KEEPS ON THE WAY DOWN. He is across
+         the room, not at the camera, so a disc falling to his head must stay
+         far away — at 0 it would grow back to full size in her face, which is
+         what the first build did. */
+      depthKeep: 0.82,
+      /* HOW IT IS DRAWN, as opposed to where it is. `drawR` multiplies the
+         ball's 16-unit radius: a disc is a wider object, and at 1.0 it was an
+         unreadable speck at the far end of the flight. `flatten` caps how much
+         the ellipse is squashed with depth — a disc seen edge-on is a line, and
+         a line is not a disc. Both came out of rendering the catch and looking
+         at it. */
+      drawR: 1.55,
+      flatten: 0.55,
+      spin: 9.5,
+    },
+
+    /* ---- THE CATCH WINDOW ---------------------------------------------
+       `at` is where in the flight the disc is catchable, as a share: 0.62 is on
+       the way down, which is what a dog jumping at a disc actually does.
+       `half` is the half-width of the window in seconds — inside it, he catches.
+       `grace` is the wider span the SCORE cares about, so a tap that misses by
+       a hair scores better than one that misses by a mile.
+
+       A REAL THUMB, NOT A FRAME. 0.16 either side is ~10 frames at 60fps, which
+       is generous by the standards of a timing game and correct by the standards
+       of an eight-year-old on a phone on a bus. */
+    /* `at` 0.86 rather than 0.90 so BEING LATE IS POSSIBLE. At 0.90 the disc
+       lands 0.16s after the window closes, i.e. exactly the window's own
+       half-width, so a late tap could never happen at all: every miss was an
+       early one and "a little late" was dead copy. 0.86 leaves about a fifth of
+       a second of late, which is what makes the window feel like a window. */
+    window: { at: 0.86, half: 0.16, grace: 0.30 },
+
+    /* ---- THE LEAP ------------------------------------------------------
+       `TRICK_POSE.jump` is driven directly rather than through
+       `train.perform`, because a performance's timing comes from the obedience
+       roll and a timing game needs the leap to happen NOW. `dur` is the pose's
+       own clock; `hold` stretches the airborne part so the catch reads as a
+       catch rather than as a bounce. */
+    /* `height` scales the jump pose's own altitude: a trick jump is a bounce on
+       the spot and this one is going somewhere. Applied to the `hop` TARGET, so
+       the spring still does the work. */
+    leap: { dur: 0.95, hold: 0.22, height: 1.45 },
+
+    /* ---- WHAT A THROW IS WORTH, 0..1 ---------------------------------
+       Height and airtime are SCOPE's two named terms; timing is the third
+       because it is the thing she is actually doing. `missCredit` is the
+       non-negotiable in a number: "losing must never feel like rebuke". */
+    score: { base: 0.42, height: 0.30, airtime: 0.16, timing: 0.12, missCredit: 0.18 },
+
+    /* coins by band. Sized against the trial's Beginner prizes (100/50/30) so
+       neither activity is the obvious way to farm. */
+    prize: [[9.20, 120], [8.20, 80], [6.80, 45], [4.00, 22], [0, 10]],
+
+    /* the word on the card. A word, never a grade. */
+    words: [
+      [9.20, 'Every one of them'],
+      [8.20, 'He was flying'],
+      [6.80, 'A good afternoon'],
+      [4.00, 'He had fun'],
+      [0, 'Next time'],
+    ],
+
+    /* ---- the surface. Reuses the ring's back button and dim on purpose:
+       "get me out of here is in one place in the whole game" (§20 of the ring
+       block above), and a second dimming value would be a second sky. */
+    ui: {
+      dim: 0.20,
+      hintY: 96,
+      cardY: 300, cardW: 306, cardH: 214, cardR: 22,
+      panelY: 330, panelW: 306, panelH: 234, panelR: 22,
+      enter: { inset: 36, w: 224, h: 46, r: 23 },
+      pipY: 150, pipR: 5, pipGap: 16,      // one pip per throw, filled as they go
+      sfx: { throw: 'toy-throw', catch: 'proud-yip', miss: 'huff', card: 'praise' },
+    },
+  },
+
   /* ---- WALKS ----------------------------------------------------------
      REFRAMED (SCOPE.md stage 4, research §8 judgement 1). There is NO
      side-profile rig and none is being built. The beat is:
@@ -1892,6 +2012,14 @@ export const BALANCE = {
     board:    [110, 15],    // the judge's board arriving
     card:     [96, 14],     // the result card
     chip:     [120, 15],    // the free-window chips rising
+    /* ---- the disc game (stage 9). `makeSprings` throws on a name that is not
+       in this table, which is how the disc layer failed to boot the first time
+       it was run — a guard doing exactly its job. `field` is slower than the
+       ring's wash because the disc field is a lighter dim and should not snap;
+       `flash` is the catch/miss beat and wants to be quick and over. */
+    field:    [34, 12],     // the disc field's wash
+    panel:    [110, 15],    // the entry panel arriving (the board's numbers)
+    flash:    [150, 16],    // the catch or the miss, briefly
     mark:     [150, 11],    // the round's pip landing
   },
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },

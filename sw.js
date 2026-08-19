@@ -109,6 +109,18 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.16.0: THE DISC GAME (schema v9). TWO NEW MODULES — `src/dog/disc.js` and
+   `src/state/disc.js` — so this generation MUST move and both MUST appear in
+   PRECACHE below: `scenes/room.js` and `state/game.js` import them
+   unconditionally, and a phone that took this generation without them would
+   fail to resolve an import offline and show a blank screen. That is the
+   failure 8.5.0's note describes, and it is why this list is checked rather
+   than trusted (`py tools/check-precache.py` now expects 56 entries).
+
+   The save's `contests.disc` stub is reshaped by MIGRATIONS[9]: `rank` and
+   `wins` are dropped because both describe a rank ladder, and SCOPE's
+   non-negotiables cut "rank ladders per contest type" outright.
+
    8.15.0: DECOR ON THE CARE LADDER. Two earned rows that change the baked room
    art — `state/balance.js` and `scenes/room.js` move; no new module, no schema
    change (unlocks are DERIVED from `carePoints` and were never stored, which is
@@ -176,7 +188,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.15.0';
+const VERSION = '8.16.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -200,6 +212,7 @@ const PRECACHE = [
   './src/dog/breeds.js',
   './src/dog/care.js',
   './src/dog/contest.js',
+  './src/dog/disc.js',
   './src/dog/draw.js',
   './src/dog/idle.js',
   './src/dog/pet.js',
@@ -220,6 +233,7 @@ const PRECACHE = [
   './src/scenes/room.js',
   './src/state/balance.js',
   './src/state/contest.js',
+  './src/state/disc.js',
   './src/state/game.js',
   './src/state/save.js',
   './src/state/time.js',
