@@ -376,6 +376,38 @@ export const MIGRATIONS = {
     s.v = 8;
     return s;
   },
+
+  /* ---- v8 -> v9 : the disc game is real, so its record has to be -------
+     `contests.disc` has been a four-field stub since stage 1 —
+     `{rank, wins, lastEntryAt, entriesToday}` — written once on a new save and
+     read by nothing except the generic new-day reset. Stage 5 kept it
+     deliberately ("`disc` stays: it is reframed as catch-and-leap and may still
+     ship", MIGRATIONS[5]'s note), and this is the ship.
+
+     `rank` AND `wins` ARE DROPPED, and that is a design decision rather than
+     housekeeping: both describe a rank ladder, and SCOPE's non-negotiables cut
+     "rank ladders per contest type" outright. Obedience keeps the one ladder.
+     Nobody loses anything — nothing ever wrote a non-zero value into either.
+
+     The new fields start at zero, which is the truth: she has never played it. */
+  9: (s) => {
+    if (!s.contests || typeof s.contests !== 'object') s.contests = {};
+    const old = (s.contests.disc && typeof s.contests.disc === 'object') ? s.contests.disc : {};
+    const n = (v) => (Number.isFinite(+v) ? +v : 0);
+    s.contests.disc = {
+      best: 0,
+      plays: 0,
+      catches: 0,
+      thrown: 0,
+      /* the one field worth carrying over: it is the same clock, and it was the
+         only one of the four that anything could have written */
+      lastPlayAt: Math.max(0, n(old.lastEntryAt)),
+      entriesToday: Math.max(0, Math.floor(n(old.entriesToday))),
+      day: dayIndex(Date.now()),
+    };
+    s.v = 9;
+    return s;
+  },
 };
 
 export function migrate(raw) {

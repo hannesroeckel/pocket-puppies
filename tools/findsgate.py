@@ -30,7 +30,7 @@ WHAT IT ASSERTS:
      reports — which is also how `setInset` was found to be DEAD for every panel
      in the game, because `loop.resize()` only ever ran on an orientation change.
 
-  F  OLD SAVES KEEP THEIR SHELF. v7 -> v8 seeds `display` with the same seven
+  F  OLD SAVES KEEP THEIR SHELF. The v8 migration seeds `display` with the same seven
      things the room was already drawing, so nobody's furniture moves.
 
 Usage:  py tools/findsgate.py [--shots]
@@ -193,20 +193,29 @@ def main():
           const got = m.migrate(s);
           return { v: got.v, display: got.walks.display };
         }""")
-        check(mig["v"] == 8, "a v7 save migrates to v8", mig["v"])
+        # AGAINST `SCHEMA_VERSION`, NOT AGAINST 8. Pinning the number here made
+        # this gate fail the moment the next migration landed (v9, the disc
+        # game's record) while the product was perfectly correct — the same
+        # mistake `timegate` made and had fixed, in a second place nobody
+        # checked. A gate that has to be edited on every schema bump is a gate
+        # that will be edited wrong.
+        now_v = pg.evaluate("async () => (await import('/src/state/game.js')).SCHEMA_VERSION")
+        check(mig["v"] == now_v, "a v7 save migrates to the current schema",
+              "reached v%s of v%s" % (mig["v"], now_v))
         check(len(mig["display"]) == cap,
               "and keeps a shelf of exactly what the room was already drawing", mig["display"])
         walked = pg.evaluate("""async () => {
           const m = await import('/src/state/save.js');
           const out = {};
-          for (let v = 1; v <= 8; v++) {
+          for (let v = 1; v <= 9; v++) {
             const s = JSON.parse(JSON.stringify(__pp.app.game.state));
             s.v = v;
             try { out[v] = m.migrate(s).v; } catch (e) { out[v] = 'threw: ' + e.message; }
           }
           return out;
         }""")
-        check(all(v == 8 for v in walked.values()), "v1..v8 all migrate to v8", walked)
+        check(all(v == now_v for v in walked.values()),
+              "every older save migrates to v%s" % now_v, walked)
 
         check(not errors, "no page errors and no console warnings", errors[:4])
         check(not requests, "no external requests", requests[:4])

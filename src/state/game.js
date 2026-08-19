@@ -33,6 +33,7 @@ import { clamp } from '../engine/draw.js';
    in an old save; see MIGRATIONS[5].) */
 import { rng as sharedRng } from '../engine/rng.js';
 import { dayIndex } from './time.js';
+import { discState } from './disc.js';
 import { contestState, classAt, isTop, champStanding } from './contest.js';
 import {
   walkState, startWalk as startWalkModel, walkProgress as walkProgressModel,
@@ -40,7 +41,7 @@ import {
   collected as collectedFinds, FIND_BY_ID, isShelvable, metDogs,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -172,7 +173,16 @@ export function newState(now = Date.now(), opts = {}) {
        ship. `obedience` is the real one; `state/contest.js contestState()`
        repairs and day-rolls it on every read, exactly as `walkState` does. */
     contests: {
-      disc: { rank: 0, wins: 0, lastEntryAt: 0, entriesToday: 0 },
+      /* ---- THE DISC GAME'S RECORD (stage 9) ----------------------------
+         Was `{rank, wins, lastEntryAt, entriesToday}` from stage 1 — a
+         pre-ladder stub written once and read by nothing. Two of those fields
+         described a rank ladder, and SCOPE's non-negotiables cut "rank ladders
+         per contest type" outright, so they are gone. What is left is what the
+         game actually keeps: a personal best, how many rounds she has played,
+         his catch record, and the daily count that paces it.
+         `state/disc.js discState()` repairs and day-rolls this on every read,
+         exactly as `contestState` does for the trial. */
+      disc: { best: 0, plays: 0, catches: 0, thrown: 0, lastPlayAt: 0, entriesToday: 0, day: dayIndex(now) },
       obedience: {
         classIdx: 0, day: dayIndex(now), entriesToday: 0, entries: 0,
         wins: 0, best: 0, lastEntryAt: 0, champScores: [], won: false,
@@ -1591,6 +1601,51 @@ export function createGame(state, opts = {}) {
       onChange();
       return { id: d.id, name: d.name, breedId: d.breedId, sex: d.sex };
     },
+    /**
+     * BANK A FINISHED DISC ROUND.
+     *
+     * The same shape `recordContest` has, and the same rules: a PRACTICE round
+     * returns early and changes nothing but the best-ever, coins are the only
+     * currency it can pay, and CARE POINTS ARE NOT PAID AT ALL — `economy.care`
+     * has no disc key, which is the two-currency separation holding by
+     * construction rather than by policy.
+     *
+     * The daily count is spent HERE, when a round finishes, which is what makes
+     * an abandoned round free (ARCHITECTURE 15.1 deviation 7's rule, applied to
+     * the second contest).
+     */
+    recordDisc(o = {}, now = Date.now()) {
+      const r = discState(state, now);
+      const score = clampNum(o.score, 0, 10, 0);
+      const thrown = Math.max(0, Math.floor(num(o.thrown, 0)));
+      const caught = clamp(Math.floor(num(o.caught, 0)), 0, thrown);
+      const t = num(now, Date.now());
+      r.lastPlayAt = t;
+      if (score > r.best) r.best = score;
+      /* his record is kept whether or not the round counted: he did catch them */
+      r.thrown += thrown;
+      r.catches += caught;
+      if (o.practice) {
+        onChange();
+        return { score, prize: 0, practice: true, best: r.best, plays: r.plays,
+          caught, thrown, entriesToday: r.entriesToday };
+      }
+      r.plays++;
+      r.entriesToday++;
+      const prize = Math.max(0, Math.floor(num(o.prize, 0)));
+      if (prize > 0) api.addCoins(prize);
+      api.log('disc', 'scored ' + score.toFixed(2) + (prize ? ' (+' + prize + ')' : ''));
+      onChange();
+      return { score, prize, practice: false, best: r.best, plays: r.plays,
+        caught, thrown, entriesToday: r.entriesToday };
+    },
+    /** the disc record, repaired and day-rolled on every read */
+    get disc() { return discState(state); },
+    /** rounds left today before it is just for fun */
+    get discPlaysLeft() {
+      return Math.max(0, BALANCE.contest.perDay - discState(state).entriesToday);
+    },
+
     /**
      * Make another dog the one in the room. The CALLER remounts the scene —
      * scenes/room.js builds the rig, the renderer, petting, idle and every

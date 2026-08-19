@@ -1,6 +1,6 @@
 {
  "shiba-feed": {
-  "frames": 1549,
+  "frames": 1529,
   "phases": [
    "approach",
    "eat",
@@ -9,25 +9,25 @@
    "place",
    "pour"
   ],
-  "framesChecked": 1389,
+  "framesChecked": 1369,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1389,
-  "framesWhereTheFarHalfTookThosePixelsBack": 1389,
+  "framesWhereHisBodyOverlapsTheBowl": 1369,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1369,
   "framesWithTorsoShowingInsideTheBowl": 0,
-  "colourTiePixelsIgnoredWorstFrame": 9,
-  "replayMismatchWorstFrame": 2,
-  "replayMismatchWorstAnyFrame": 2,
-  "replayMismatchWorstFrac": 4.5e-05,
-  "framesWithFaceSeamAndSplitVessel": 1416,
-  "framesWhereHisFaceIsDownInsideTheVessel": 600,
+  "colourTiePixelsIgnoredWorstFrame": 6,
+  "replayMismatchWorstFrame": 1,
+  "replayMismatchWorstAnyFrame": 1,
+  "replayMismatchWorstFrac": 2.3e-05,
+  "framesWithFaceSeamAndSplitVessel": 1396,
+  "framesWhereHisFaceIsDownInsideTheVessel": 581,
   "framesWithMuzzleOutsideTheBowlBelowTheLip": 0,
   "worstMuzzleOutsidePx": 0,
   "worstMuzzleOutsidePxUndilated": 0,
   "worstMuzzleOutsidePhase": null,
   "worstMuzzleOutsideBox": null,
   "worstMuzzleOutsideSamples": null,
-  "deepestFaceCoveredByTheNearWallPx": 8046,
+  "deepestFaceCoveredByTheNearWallPx": 8001,
   "worstFaceInsideVesselButUncoveredPx": 5,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
@@ -39,7 +39,7 @@
     "defectFrames": 0
    },
    "eat": {
-    "checked": 497,
+    "checked": 477,
     "defectFrames": 0
    },
    "finish": {
@@ -64,8 +64,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99301,
     "maskPx": 44123,
-    "torsoInMask": 37993,
-    "backOverTorso": 37993,
+    "torsoInMask": 37987,
+    "backOverTorso": 37987,
     "defect": 0
    },
    "b-pouring": {
@@ -114,8 +114,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 44138,
-    "torsoInMask": 43772,
-    "backOverTorso": 43772,
+    "torsoInMask": 43693,
+    "backOverTorso": 43693,
     "defect": 0
    },
    "g-fading": {
@@ -141,7 +141,7 @@
   },
   "worstReplayFrame": {
    "phase": "finish",
-   "px": 2,
+   "px": 1,
    "bd": {
     "onScreen": true,
     "split": true,
@@ -150,29 +150,11 @@
     "s": 1.86359,
     "kind": "food",
     "fill": 0.16799,
-    "t": 22.01667,
+    "t": 21.71667,
     "ripple": 0,
     "alpha": 1
    },
    "samples": [
-    {
-     "i": 172916,
-     "his": [
-      245,
-      226,
-      202
-     ],
-     "rendered": [
-      229,
-      204,
-      171
-     ],
-     "replayed": [
-      218,
-      187,
-      152
-     ]
-    },
     {
      "i": 322512,
      "his": [
@@ -194,8 +176,8 @@
    ]
   },
   "pass": true,
-  "meaningB": "PASS means: on all 1416 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 600 of those frames -- the near wall taking his jaw back -- up to 8046 px at the deepest.",
-  "meaning": "PASS means: on all 1389 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1389 of those frames and the far half took those pixels back on 1389. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
+  "meaningB": "PASS means: on all 1396 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 581 of those frames -- the near wall taking his jaw back -- up to 8001 px at the deepest.",
+  "meaning": "PASS means: on all 1369 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1369 of those frames and the far half took those pixels back on 1369. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "shiba-water": {
   "frames": 1576,
@@ -262,8 +244,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99301,
     "maskPx": 44123,
-    "torsoInMask": 38005,
-    "backOverTorso": 38005,
+    "torsoInMask": 38004,
+    "backOverTorso": 38004,
     "defect": 0
    },
    "b-pouring": {
@@ -558,7 +540,7 @@
   "meaning": "PASS means: on all 1376 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1376 of those frames and the far half took those pixels back on 1376. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "cockapoo-water": {
-  "frames": 1581,
+  "frames": 1587,
   "phases": [
    "approach",
    "drink",
@@ -567,26 +549,26 @@
    "pour",
    "shakeMuzzle"
   ],
-  "framesChecked": 1421,
+  "framesChecked": 1427,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1421,
-  "framesWhereTheFarHalfTookThosePixelsBack": 1421,
+  "framesWhereHisBodyOverlapsTheBowl": 1427,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1427,
   "framesWithTorsoShowingInsideTheBowl": 0,
-  "colourTiePixelsIgnoredWorstFrame": 73,
-  "replayMismatchWorstFrame": 6,
-  "replayMismatchWorstAnyFrame": 6,
-  "replayMismatchWorstFrac": 0.000116,
-  "framesWithFaceSeamAndSplitVessel": 1448,
-  "framesWhereHisFaceIsDownInsideTheVessel": 577,
+  "colourTiePixelsIgnoredWorstFrame": 80,
+  "replayMismatchWorstFrame": 3,
+  "replayMismatchWorstAnyFrame": 3,
+  "replayMismatchWorstFrac": 5.8e-05,
+  "framesWithFaceSeamAndSplitVessel": 1454,
+  "framesWhereHisFaceIsDownInsideTheVessel": 584,
   "framesWithMuzzleOutsideTheBowlBelowTheLip": 0,
   "worstMuzzleOutsidePx": 0,
   "worstMuzzleOutsidePxUndilated": 0,
   "worstMuzzleOutsidePhase": null,
   "worstMuzzleOutsideBox": null,
   "worstMuzzleOutsideSamples": null,
-  "deepestFaceCoveredByTheNearWallPx": 9654,
-  "worstFaceInsideVesselButUncoveredPx": 15,
+  "deepestFaceCoveredByTheNearWallPx": 9782,
+  "worstFaceInsideVesselButUncoveredPx": 16,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
   "worstDefectPhase": null,
@@ -597,7 +579,7 @@
     "defectFrames": 0
    },
    "drink": {
-    "checked": 572,
+    "checked": 578,
     "defectFrames": 0
    },
    "finish": {
@@ -632,8 +614,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99944,
     "maskPx": 51907,
-    "torsoInMask": 44061,
-    "backOverTorso": 44061,
+    "torsoInMask": 44060,
+    "backOverTorso": 44060,
     "defect": 0
    },
    "c-approach": {
@@ -642,8 +624,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 51907,
-    "torsoInMask": 44305,
-    "backOverTorso": 44305,
+    "torsoInMask": 44314,
+    "backOverTorso": 44314,
     "defect": 0
    },
    "d-eating": {
@@ -662,8 +644,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 51907,
-    "torsoInMask": 51906,
-    "backOverTorso": 51906,
+    "torsoInMask": 51907,
+    "backOverTorso": 51907,
     "defect": 0
    },
    "f-finish-upright": {
@@ -672,8 +654,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 51907,
-    "torsoInMask": 50486,
-    "backOverTorso": 50486,
+    "torsoInMask": 50587,
+    "backOverTorso": 50587,
     "defect": 0
    },
    "g-fading": {
@@ -698,8 +680,8 @@
    }
   },
   "worstReplayFrame": {
-   "phase": "drink",
-   "px": 6,
+   "phase": "shakeMuzzle",
+   "px": 3,
    "bd": {
     "onScreen": true,
     "split": true,
@@ -707,92 +689,74 @@
     "y": 686.788,
     "s": 2.01886,
     "kind": "water",
-    "fill": 0.60003,
-    "t": 17.01667,
-    "ripple": 0.72615,
+    "fill": 0.16447,
+    "t": 22.11667,
+    "ripple": 0.38289,
     "alpha": 1
    },
    "samples": [
     {
-     "i": 360420,
+     "i": 268696,
      "his": [
       122,
       85,
       50
      ],
      "rendered": [
-      136,
-      186,
-      192
+      247,
+      248,
+      241
      ],
      "replayed": [
-      128,
-      172,
-      174
+      240,
+      242,
+      230
      ]
     },
     {
-     "i": 360424,
+     "i": 268700,
      "his": [
       122,
       85,
       50
      ],
      "rendered": [
-      135,
-      184,
-      189
+      245,
+      246,
+      238
      ],
      "replayed": [
-      127,
-      169,
-      170
+      241,
+      243,
+      233
      ]
     },
     {
-     "i": 360428,
+     "i": 271924,
      "his": [
       122,
       85,
       50
      ],
      "rendered": [
-      133,
-      181,
-      185
+      244,
+      245,
+      237
      ],
      "replayed": [
-      125,
-      167,
-      166
-     ]
-    },
-    {
-     "i": 360432,
-     "his": [
-      122,
-      85,
-      50
-     ],
-     "rendered": [
-      132,
-      178,
-      181
-     ],
-     "replayed": [
-      123,
-      164,
-      162
+      240,
+      242,
+      230
      ]
     }
    ]
   },
   "pass": true,
-  "meaningB": "PASS means: on all 1448 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 577 of those frames -- the near wall taking his jaw back -- up to 9654 px at the deepest.",
-  "meaning": "PASS means: on all 1421 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1421 of those frames and the far half took those pixels back on 1421. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
+  "meaningB": "PASS means: on all 1454 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 584 of those frames -- the near wall taking his jaw back -- up to 9782 px at the deepest.",
+  "meaning": "PASS means: on all 1427 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1427 of those frames and the far half took those pixels back on 1427. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "schnoodle-feed": {
-  "frames": 1544,
+  "frames": 1554,
   "phases": [
    "approach",
    "eat",
@@ -801,25 +765,25 @@
    "place",
    "pour"
   ],
-  "framesChecked": 1384,
+  "framesChecked": 1394,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1384,
-  "framesWhereTheFarHalfTookThosePixelsBack": 1384,
+  "framesWhereHisBodyOverlapsTheBowl": 1394,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1394,
   "framesWithTorsoShowingInsideTheBowl": 0,
-  "colourTiePixelsIgnoredWorstFrame": 61,
-  "replayMismatchWorstFrame": 0,
-  "replayMismatchWorstAnyFrame": 0,
-  "replayMismatchWorstFrac": 0,
-  "framesWithFaceSeamAndSplitVessel": 1411,
-  "framesWhereHisFaceIsDownInsideTheVessel": 607,
+  "colourTiePixelsIgnoredWorstFrame": 82,
+  "replayMismatchWorstFrame": 3,
+  "replayMismatchWorstAnyFrame": 3,
+  "replayMismatchWorstFrac": 5.2e-05,
+  "framesWithFaceSeamAndSplitVessel": 1421,
+  "framesWhereHisFaceIsDownInsideTheVessel": 617,
   "framesWithMuzzleOutsideTheBowlBelowTheLip": 0,
   "worstMuzzleOutsidePx": 0,
   "worstMuzzleOutsidePxUndilated": 0,
   "worstMuzzleOutsidePhase": null,
   "worstMuzzleOutsideBox": null,
   "worstMuzzleOutsideSamples": null,
-  "deepestFaceCoveredByTheNearWallPx": 12457,
+  "deepestFaceCoveredByTheNearWallPx": 12546,
   "worstFaceInsideVesselButUncoveredPx": 4,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
@@ -831,7 +795,7 @@
     "defectFrames": 0
    },
    "eat": {
-    "checked": 492,
+    "checked": 502,
     "defectFrames": 0
    },
    "finish": {
@@ -856,8 +820,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99301,
     "maskPx": 57558,
-    "torsoInMask": 45892,
-    "backOverTorso": 45892,
+    "torsoInMask": 45898,
+    "backOverTorso": 45898,
     "defect": 0
    },
    "b-pouring": {
@@ -866,8 +830,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 0.99944,
     "maskPx": 57594,
-    "torsoInMask": 45917,
-    "backOverTorso": 45917,
+    "torsoInMask": 45918,
+    "backOverTorso": 45918,
     "defect": 0
    },
    "c-approach": {
@@ -876,8 +840,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 57594,
-    "torsoInMask": 46521,
-    "backOverTorso": 46521,
+    "torsoInMask": 46552,
+    "backOverTorso": 46552,
     "defect": 0
    },
    "d-eating": {
@@ -886,8 +850,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 57594,
-    "torsoInMask": 57594,
-    "backOverTorso": 57594,
+    "torsoInMask": 57487,
+    "backOverTorso": 57487,
     "defect": 0
    },
    "e-lick": {
@@ -906,8 +870,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 57594,
-    "torsoInMask": 54529,
-    "backOverTorso": 54529,
+    "torsoInMask": 54736,
+    "backOverTorso": 54736,
     "defect": 0
    },
    "g-fading": {
@@ -932,28 +896,83 @@
    }
   },
   "worstReplayFrame": {
-   "phase": "pour",
-   "px": 0,
+   "phase": "eat",
+   "px": 3,
    "bd": {
     "onScreen": true,
     "split": true,
     "x": 178,
-    "y": 683.517,
-    "s": 2.12434,
+    "y": 683.507,
+    "s": 2.12482,
     "kind": "food",
-    "fill": 0,
-    "t": 0.95,
+    "fill": 0.23359,
+    "t": 20.28333,
     "ripple": 0,
-    "alpha": 0.99018
+    "alpha": 1
    },
-   "samples": null
+   "samples": [
+    {
+     "i": 412684,
+     "his": [
+      100,
+      53,
+      29
+     ],
+     "rendered": [
+      224,
+      187,
+      133
+     ],
+     "replayed": [
+      219,
+      179,
+      124
+     ]
+    },
+    {
+     "i": 412688,
+     "his": [
+      100,
+      53,
+      29
+     ],
+     "rendered": [
+      216,
+      175,
+      120
+     ],
+     "replayed": [
+      209,
+      163,
+      106
+     ]
+    },
+    {
+     "i": 412692,
+     "his": [
+      100,
+      53,
+      29
+     ],
+     "rendered": [
+      202,
+      154,
+      95
+     ],
+     "replayed": [
+      195,
+      142,
+      83
+     ]
+    }
+   ]
   },
   "pass": true,
-  "meaningB": "PASS means: on all 1411 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 607 of those frames -- the near wall taking his jaw back -- up to 12457 px at the deepest.",
-  "meaning": "PASS means: on all 1384 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1384 of those frames and the far half took those pixels back on 1384. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
+  "meaningB": "PASS means: on all 1421 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 617 of those frames -- the near wall taking his jaw back -- up to 12546 px at the deepest.",
+  "meaning": "PASS means: on all 1394 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1394 of those frames and the far half took those pixels back on 1394. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "schnoodle-water": {
-  "frames": 1589,
+  "frames": 1577,
   "phases": [
    "approach",
    "drink",
@@ -962,25 +981,25 @@
    "pour",
    "shakeMuzzle"
   ],
-  "framesChecked": 1429,
+  "framesChecked": 1417,
   "framesNotChecked_noBowlOnScreen": 104,
   "framesNotChecked_bowlCrossFading": 56,
-  "framesWhereHisBodyOverlapsTheBowl": 1429,
-  "framesWhereTheFarHalfTookThosePixelsBack": 1429,
+  "framesWhereHisBodyOverlapsTheBowl": 1417,
+  "framesWhereTheFarHalfTookThosePixelsBack": 1417,
   "framesWithTorsoShowingInsideTheBowl": 0,
-  "colourTiePixelsIgnoredWorstFrame": 83,
-  "replayMismatchWorstFrame": 3,
-  "replayMismatchWorstAnyFrame": 3,
-  "replayMismatchWorstFrac": 5.2e-05,
-  "framesWithFaceSeamAndSplitVessel": 1456,
-  "framesWhereHisFaceIsDownInsideTheVessel": 602,
+  "colourTiePixelsIgnoredWorstFrame": 74,
+  "replayMismatchWorstFrame": 0,
+  "replayMismatchWorstAnyFrame": 0,
+  "replayMismatchWorstFrac": 0,
+  "framesWithFaceSeamAndSplitVessel": 1444,
+  "framesWhereHisFaceIsDownInsideTheVessel": 594,
   "framesWithMuzzleOutsideTheBowlBelowTheLip": 0,
   "worstMuzzleOutsidePx": 0,
   "worstMuzzleOutsidePxUndilated": 0,
   "worstMuzzleOutsidePhase": null,
   "worstMuzzleOutsideBox": null,
   "worstMuzzleOutsideSamples": null,
-  "deepestFaceCoveredByTheNearWallPx": 12379,
+  "deepestFaceCoveredByTheNearWallPx": 12462,
   "worstFaceInsideVesselButUncoveredPx": 3,
   "worstDefectPx": 0,
   "worstDefectFracOfBowl": 0,
@@ -992,7 +1011,7 @@
     "defectFrames": 0
    },
    "drink": {
-    "checked": 580,
+    "checked": 568,
     "defectFrames": 0
    },
    "finish": {
@@ -1037,8 +1056,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 57594,
-    "torsoInMask": 46529,
-    "backOverTorso": 46529,
+    "torsoInMask": 46522,
+    "backOverTorso": 46522,
     "defect": 0
    },
    "d-eating": {
@@ -1067,8 +1086,8 @@
     "bowlOnScreen": true,
     "bowlAlpha": 1,
     "maskPx": 57594,
-    "torsoInMask": 53906,
-    "backOverTorso": 53906,
+    "torsoInMask": 53669,
+    "backOverTorso": 53669,
     "defect": 0
    },
    "g-fading": {
@@ -1093,80 +1112,25 @@
    }
   },
   "worstReplayFrame": {
-   "phase": "drink",
-   "px": 3,
+   "phase": "pour",
+   "px": 0,
    "bd": {
     "onScreen": true,
     "split": true,
     "x": 178,
-    "y": 683.507,
-    "s": 2.12482,
+    "y": 683.517,
+    "s": 2.12434,
     "kind": "water",
-    "fill": 0.33146,
-    "t": 20.08333,
-    "ripple": 1,
-    "alpha": 1
+    "fill": 0,
+    "t": 0.95,
+    "ripple": 0,
+    "alpha": 0.99018
    },
-   "samples": [
-    {
-     "i": 412684,
-     "his": [
-      100,
-      53,
-      29
-     ],
-     "rendered": [
-      120,
-      160,
-      157
-     ],
-     "replayed": [
-      123,
-      164,
-      162
-     ]
-    },
-    {
-     "i": 412688,
-     "his": [
-      100,
-      53,
-      29
-     ],
-     "rendered": [
-      122,
-      162,
-      160
-     ],
-     "replayed": [
-      124,
-      166,
-      166
-     ]
-    },
-    {
-     "i": 412692,
-     "his": [
-      100,
-      53,
-      29
-     ],
-     "rendered": [
-      123,
-      164,
-      162
-     ],
-     "replayed": [
-      126,
-      169,
-      170
-     ]
-    }
-   ]
+   "samples": null
   },
   "pass": true,
-  "meaningB": "PASS means: on all 1456 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 602 of those frames -- the near wall taking his jaw back -- up to 12379 px at the deepest.",
-  "meaning": "PASS means: on all 1429 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1429 of those frames and the far half took those pixels back on 1429. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
+  "meaningB": "PASS means: on all 1444 frames where the vessel was split around him, NO pixel of his FACE -- skull, cheeks, muzzle, beard, nose, mouth, read at the renderer's own face seam so no ear is counted -- survived outside the vessel's outline below the near-lip line. Not vacuous: his face was down INSIDE the vessel below that line on 594 of those frames -- the near wall taking his jaw back -- up to 12462 px at the deepest.",
+  "meaning": "PASS means: on all 1417 frames where an opaque bowl was on screen -- every beat from placing it to sitting back up -- NO pixel of his torso survived inside the bowl's outline. Not vacuous: his body was behind the bowl on 1417 of those frames and the far half took those pixels back on 1417. 104 frames were not checked because there was no bowl on screen and 56 because it was mid cross-fade."
  },
  "consoleErrors": [],
  "allPass": true
