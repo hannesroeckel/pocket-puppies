@@ -23,6 +23,10 @@ import BALANCE from '../state/balance.js';
    codebase. scenes/props.js does not import this module, so this direction is
    safe. */
 import { drawFind } from '../scenes/props.js';
+/* THE TUFTED MASS, which the profile view shares — see dog/coat.js. Moved out of
+   this file unchanged; `fluffMass` takes `pal` as an argument now because it can
+   no longer close over it. */
+import { buildFluff, fluffMass } from './coat.js';
 import {
   TAU, clamp, lerp, pt, ell, crClosed, ribbon, resampleClosed, loopNormals, mix, rgba,
 } from '../engine/draw.js';
@@ -1571,53 +1575,6 @@ export function createDogRenderer(rig) {
                velocity so they swing, 'topknot' takes light head parallax
        mirror  draw both sides
      ================================================================== */
-  /**
-   * A furnishing is ONE COHESIVE MASS with a tufted edge — authored as a
-   * closed outline exactly like a silhouette, then broken along its normals
-   * by the same |sin|^pow profile the coat uses.
-   *
-   * (The first attempt drew each furnishing as a cluster of overlapping
-   * discs. Rendered, a white disc cluster on a dark muzzle reads
-   * unmistakably as SOAP SUDS, not as a beard — the individual circles stay
-   * legible and the eye names them. A single tufted path reads as hair.)
-   *
-   * Paths are static in head-local space, so every one is tufted ONCE here at
-   * construction and only translated/scaled per frame.
-   */
-  function buildFluff(poly, salt, amp, cycles, pow, rim) {
-    const rs = resampleClosed(poly, 4);
-    const n = rs.length;
-    const norms = loopNormals(rs);
-    const raw = new Float32Array(n);
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      const u = i / n;
-      let v = Math.pow(Math.abs(Math.sin(Math.PI * cycles * u + salt)), pow);
-      v *= 1 + 0.34 * Math.sin(u * TAU * 3 + salt * 1.9);
-      raw[i] = v; sum += v;
-    }
-    const mean = sum / n;
-    /* `rim` scales the dark edge. A flat 2 units is right on a beard 45 units
-       deep and far too heavy on a brow only 10 deep: there, rim plus tuft is a
-       dim grey skirt as thick as the pale mass it surrounds, and the brow stops
-       reading as a brow and starts reading as a smudge. */
-    const rw = 2.0 * (rim === undefined ? 1 : rim);
-    const fill = [], dark = [];
-    let y0 = Infinity, y1 = -Infinity;
-    for (let i = 0; i < n; i++) {
-      const d = amp * (raw[i] - mean + 0.34);
-      const x = rs[i].x + norms[i].x * d, y = rs[i].y + norms[i].y * d;
-      fill.push(pt(x, y));
-      dark.push(pt(x + norms[i].x * rw, y + norms[i].y * rw));
-      if (y < y0) y0 = y;
-      if (y > y1) y1 = y;
-    }
-    /* `base` is the SMOOTH resampled contour, before tufting. A contact shadow
-       traced round the ragged edge is just more ragged edge; traced round the
-       smooth one it reads as the form's shadow on the face underneath. */
-    return { fill, dark, base: rs, y0, y1 };
-  }
-
   /* precomputed furnishing geometry, per entry per side */
   const furnish = [];
   {
@@ -1635,66 +1592,6 @@ export function createDogRenderer(rig) {
           f.tuftCycles || 9, f.tuftPow || 0.8, f.rim);
       }
       furnish.push({ f, sides, geo });
-    }
-  }
-
-  /**
-   * ONE furnishing side's MASS — contact shadow, dark rim, fill, form shade —
-   * in head-local coordinates.
-   *
-   * Pulled out of drawFurnishings so that the live path and the pre-baked path
-   * below run the exact same drawing code and cannot drift apart. Everything
-   * here is static in head-local space (see buildFluff), which is precisely
-   * what makes the bake possible.
-   */
-  function fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha) {
-    /* CONTACT SHADOW — what stops a furnishing reading as a decal.
-       A pale mass laid on the face with no shadow under it has no stated
-       relationship to the head: it hovers in front of the face. A brow
-       physically OVERHANGS the brow ridge, so it throws a soft shadow down onto
-       the lid — and drawing that shadow is what drops it back ONTO the lid
-       without moving it down over the eye and re-crushing it (the opposite
-       failure). Traced round the SMOOTH base contour, offset down, and mostly
-       hidden behind the mass itself: all that shows is the crescent below the
-       lower edge. */
-    if (f.contact) {
-      const CT = f.contact;
-      const passes = CT.soft === false ? 1 : 2;
-      for (let q = passes; q >= 1; q--) {
-        c.globalAlpha = alpha * (CT.alpha || 0.20) / passes;
-        c.save();
-        c.translate((CT.dx || 0) * hw * sd, (CT.dy === undefined ? 0.06 : CT.dy) * hh * (q / passes));
-        c.beginPath(); crClosed(c, geo.base, 1);
-        c.fillStyle = pal[CT.color] || dark; c.fill();
-        c.restore();
-      }
-      c.globalAlpha = alpha;
-    }
-    c.beginPath(); crClosed(c, geo.dark, 1);
-    c.fillStyle = dark; c.fill();
-    c.beginPath(); crClosed(c, geo.fill, 1);
-    c.fillStyle = main; c.fill();
-    /* a soft inner shade so the mass has volume rather than reading as a
-       flat paper cutout stuck on the face */
-    if (f.shadeIn || f.shadeUnder) {
-      c.beginPath(); crClosed(c, geo.fill, 1);
-      c.save(); c.clip();
-      /* `shadeIn` shades from the TOP down, which is right for a beard
-         hanging in the shadow of the jaw. It is backwards for a brow: an
-         overhanging mass is LIT on top and dark underneath, and shading it
-         the other way lights it from below — one more reason the brows read
-         as pasted on rather than as part of the skull. `shadeUnder` runs the
-         ramp the other way, and over the furnishing's OWN extent rather than
-         the head's, so a shape only a fifth of a head deep actually gets the
-         full ramp instead of a flat slice of it. */
-      const sg = f.shadeUnder
-        ? c.createLinearGradient(0, geo.y1, 0, geo.y0 - (geo.y1 - geo.y0) * 0.25)
-        : c.createLinearGradient(0, -hh * 0.2, 0, hh * 0.5);
-      sg.addColorStop(0, rgba(dark, f.shadeUnder || f.shadeIn));
-      sg.addColorStop(1, rgba(dark, 0));
-      c.fillStyle = sg;
-      c.fillRect(-hw, -hh, hw * 2, hh * 2);
-      c.restore();
     }
   }
 
@@ -1761,7 +1658,7 @@ export function createDogRenderer(rig) {
     const bc = cv.getContext('2d');
     if (!bc) { bakes.set(key, null); return null; }
     bc.setTransform(K, 0, 0, K, -x0 * K, -y0 * K);
-    fluffMass(bc, f, geo, sd, main, dark, hw, hh, 1);
+    fluffMass(bc, f, geo, sd, main, dark, hw, hh, 1, pal);
     const out = { cv, x0, y0, w: x1 - x0, h: y1 - y0 };
     /* the key space is bounded in practice (7 sides x one scale x the pristine
        palette), but never let a resize storm grow it without limit */
@@ -1865,7 +1762,7 @@ export function createDogRenderer(rig) {
           bk = fluffBake(ent, i, sd, main, dark, baseK * Math.max(1, f.scale || 1));
         }
         if (bk) c.drawImage(bk.cv, bk.x0, bk.y0, bk.w, bk.h);
-        else fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha);
+        else fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha, pal);
         c.globalAlpha = 1;
         c.restore();
         /* a few wispy hairs sweeping out of the cluster — this is what makes

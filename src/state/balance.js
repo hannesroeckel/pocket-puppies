@@ -2145,13 +2145,23 @@ export const BALANCE = {
     /* the muzzle is the FRONT OF THE FACE now, not a shape stuck on it */
     muzzle: { w: 0.30, h: 0.24, x: 0.62, y: 0.30 },
     nose: { x: 0.72, y: 0.12, r: 0.30 },
-    eye: { x: 0.30, y: -0.02, r: 1.0 },
+    eye: { x: 0.30, y: -0.02, r: 0.52 },
     /* one ear, hanging off the near cheek, swinging with the stride */
-    ear: { w: 0.62, h: 0.92, x: 0.18, y: 0.10, angle: 0.10 },
-    tail: { x: 0.86, y: 0.30, w: 0.30, h: 0.46, angle: -0.9 },
+    /* ONE EAR, AND IT IS NOT A PLANK. At w 0.62 / h 0.92 and barely rotated it
+       came out as tall as his whole body, hanging down the middle of him over the
+       front legs — the single worst thing in the first two renders. It is a lobe
+       lying back along the cheek: half the size, well behind the eye, and rotated
+       enough to follow the jaw. */
+    ear: { w: 0.50, h: 0.46, x: 0.34, y: -0.06, angle: 0.55 },
+    /* the tail read as a SECOND RUMP at 0.30 x 0.46 — a scalloped mass the size
+       of his hindquarters, at mid-height. A plume is small, high and behind. */
+    tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15 },
     /* the legs: stubs, no joints (the reference has none), with the hind pair
        a little longer and the paw a little wider than the leg */
-    leg: { len: 1.15, w: 1.05, hind: 1.06, paw: 0.62, shoulderX: 0.52, hipX: 0.62 },
+    /* thicker than the frontal legs, not thinner: in profile a leg is a whole
+       limb rather than a strip of one, and at 1.05 they read as wire. Shorter,
+       too — the reference puppy is low to the ground. */
+    leg: { len: 0.98, w: 1.55, hind: 1.04, paw: 0.70, shoulderX: 0.56, hipX: 0.68 },
     cream: { w: 0.44, h: 0.42, alpha: 0.85 },
     shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
     /* ---- THE GAIT ----------------------------------------------------

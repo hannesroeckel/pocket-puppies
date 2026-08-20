@@ -37,344 +37,301 @@
 
    WHAT IS SHARED WITH THE FRONTAL DOG, AND WHY
    -------------------------------------------
-   Everything except the shape: `breed.palette` for colour, `breed.proportions`
-   for how big the parts are, and `FUR_TYPE` (exported from dog/draw.js) for how
-   deep the scallop is and how dense the curl. A profile dog with its own coat
-   numbers would drift away from the frontal one breed by breed; sharing the
-   numbers means the two views can only disagree about silhouette, which is the
-   thing they are supposed to disagree about.
+   THE FIRST VERSION OF THIS FILE DREW ITS OWN COAT, and the verdict on it was
+   "that looks horrible". It was: one sine-modulated outline and a few interior
+   arcs, against a frontal dog whose coat is a contact shadow, a dark rim outside
+   the fill, the fill, and a form shade inside it — tufted once at construction
+   and tuned across eight stages against defects that were only ever found by
+   looking. It reused the frontal coat's NUMBERS and none of its DRAWING, so it
+   read as a knock-off of our own dog, which is what it was.
+
+   So `buildFluff` and `fluffMass` moved out of dog/draw.js into dog/coat.js and
+   BOTH VIEWS CALL THEM. Everything here is shared: the tufted mass, the derived
+   palette (`rig.pal`, including `line` — the contour the first attempt had no
+   idea it was missing), `breed.proportions` for how big the parts are, and
+   `FUR_TYPE` for how deep the scallop is. What is NOT shared is the silhouette,
+   which is the one thing the two views are supposed to disagree about.
+
+   THE SHAPES ARE NORMALISED POLYGONS, in the same [-1..1] space `breed.furnishings`
+   uses for its paths, scaled by half-extents at construction. So a Shiba's
+   profile is a Shiba's proportions and there is no second table of sizes.
 
    He must read as the same dog seen from a different side. That is the whole
    test, and it is not one a gate can make — it is one to look at.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
-import { TAU, clamp, lerp, smooth, hump, ell } from '../engine/draw.js';
+import { TAU, clamp, pt, hump, ell } from '../engine/draw.js';
 import { FUR_TYPE } from './draw.js';
+import { buildFluff, fluffMass } from './coat.js';
 
 const S = BALANCE.side;
 
-/* a stable hash, so every curl and every scallop is in the same place on every
-   frame and on every launch — the room's own trick (`BALANCE.rng.roomSeed`) */
-function hash(i, salt) {
-  const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
+/* ==========================================================================
+   THE SILHOUETTES, as normalised polygons in [-1..1].
 
-/**
- * A SCALLOPED CLOSED SHAPE — the coat motif, in profile.
- *
- * The frontal rig builds this from a sampled outline with lobes pushed along the
- * normal (`buildFluff`/`fluffMass` in dog/draw.js). Here the shapes are simple
- * enough — a bean, a dome, a stub — to walk the ellipse directly and modulate
- * the radius, which is the same read at a twentieth of the code.
- *
- * `cycles` and `amp` come from the breed's own `tuft` block, so a wavy coat
- * scallops loosely and a curly one tightly, exactly as it does face-on.
- */
-function furShape(c, cx, cy, rx, ry, o = {}) {
-  const t = o.tuft || { cycles: 12, amp: 3.0, pow: 0.7 };
-  const amp = (o.amp === undefined ? 1 : o.amp) * (t.amp || 3) * (o.scale || 1);
-  const cycles = Math.max(3, Math.round((t.cycles || 12) * (o.cycleScale || 1)));
-  const rot = o.rot || 0;
-  const salt = o.salt || 0;
-  const n = Math.max(24, cycles * 6);
-  c.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const u = i / n;
-    const a = u * TAU;
-    /* two frequencies, the second at a third of the amplitude: one wave alone
-       reads as a gear, and the frontal coat has the same second octave */
-    const w = Math.sin(a * cycles + salt) * 1 + Math.sin(a * cycles * 2.1 + salt * 1.7) * 0.34;
-    const j = 1 + (hash(i, salt) - 0.5) * 0.18;
-    const r = 1 + (w * j * amp) / Math.max(rx, ry);
-    const px = Math.cos(a) * rx * r;
-    const py = Math.sin(a) * ry * r;
-    const x = cx + px * Math.cos(rot) - py * Math.sin(rot);
-    const y = cy + px * Math.sin(rot) + py * Math.cos(rot);
-    if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
-  }
-  c.closePath();
-}
+   +x is FORWARD (the nose end) and +y is DOWN, so every shape below is drawn
+   nose-right and mirrored by the caller's transform — one set of numbers rather
+   than two. Scaled by the part's half-extents at construction.
 
-/** the interior curl: short wide faint C-arcs, the frontal coat's own recipe */
-function curls(c, cx, cy, rx, ry, coatShade, fur, salt, dens) {
-  const k = fur.curl;
-  if (!k) return;
-  const n = Math.round(clamp((rx * ry) / 260, 3, 26) * (dens === undefined ? 1 : dens));
-  c.save();
-  c.strokeStyle = coatShade;
-  c.globalAlpha = k.alpha * 1.15;
-  c.lineWidth = k.width;
-  c.lineCap = 'round';
-  for (let i = 0; i < n; i++) {
-    const u = hash(i, salt) * TAU;
-    const v = 0.28 + hash(i, salt + 9) * 0.58;
-    const x = cx + Math.cos(u) * rx * v;
-    const y = cy + Math.sin(u) * ry * v;
-    const r = Math.min(rx, ry) * k.radius * 0.30;
-    const a0 = hash(i, salt + 3) * TAU;
-    c.beginPath();
-    c.arc(x, y, r, a0, a0 + k.sweep * 0.55);
-    c.stroke();
-  }
-  c.restore();
-}
+   These twelve-or-so points per shape are the entire art direction of the
+   profile, and they are what the render-and-look loop moves.
+   ========================================================================== */
+const SHAPE = {
+  /* the body: a bean with a DEEP CHEST FORWARD and a tucked belly behind it,
+     which is what makes a puppy read as a puppy rather than as a sausage */
+  body: [
+    [0.98, -0.18], [0.74, -0.72], [0.30, -0.94], [-0.20, -0.98],
+    [-0.66, -0.82], [-0.94, -0.42], [-1.00, 0.10], [-0.82, 0.56],
+    [-0.40, 0.72], [0.10, 0.80], [0.56, 0.92], [0.90, 0.52],
+  ],
+  /* the head: a dome, a stop, and a short muzzle carrying the nose */
+  head: [
+    [-0.10, -1.00], [0.42, -0.88], [0.72, -0.60], [0.96, -0.40],
+    [1.14, -0.06], [0.98, 0.28], [0.62, 0.46], [0.20, 0.62],
+    [-0.34, 0.76], [-0.82, 0.52], [-1.00, 0.04], [-0.90, -0.52],
+  ],
+  /* one ear: a long soft lobe, wider at the bottom than the top */
+  ear: [
+    [-0.52, -0.86], [0.16, -0.94], [0.62, -0.58], [0.78, 0.00],
+    [0.72, 0.56], [0.34, 0.90], [-0.24, 0.96], [-0.68, 0.62],
+    [-0.86, 0.06], [-0.80, -0.48],
+  ],
+  /* the tail: a plume, fat at the tip */
+  tail: [
+    [-0.90, 0.10], [-0.52, -0.52], [0.06, -0.82], [0.62, -0.66],
+    [0.92, -0.14], [0.86, 0.44], [0.36, 0.82], [-0.28, 0.76],
+    [-0.76, 0.52],
+  ],
+  /* the pale chest and belly, inside the body's front half */
+  chest: [
+    [0.86, -0.10], [0.52, -0.44], [0.06, -0.50], [-0.36, -0.30],
+    [-0.52, 0.14], [-0.30, 0.60], [0.20, 0.80], [0.66, 0.60],
+    [0.88, 0.26],
+  ],
+};
 
 export function createSideDog(rig) {
   const breed = rig.breed;
   const P = breed.proportions;
-  const C = breed.palette;
+  const pal = rig.pal;
   const fur = FUR_TYPE[breed.fur.type] || FUR_TYPE.short;
   const tuft = fur.tuft || { cycles: 12, amp: 3, pow: 0.7 };
 
   /* ---- THE PROFILE'S OWN PROPORTIONS -------------------------------------
-     Derived from the frontal numbers rather than typed in, so a breed that is
-     wider face-on is longer in profile and nothing has two sources of truth.
-     The multipliers are the whole art direction of this file, and they were set
-     by rendering him next to `docs/reference/side-run-cycle.png` and moving them
-     until he matched: a puppy in profile is LONGER than he is wide face-on, his
-     chest is low and deep, and his head is huge. */
+     Derived from the frontal numbers, never typed in: a breed that is wider
+     face-on is longer in profile, and nothing has two sources of truth. */
   const g = {
     bodyHW: P.bodyW * S.body.long,
     bodyHH: P.bodyH * S.body.deep,
     headHW: P.headW * P.headScale * S.head.w,
     headHH: P.headH * P.headScale * S.head.h,
-    muzHW: P.muzzleW * S.muzzle.w,
-    muzHH: P.muzzleH * S.muzzle.h,
     earHW: P.earW * S.ear.w,
     earHH: P.earH * S.ear.h,
+    tailHW: P.bodyW * S.tail.w * (P.tailLen || 1),
+    tailHH: P.bodyH * S.tail.h,
     legLen: P.legLen * S.leg.len,
     legW: P.legW * S.leg.w,
   };
 
-  /**
-   * WHERE EVERY PART IS, for a gait phase.
-   *
-   * `face` is -1 for "nose to the left", which is how the reference is drawn;
-   * everything below is computed in a right-facing space and mirrored by the
-   * caller's transform, so there is one set of numbers rather than two.
-   *
-   * `run` is how much of the gait is applied, 0..1 — 0 is the standing pose, and
-   * the standing pose is deliberately not authored separately. It is the loop
-   * held at its gathered key, which is what keeps a dog who stops mid-stride
-   * from snapping into a different animal.
-   */
+  /* ---- TUFTED ONCE, AT CONSTRUCTION --------------------------------------
+     `buildFluff` bakes the scalloped contour, the dark rim outside it, and the
+     smooth base the contact shadow is traced round. It is static in part-local
+     space — which is exactly why the frontal dog can bake its furnishings to
+     bitmaps, and why nothing here re-tufts per frame. */
+  function tuftOf(shape, hw, hh, salt, o = {}) {
+    const poly = shape.map((q) => pt(q[0] * hw, q[1] * hh));
+    return buildFluff(poly, salt,
+      (tuft.amp || 3) * (o.amp === undefined ? 1 : o.amp) * (o.scale || 1),
+      Math.max(3, (tuft.cycles || 12) * (o.cycleScale === undefined ? 1 : o.cycleScale)),
+      tuft.pow || 0.7, o.rim);
+  }
+
+  const geo = {
+    body: tuftOf(SHAPE.body, g.bodyHW, g.bodyHH, 7.1, { scale: tuft.bodyScale || 1 }),
+    head: tuftOf(SHAPE.head, g.headHW, g.headHH, 3.3),
+    ear: tuftOf(SHAPE.ear, g.earHW, g.earHH, 23.5, { amp: 0.9 }),
+    tail: tuftOf(SHAPE.tail, g.tailHW, g.tailHH, 31.7, { amp: 1.1, cycleScale: 0.7 }),
+    chest: tuftOf(SHAPE.chest, g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, 19.3,
+      { amp: 0.5, cycleScale: 0.8, rim: 0.35 }),
+  };
+
+  /* the specs the shared mass reads: a contact shadow under each part and a form
+     shade inside it, which together are what stop a mass reading as a cut-out */
+  const SPEC = {
+    body: { contact: { alpha: 0.16, dy: 0.10 }, shadeIn: 0.30 },
+    head: { contact: { alpha: 0.14, dy: 0.12 }, shadeIn: 0.26 },
+    ear: { contact: { alpha: 0.18, dy: 0.06 }, shadeUnder: 0.34 },
+    tail: { shadeIn: 0.28 },
+    chest: { shadeUnder: 0.18 },
+  };
+
+  /** the gait: a bound, per the reference's four keys */
   function pose(phase, run) {
-    const ph = phase % 1;
+    const ph = ((phase % 1) + 1) % 1;
     const a = ph * TAU;
     const L = S.gait;
-    /* THE BODY BOB. A bound lifts the whole dog once per cycle; the reference's
-       four frames are two extended and two gathered, which is a bound rather
-       than a trot. `hump` gives the single arch. */
     const lift = hump(ph) * L.bob * run;
-    const stretch = Math.sin(a) * L.stretch * run;
-    /* THE LEGS, AS PAIRS. A bound throws both fronts forward together and both
-       hinds back, so the pairs are half a cycle apart and the near/far legs of
-       a pair are a small lag apart — which is what stops it reading as two legs
-       instead of four. */
     const leg = (base, off) => {
-      const p = (ph + off) % 1;
-      const sw = Math.sin(p * TAU);
+      const q = (ph + off) % 1;
+      const sw = Math.sin(q * TAU);
       return {
-        /* along the ground: forward on the swing, back on the drive */
         dx: sw * L.reach * run,
-        /* off the ground: only ever up, and only on the forward half */
-        dy: -Math.max(0, Math.sin(p * TAU)) * L.paw * run,
-        /* the stub shortens as it swings under him, which is the only
-           foreshortening a jointless leg gets */
+        dy: -Math.max(0, Math.sin(q * TAU)) * L.paw * run,
         len: base * (1 - Math.abs(sw) * L.foreshorten * run),
       };
     };
     return {
       lift,
-      stretch,
       front: [leg(g.legLen, L.lagFar), leg(g.legLen, 0)],
       hind: [leg(g.legLen * S.leg.hind, 0.5 + L.lagFar), leg(g.legLen * S.leg.hind, 0.5)],
-      /* the head rides the bob a little late, and dips on the drive */
-      headDY: -lift * 0.34 + Math.sin(a - 0.6) * L.headBob * run,
+      headDY: -lift * 0.30 + Math.sin(a - 0.6) * L.headBob * run,
       tail: Math.sin(a * 2) * L.tail * run,
-      earSwing: Math.sin(a - 1.1) * L.ear * run,
+      ear: Math.sin(a - 1.1) * L.ear * run,
     };
   }
 
-  /** one leg: a soft stub with a paw, drawn from a hip toward the ground */
-  function drawLeg(c, hx, hy, l, coat, dark, wide) {
+  /** one part's mass, at a position, through the SHARED pipeline */
+  function mass(c, key, x, y, rot, hw, hh, main, dark, alpha) {
+    c.save();
+    c.translate(x, y);
+    if (rot) c.rotate(rot);
+    fluffMass(c, SPEC[key], geo[key], 1, main, dark, hw, hh, alpha, pal);
+    c.restore();
+  }
+
+  /** a leg: a stub with a rim, because the reference has no joints */
+  function drawLeg(c, hx, hy, l, main, dark, wide) {
     const w = g.legW * (wide || 1);
     const x = hx + l.dx;
     const y = hy + l.len + l.dy;
     c.save();
-    c.strokeStyle = dark ? C.coatShade : coat;
     c.lineCap = 'round';
-    c.lineWidth = w;
+    /* the rim first and wider, then the coat on top — the same "dark outside the
+       fill" order the tufted mass uses */
+    for (const pair of [[dark, w + 3.4], [main, w]]) {
+      c.strokeStyle = pair[0];
+      c.lineWidth = pair[1];
+      c.beginPath();
+      c.moveTo(hx, hy);
+      c.quadraticCurveTo(hx + l.dx * 0.55, hy + l.len * 0.55, x, y);
+      c.stroke();
+    }
+    const pr = w * S.leg.paw;
+    c.fillStyle = dark;
+    ell(c, x, y, pr + 1.7, pr * 0.80 + 1.7); c.fill();
+    c.fillStyle = main;
+    ell(c, x, y, pr, pr * 0.80); c.fill();
+    c.restore();
+  }
+
+  /** the muzzle tip, the nose, the mouth and the one eye */
+  function drawFace(c, hx, hy, a) {
+    const mx = hx + g.headHW * S.muzzle.x;
+    const my = hy + g.headHH * S.muzzle.y;
+    const mw = P.muzzleW * S.muzzle.w, mh = P.muzzleH * S.muzzle.h;
+
+    /* the pale muzzle, sitting ON the face rather than stuck to the front of it */
+    c.save();
+    c.globalAlpha = a * 0.92;
+    c.fillStyle = pal.muzMid || pal.cream;
+    ell(c, mx, my, mw, mh); c.fill();
+    c.restore();
+
+    /* the nose: a dark bean at the tip, the strongest single mark on him */
+    c.fillStyle = pal.nose;
+    ell(c, mx + mw * S.nose.x, my - mh * S.nose.y, mw * S.nose.r, mw * S.nose.r * 0.88); c.fill();
+
+    /* the mouth, a soft line back from under the nose */
+    c.save();
+    c.strokeStyle = pal.mouth || pal.line;
+    c.globalAlpha = a * 0.8; c.lineWidth = 2.1; c.lineCap = 'round';
     c.beginPath();
-    c.moveTo(hx, hy);
-    /* a single soft bend toward the ground: no knee, per the reference */
-    c.quadraticCurveTo(hx + l.dx * 0.55, hy + l.len * 0.55, x, y);
+    c.moveTo(mx + mw * 0.52, my + mh * 0.34);
+    c.quadraticCurveTo(mx + mw * 0.02, my + mh * 0.74, mx - mw * 0.44, my + mh * 0.44);
     c.stroke();
-    /* the paw, a rounded blob a touch wider than the leg */
-    c.fillStyle = dark ? C.coatShade : coat;
-    ell(c, x, y, w * S.leg.paw, w * S.leg.paw * 0.78); c.fill();
+    c.restore();
+
+    /* THE EYE, and there is one of them. Sized off the frontal eye and then
+       HALVED: face-on you read two small eyes in a wide face, and the same
+       radius in profile is a saucer — which is exactly what the first render
+       put on the side of his head. */
+    const ex = hx + g.headHW * S.eye.x;
+    const ey = hy + g.headHH * S.eye.y;
+    const er = g.headHW * 0.245 * (P.eyeSize || 1) * S.eye.r;
+    c.fillStyle = pal.eye;
+    ell(c, ex, ey, er, er * 1.06); c.fill();
+    c.fillStyle = pal.eyeHi || '#ffffff';
+    ell(c, ex + er * 0.36, ey - er * 0.42, er * 0.32, er * 0.28); c.fill();
+    /* the brow: the frontal dog's expression lives in it */
+    c.save();
+    c.strokeStyle = pal.coatSh; c.globalAlpha = a * 0.5;
+    c.lineWidth = 2.6; c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(ex - er * 1.0, ey - er * 2.0);
+    c.quadraticCurveTo(ex + er * 0.2, ey - er * 2.7, ex + er * 1.3, ey - er * 1.8);
+    c.stroke();
     c.restore();
   }
 
   /**
-   * DRAW HIM.
-   *
-   * `o = { x, y, s, face, phase, run, alpha }` — `y` is THE GROUND HE STANDS ON,
-   * not his centre, which is the same contract `rig.y` has (`rig.floorV`). A
-   * profile dog whose origin was his middle would need every caller to know how
-   * tall he is.
+   * DRAW HIM. `y` is THE GROUND HE STANDS ON, not his centre — the same contract
+   * `rig.y` has (`rig.floorV`), because a profile dog whose origin was his middle
+   * would need every caller to know how tall he is.
    */
   function draw(gg, o = {}) {
     const c = gg.ctx;
     const s = o.s === undefined ? rig.s : o.s;
     const face = (o.face || -1) < 0 ? -1 : 1;
     const run = clamp(o.run === undefined ? 1 : o.run, 0, 1);
-    const p = pose(o.phase || 0, run);
     const a = o.alpha === undefined ? 1 : o.alpha;
+    const p = pose(o.phase || 0, run);
+    const main = pal.coat, dark = pal.line;
 
     c.save();
     c.globalAlpha = a;
-    c.translate(o.x || 0, (o.y || 0) + p.lift);
+    c.translate(o.x || 0, o.y || 0);
     c.scale(face * s, s);
+    c.lineJoin = 'round';
 
-    /* ---- the contact shadow, which is what puts him ON something --------- */
-    const sh = clamp(1 - p.lift / Math.max(1, S.gait.bob), 0.35, 1);
+    /* the contact shadow on the ground — smaller and fainter the higher he is.
+       Drawn BEFORE the lift is applied, because the shadow stays on the floor. */
+    const sh = clamp(1 - p.lift / Math.max(1, S.gait.bob), 0.4, 1);
     c.save();
     c.globalAlpha = a * S.shadow.alpha * sh;
     c.fillStyle = S.shadow.ink;
-    ell(c, 0, -p.lift, g.bodyHW * S.shadow.w * sh, g.bodyHH * S.shadow.h * sh); c.fill();
+    ell(c, 0, 0, g.bodyHW * S.shadow.w * sh, g.bodyHH * S.shadow.h * sh); c.fill();
     c.restore();
 
-    /* body geometry, in a space where the ground is y=0 and up is negative */
-    const bodyCY = -(g.legLen + g.bodyHH * 0.86);
-    const bodyCX = 0;
-    const headCX = g.bodyHW * S.head.fwd;
-    const headCY = bodyCY - g.bodyHH * S.head.up + p.headDY;
+    c.translate(0, -p.lift);
+    const bodyY = -(g.legLen + g.bodyHH * 0.82);
+    const headX = g.bodyHW * S.head.fwd;
+    const headY = bodyY - g.bodyHH * S.head.up + p.headDY;
+    const hipY = bodyY + g.bodyHH * 0.40;
 
-    /* ---- THE FAR LEGS, BEHIND EVERYTHING ------------------------------- */
-    const shX = g.bodyHW * S.leg.shoulderX;
-    const hipX = -g.bodyHW * S.leg.hipX;
-    const hipY = bodyCY + g.bodyHH * 0.42;
-    drawLeg(c, shX * 0.82, hipY, p.front[0], C.coat, true, 0.94);
-    drawLeg(c, hipX * 0.82, hipY, p.hind[0], C.coat, true, 0.94);
+    /* far legs, the tail, then the body over both */
+    drawLeg(c, g.bodyHW * S.leg.shoulderX * 0.80, hipY, p.front[0], pal.coatSh, dark, 0.94);
+    drawLeg(c, -g.bodyHW * S.leg.hipX * 0.80, hipY, p.hind[0], pal.coatSh, dark, 0.94);
+    mass(c, 'tail', -g.bodyHW * S.tail.x, bodyY - g.bodyHH * S.tail.y,
+      S.tail.angle + p.tail, g.tailHW, g.tailHH, main, dark, a);
+    mass(c, 'body', 0, bodyY, 0, g.bodyHW, g.bodyHH, main, dark, a);
+    mass(c, 'chest', g.bodyHW * 0.34, bodyY + g.bodyHH * 0.30, 0,
+      g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, pal.cream, pal.creamSh, a * S.cream.alpha);
 
-    /* ---- THE TAIL, a curled plume off the rump ------------------------- */
-    const tailX = -g.bodyHW * S.tail.x;
-    const tailY = bodyCY - g.bodyHH * S.tail.y;
-    c.save();
-    c.translate(tailX, tailY);
-    c.rotate((S.tail.angle + p.tail) * (P.tailCurl || 0.7));
-    c.fillStyle = C.coat;
-    furShape(c, -g.bodyHW * 0.10, 0, g.bodyHW * S.tail.w * (P.tailLen || 1),
-      g.bodyHH * S.tail.h, { tuft, salt: 31, cycleScale: 0.55 });
-    c.fill();
-    c.strokeStyle = C.coatShade; c.lineWidth = 1.6; c.globalAlpha = a * 0.5; c.stroke();
-    c.restore();
+    /* near legs in front of the body */
+    drawLeg(c, g.bodyHW * S.leg.shoulderX, hipY, p.front[1], main, dark, 1);
+    drawLeg(c, -g.bodyHW * S.leg.hipX, hipY, p.hind[1], main, dark, 1);
 
-    /* ---- THE BODY ------------------------------------------------------ */
-    c.fillStyle = C.coat;
-    furShape(c, bodyCX, bodyCY, g.bodyHW * (1 + p.stretch * 0.02), g.bodyHH,
-      { tuft, salt: 7, scale: tuft.bodyScale || 1 });
-    c.fill();
-    c.save(); c.globalAlpha = a * 0.55; c.strokeStyle = C.coatShade; c.lineWidth = 2;
-    c.stroke(); c.restore();
-    curls(c, bodyCX, bodyCY, g.bodyHW, g.bodyHH, C.coatShade, fur, 7);
-
-    /* the chest and belly, pale — the same cream ramp the frontal dog carries */
-    c.save();
-    c.globalAlpha = a * S.cream.alpha;
-    c.fillStyle = C.cream;
-    furShape(c, g.bodyHW * 0.30, bodyCY + g.bodyHH * 0.34,
-      g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, { tuft, salt: 19, cycleScale: 0.8 });
-    c.fill();
-    c.restore();
-
-    /* ---- THE NEAR LEGS ------------------------------------------------- */
-    drawLeg(c, shX, hipY, p.front[1], C.coat, false, 1);
-    drawLeg(c, hipX, hipY, p.hind[1], C.coat, false, 1);
-
-    /* ---- THE HEAD ------------------------------------------------------ */
-    c.fillStyle = C.coat;
-    furShape(c, headCX, headCY, g.headHW, g.headHH, { tuft, salt: 3 });
-    c.fill();
-    c.save(); c.globalAlpha = a * 0.5; c.strokeStyle = C.coatShade; c.lineWidth = 2;
-    c.stroke(); c.restore();
-    curls(c, headCX, headCY, g.headHW, g.headHH, C.coatShade, fur, 3, 0.8);
-
-    /* THE MUZZLE, which in profile is the outline of the face rather than a
-       shape stuck on the front of it. Pale, like the frontal muzzle ramp. */
-    const muzX = headCX + g.headHW * S.muzzle.x;
-    const muzY = headCY + g.headHH * S.muzzle.y;
-    c.fillStyle = C.cream;
-    furShape(c, muzX, muzY, g.muzHW, g.muzHH, { tuft, salt: 12, amp: 0.55, cycleScale: 0.7 });
-    c.fill();
-    c.save(); c.globalAlpha = a * 0.4; c.strokeStyle = C.coatShade; c.lineWidth = 1.6;
-    c.stroke(); c.restore();
-
-    /* the nose: a dark bean at the tip, the reference's strongest single mark */
-    c.fillStyle = C.nose;
-    ell(c, muzX + g.muzHW * S.nose.x, muzY - g.muzHH * S.nose.y,
-      g.muzHW * S.nose.r, g.muzHW * S.nose.r * 0.86); c.fill();
-
-    /* the mouth line, and a tongue if he is running */
-    c.save();
-    c.strokeStyle = C.nose; c.globalAlpha = a * 0.75; c.lineWidth = 2.2; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(muzX + g.muzHW * 0.62, muzY + g.muzHH * 0.30);
-    c.quadraticCurveTo(muzX + g.muzHW * 0.10, muzY + g.muzHH * 0.62,
-      muzX - g.muzHW * 0.34, muzY + g.muzHH * 0.40);
-    c.stroke();
-    c.restore();
-    if (run > 0.35) {
-      c.save();
-      c.globalAlpha = a * clamp((run - 0.35) / 0.4, 0, 1);
-      c.fillStyle = C.tongue;
-      ell(c, muzX + g.muzHW * 0.16, muzY + g.muzHH * 0.72,
-        g.muzHW * 0.30, g.muzHH * 0.34); c.fill();
-      c.restore();
-    }
-
-    /* THE EYE — one of them. Big, dark, low, with the highlight the frontal
-       face uses, because that highlight is most of what makes him a puppy. */
-    const eyeX = headCX + g.headHW * S.eye.x;
-    const eyeY = headCY + g.headHH * S.eye.y;
-    const er = g.headHW * 0.245 * (P.eyeSize || 1) * S.eye.r;
-    c.fillStyle = C.eye;
-    ell(c, eyeX, eyeY, er, er * 1.04); c.fill();
-    c.fillStyle = '#ffffff';
-    ell(c, eyeX + er * 0.34, eyeY - er * 0.40, er * 0.34, er * 0.30); c.fill();
-    /* the brow, which is what gives the frontal dog his expression */
-    c.save();
-    c.strokeStyle = C.coatShade; c.globalAlpha = a * 0.55; c.lineWidth = 2.4; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(eyeX - er * 0.9, eyeY - er * 1.9);
-    c.quadraticCurveTo(eyeX + er * 0.2, eyeY - er * 2.5, eyeX + er * 1.2, eyeY - er * 1.7);
-    c.stroke();
-    c.restore();
-
-    /* ---- THE EAR, and there is only one ------------------------------- */
-    const earX = headCX - g.headHW * S.ear.x;
-    const earY = headCY + g.headHH * S.ear.y;
-    c.save();
-    c.translate(earX, earY);
-    c.rotate(S.ear.angle + p.earSwing);
-    c.fillStyle = C.coat;
-    furShape(c, 0, g.earHH * 0.5, g.earHW, g.earHH,
-      { tuft, salt: 23, cycleScale: 0.7, amp: 1.15 });
-    c.fill();
-    c.save(); c.globalAlpha = a * 0.45; c.strokeStyle = C.coatShade; c.lineWidth = 2;
-    c.stroke(); c.restore();
-    curls(c, 0, g.earHH * 0.5, g.earHW, g.earHH, C.coatShade, fur, 23, 0.7);
-    c.restore();
+    /* the head over the shoulders, the face, then the ear over all of it */
+    mass(c, 'head', headX, headY, 0, g.headHW, g.headHH, main, dark, a);
+    drawFace(c, headX, headY, a);
+    mass(c, 'ear', headX - g.headHW * S.ear.x, headY + g.headHH * S.ear.y,
+      S.ear.angle + p.ear, g.earHW, g.earHH, main, dark, a);
 
     c.restore();
   }
 
   return {
     draw,
-    /** the pose maths on its own, for gates and for anything that needs to know
-        where his paws are without drawing him */
     pose,
     get geom() { return { ...g }; },
     get debug() {
