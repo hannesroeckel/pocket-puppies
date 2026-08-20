@@ -41,7 +41,7 @@ import {
   collected as collectedFinds, FIND_BY_ID, isShelvable, metDogs,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -208,7 +208,11 @@ export function newState(now = Date.now(), opts = {}) {
          that is where a toy is. Photos are not either: they are the album. */
       display: [],
     },
-    flags: { seenIntro: false, namedFirstDog: false },
+    /* `howto` is which explainers she has already been shown, one key per mode.
+       A per-SAVE record rather than per-dog: the disc game works the same way
+       whoever is in the room, and being told twice because she adopted a second
+       dog would be the game not paying attention. */
+    flags: { seenIntro: false, namedFirstDog: false, howto: {} },
     settings: { sound: true, reducedMotion: 'auto', mic: false },
   };
 }
@@ -1751,6 +1755,29 @@ export function createGame(state, opts = {}) {
 
     /* a non-string key would land on the object as "undefined" and then be
        persisted forever, so both of these refuse one */
+    /* ---- WHAT SHE HAS BEEN SHOWN HOW TO DO -------------------------------
+       Read defensively even though `newState` and the migration both fill it:
+       `save.js`'s own rule is that a missing key is filled in there, and this
+       still refuses to throw on a hand-edited save because the alternative is a
+       blank screen instead of a card. */
+    seenHowto(id) {
+      const h = state.flags && state.flags.howto;
+      return !!(h && typeof h === 'object' && h[id]);
+    },
+    markHowtoSeen(id) {
+      if (typeof id !== 'string' || !id) return;
+      if (!state.flags || typeof state.flags !== 'object') state.flags = {};
+      if (!state.flags.howto || typeof state.flags.howto !== 'object') state.flags.howto = {};
+      if (state.flags.howto[id]) return;
+      state.flags.howto[id] = true;
+      onChange();
+    },
+    /** for the settings surface and for gates: show every explainer again */
+    forgetHowto() {
+      if (!state.flags || typeof state.flags !== 'object') state.flags = {};
+      state.flags.howto = {};
+      onChange();
+    },
     setFlag(key, v) {
       if (typeof key !== 'string' || !key) return;
       if (!state.flags || typeof state.flags !== 'object') state.flags = {};

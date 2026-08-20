@@ -26,6 +26,7 @@ import { BREED_IDS, getBreed } from './dog/breeds.js';
    reads `env(safe-area-inset-*)`, so it is the only place that can resolve the
    bottom of what a thumb can touch — see the header of ui/reach.js. */
 import reach from './ui/reach.js';
+import { HOWTO_IDS, HOWTO } from './ui/howto.js';
 
 const V = BALANCE.view;
 
@@ -510,14 +511,34 @@ async function boot() {
      * swallowed — which cost an hour of stage-3 verification before this
      * existed. Always call it before driving the room.
      */
-    skipIntro(name = 'Pip') {
+    /**
+     * PAST THE FRONT DOOR: named, and already shown how everything works.
+     *
+     * THE SECOND HALF IS NEW AND IT IS NOT A CONVENIENCE. `ui/howto.js` opens an
+     * explainer over a mode the first time that mode is ever opened, which is
+     * exactly right for her and exactly wrong for fourteen gates that open a
+     * mode and immediately drive it: the disc gate's flick landed on a card and
+     * the whole file fell over. Marking them seen HERE rather than in each gate
+     * means a gate tests the mode it is about, and `tools/howtogate.py` — the one
+     * gate that is about the cards — calls `game.forgetHowto()` to get them back.
+     */
+    skipIntro(name = 'Pip', { howto = false } = {}) {
       const sc = loop.scene;
       if (sc.naming && sc.naming.isOpen) sc.naming.submit(name);
       if (!game.isNamed) game.setName(name);
       if (sc.naming) sc.naming.close();
+      if (howto) game.forgetHowto();
+      else for (const id of HOWTO_IDS) game.markHowtoSeen(id);
       loop.stepFixed(1 / 60, 4);
-      return { named: game.isNamed, name: game.dog.name, naming: sc.naming ? sc.naming.debug : null };
+      return { named: game.isNamed, name: game.dog.name, naming: sc.naming ? sc.naming.debug : null,
+        howtoSeen: HOWTO_IDS.filter((id) => game.seenHowto(id)) };
     },
+    /** show every explainer again, as a first-time save would */
+    forgetHowto() { game.forgetHowto(); loop.stepFixed(1 / 60, 2); return true; },
+    /* the explainer copy and its ids, so a gate can assert on the WORDS as well
+       as on the behaviour — a card with a typed-in "his" in it is a bug that no
+       amount of driving the UI will find */
+    HOWTO, HOWTO_IDS,
 
     /* ---- stage 3 drivers: TRAINING ------------------------------------
        Every one of these steps the simulation deterministically. Nothing here

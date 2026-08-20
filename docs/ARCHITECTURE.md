@@ -3715,10 +3715,10 @@ each goes where it says.
 
 ### 31.7 Left imperfect
 
-- **He does not move to the disc.** He leaps straight up and the disc comes to him, because there is
-  no side-profile rig and no walk cycle — the constraint this whole design was reframed around. It
-  reads as a dog jumping for a disc directly overhead, which is a real thing dogs do, but he will
-  never run for one.
+- ~~**He does not move to the disc.**~~ **Fixed in §33**, after the player said so in one sentence:
+  “i want the dg to actually catch the disk instead of just staying in place and jumping lsightly”.
+  He covers ground for it now — a translate with a bounce on it, still no gait cycle and still no
+  side-profile rig.
 - **Nobody has played it with a thumb.** Every catch in this write-up was made by `disc.tap()` at a
   computed moment. Whether ±0.16s *feels* generous or brutal on a real phone is exactly the kind of
   thing that cannot be known from here, and it is the first number to revisit after she plays.
@@ -3850,3 +3850,178 @@ running total §28 recorded as 11 gates and 622 checks.
 - **The places are only reachable from a contest.** She cannot take him to the park to play with a
   ball, and there is no walk scene to arrive at — the walk is still an absence in the room (§16). The
   places exist because the contests do.
+
+
+## 33. He catches it, and she is told how (`feature/catch-and-howto`) — as built
+
+Two things from one message, after playing 8.17.0 on the phone:
+
+> *"we need an explanation on the disc in the game. one doesnt really know what to do. in general
+> we should always include a tutorial for any feature/mode in the game. also i want the dg to
+> actually catch the disk instead of just staying in place and jumping lsightly"*
+
+Cache **8.18.0**, schema **v10**, one new module (`src/ui/howto.js`).
+
+The catch came first even though the explanation was asked for first, because the explanation has
+to describe what he actually does.
+
+### 33.1 "Staying in place and jumping slightly" was three faults
+
+Each had its own cause, and each was individually defensible when it was written:
+
+| what she saw | what it was |
+|---|---|
+| **jumping slightly** | `leap.height` 1.45 × `rig.trick.hopHeight` 36 = **52 units** of lift on a dog whose head is already 200 units up. A trick jump is a bounce on the spot; this one is going somewhere. Now 2.45, and he stretches on the way up (`rig.sy`, the rig's own word for "long") with his mouth open before it shuts on the disc. |
+| **staying in place** | the disc's x **converged onto his head** through the fall. Whatever she aimed, it came to him. Now the disc keeps the line she threw it on and **he** covers the difference. |
+| **not actually catching** | the disc **stopped dead** at his resting head height and hung there until the apex of the hop set `gone = true` and deleted it. There was no frame on which he had it. Now it falls through his reach, he takes it in his **mouth**, carries it through the landing and back toward the middle, and hands it over for the next throw. |
+
+**The run is not a second skill, and that is a design constraint rather than a nicety.**
+`leap.reach` (84) exceeds `fly.drift` (72), and `reach / runSpeed` is 0.39s against a shortest
+flight of 1.05s — so there is no throw he cannot get under, by construction. Her skill is the
+timing of the tap and nothing else. A run she could lose would be a second way to fail at one
+gesture, and *"losing must never feel like rebuke"*.
+
+**On the rule this comes closest to.** SCOPE: *"no side-profile rig is being built. If any later
+stage finds itself wanting one, stop and raise it rather than quietly building one."* This does not
+want one. He is translated along x with a bounce on it; no gait cycle, no side of him drawn,
+nothing rotated — the same licence `TRICK_POSE.spin` takes to trot a circle and the reunion takes
+to cross the room. Recorded in SCOPE beside the original rule rather than left as an inference.
+
+### 33.2 The timing became physical instead of fractional
+
+`window.at` is gone. It said *where in the flight the disc is catchable, as a share* — 0.86 — which
+quietly made a floaty 1.70s throw and a flat 1.05s one two different games: the same fraction is a
+quarter of a second apart in the hand. The flight is now built so the disc crosses the line his jaws
+reach at exactly its own duration, and
+
+```js
+function idealAt() { return round.fly.dur - apexDelay(); }   // one leap before it gets here
+```
+
+is the whole model. `window.half` (±0.16s, about ten frames) is untouched — it was the one number
+in the disc game that had already been tuned against a real thumb.
+
+### 33.3 Four bugs the rework exposed, three of them found by a gate looking elsewhere
+
+- **The disc teleported on release.** `restY` was `min(from.y, catchY)`, so on the frame she let go
+  it jumped **244 units up the screen** to the height it would eventually come back down to, and
+  eased up from there. It read as a fast throw for eight generations. On the way up the base is her
+  hand now; on the way down it is his jaws; `rise` is 1 across the whole hang, so the two meet at
+  the apex and the swap is invisible.
+- **The arc peaked below the catch.** With a real leap under it, his jaws reach y 295 and a 0.85
+  flick peaked at 317 — so the "fall" ran **upward** into the catch. `fly.vanishY` and `minRise` are
+  measured from the catch line now, and there is no flick that peaks below the height he jumps to.
+- **He pogoed across the grass.** `bound.lift` was 7.5, and `hop` is in units of *a whole trick
+  jump* — so the run bounced him 270 units into the air. Invisible in every screenshot, because the
+  run is over before the frame anyone photographs; visible as `catchLine()` swinging 254 units in a
+  gate trace about something else. A trot is a sixth of a jump.
+- **He ran his ear off the screen.** His silhouette was then *measured* off the canvas over three
+  breeds — 135 units to the left ear, 106–118 to the right — and `leap.edge` is that measurement.
+  Both the landing and the run are clamped to `[edge, VW - edge]`, which makes the band asymmetric
+  (his home is 14 units left of centre) and which she will never notice, because all she sees is him
+  arriving under the disc.
+
+The disc gate is **47 checks** now: he covers ground, his head is under the disc when he takes it,
+the leap is above a trick jump, the disc ends up at his muzzle, he still has it after he lands, a
+miss falls all the way to the grass and lies there, the disc never stops at his jaws waiting to be
+collected, and all of him stays on screen at both extremes.
+
+### 33.4 `ui/howto.js` — one card, one rule
+
+> *"in general we should always include a tutorial for any feature/mode in the game"*
+
+**The rule:** the card opens on the first frame of a mode's own surface, the first time that mode is
+ever opened, dismiss-only, and never again unless she asks.
+
+**Not after a mistake.** The obvious alternative — explain it once she has failed — is forbidden by
+*"losing must never feel like rebuke"*. Kind words cannot rescue that structure: a card that arrives
+after a dropped disc **is** the game telling her she did it wrong.
+
+**Not in front of the first launch.** GIFT-READY §4.1. The naming beat and the reunion are excluded
+in `howtoContext()`, so the first thing she ever sees is still a puppy.
+
+**Seven cards, and the list was drawn up by reading each mode rather than by taste:** disc, the ring,
+training, the walk, brushing, the kennel, the collection. Everything else explains itself and gets
+nothing — feed/water/wash already set sequential gesture hints ("Slide his bowl over", then "Hold
+the bag over the bowl"); the shop is a priced list; the trick list **is** an explainer, so it is a
+*step* on the training card; petting is closed on the observed fact that touching him is the first
+thing anyone does; and the paw-shake is a discovery on purpose (§26.1).
+
+**One integration point.** The room hands the layer a context every frame and the layer decides what
+to do with it:
+
+```js
+howto.setContext(howtoContext());     // '' is "just the room"
+```
+
+A new mode gets an explainer by adding a line to `howtoContext()` and an entry to `HOWTO`. No chip,
+no hit rect, no layout. The way back in is a single `?` at the top-right, mirroring the back circle
+at the top-left — one control for all seven, rather than seven controls and seven chances for
+`ui/reach.js` to report a violation.
+
+**Two bugs worth keeping:**
+
+- **The card flickered on and off at 60fps.** It takes the surface while it is up — that is the point
+  of it being in `surfaceOwner()` — so the next frame `howtoContext()` saw an owner of `'howto'`,
+  reported "she is in no mode at all", and the layer closed the card it had just opened, which made
+  the owner `'disc'` again, which reopened it. Two correct pieces of code disagreeing about who was
+  in charge. While the card is up, the mode underneath it has not changed.
+- **The `?` did nothing on a fast tap.** It asked `press.at('chip') > 0`, which is the *eased* press
+  value: it starts at zero and ramps over `PRESS.dur`, so a tap whose down and up land in the same
+  frame read as "never pressed". Real on a phone, and caught by a gate driving down and up without
+  stepping between them.
+
+**`skipIntro` marks every explainer seen**, and that is not a convenience: fourteen gates open a mode
+and immediately drive it, and the disc gate's flick landed on a card. `tools/howtogate.py` — the one
+gate that is *about* the cards — passes `{ howto: true }` to get them back.
+
+### 33.5 `tools/howtogate.py` — 35 checks
+
+| asserts | how |
+|---|---|
+| it arrives where the mode is | opening each of the five drivable modes for the first time puts *that* card up |
+| once | a real tap on **Got it**, through `scene.pointer`; the save remembers; the second visit is silent |
+| she can ask again | the `?` chip re-opens it, tapped through the routing rather than the layer — the 8.16.1 lesson as a test |
+| nothing opens under it | care, training, the walk and the shop all refuse while it is up, and a touch on the dog does not reach the petting field |
+| never in front of the gift | no card during naming, and none at all in the plain room |
+| it fits | every card laid out at **they/them/their**, the widest expansion: the box on screen, and **every line measured** with the options it is drawn with |
+| the words | no card may contain a typed-in "he"/"his" — a bug no amount of driving the UI would find |
+
+**The text audit found something a screenshot cannot.** `ui/text.js` never clips — it shrinks to
+`minSize` and only then ellipsises — so copy that is too long comes out as *slightly smaller text*,
+which looks deliberate. Measuring every line the way it is drawn showed **most step lines being
+shrunk from 14px to between 11.5 and 13.5**: seven cards that each looked fine and were quietly a
+different size on every row. Fixed by tightening the step column (`numX` 34→30, and the gaps named
+rather than inline) and by shortening the copy until every line fits at its intended size. The
+assertion is run a second time with a deliberately over-long step pushed onto the disc card, because
+otherwise "every line fits" would be a sentence about a check that could not fail (§27.3).
+
+Looked at: `review/howto-disc.png`, `howto-train.png`, `howto-brush.png`, and
+`review/disc-01-ready.png` … `disc-07-miss.png` for the catch.
+
+### 33.6 Also fixed, because the survey of the copy found them
+
+- **The disc's shut-gate button said "Leave" and opened the food bowl.** `contest.js` had solved this
+  properly a stage earlier with `gateGo(P, reason)` → *"Feed him first"*, and its comment says why:
+  *"the button becomes the fix rather than telling her no twice"*. Copied.
+- **The More sheet's disc row had a typed-in "his"** — *"Flick it up and time his jump"* — which is
+  wrong the moment there are two dogs. It comes from `disc.entryNote()` now.
+- **"Flick the disc up — never sideways"** was the toy rig's prohibition, inherited wholesale. It was
+  also the only scolding sentence in the disc's copy, and it told her off for the one thing the new
+  mechanic added. The ball's hint still says it, and the two deliberately differ now.
+- The disc's `caught` string was a ternary whose two branches were identical.
+
+### 33.7 Left imperfect
+
+- **Nobody has played either of these with a thumb.** Every catch in this write-up was made by a
+  computed tap, and every card was dismissed by a synthetic one. Whether the run reads as *running*
+  on a real screen, and whether three lines is the right amount to read, are exactly the things that
+  cannot be known from here.
+- **The card covers his face.** It is centred, and at four steps it sits over the dog. Moving it up
+  collides with the toast and the name pill; the honest fix is fewer words, not a different y.
+- **There is no card for the ball**, deliberately (one gesture, one persistent hint, §25.3) — but
+  that means the two throwing gestures in the game are now explained to different depths.
+- **The run has no sound.** He crosses two feet of grass in silence; `scamper` exists in `sfx.js` and
+  is not called, because a footfall loop needs a cadence and the run has no gait to hang one on.
+- **The explainers are per save, not per dog.** Right for a mode, but it means a second dog's first
+  trial is unexplained even though it is her first trial *with him*.
