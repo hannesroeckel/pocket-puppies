@@ -517,16 +517,18 @@ export function createDisc(rig, opts = {}) {
   /*  DRAW                                                              */
   /* ================================================================== */
   /** the field wash, behind him */
-  function drawBack(g) {
-    const w = clamp(sp.field.x, 0, 1);
-    if (w < 0.004) return;
-    const c = g.ctx;
-    c.save();
-    c.globalAlpha = w * U.dim;
-    c.fillStyle = SURF.scrim(1);
-    c.fillRect(0, 0, VW, VH);
-    c.restore();
-  }
+  /**
+   * NOTHING, NOW — AND THAT IS THE POINT.
+   *
+   * This used to dim the living room, which was the whole of the disc "field":
+   * the room with the lights down. `scenes/outdoors.js` draws a park and
+   * `scenes/room.js` crossfades it in behind him on this layer's own `weight`,
+   * so there is a place to play in and nothing to dim. Kept as a no-op rather
+   * than deleted because the room calls it in the draw order where a disc
+   * layer's background belongs, and that call site is worth keeping if the park
+   * ever wants something in front of the grass and behind the dog.
+   */
+  function drawBack() { /* the park is the background now — see scenes/outdoors.js */ }
 
   /** the disc, and everything over him */
   function drawOver(g) {
@@ -699,6 +701,8 @@ export function createDisc(rig, opts = {}) {
     /** the room skips `toy.apply` while this is true, or the toy fights the leap */
     get busy() { return !!beat; },
     get owns() { return !!beat; },
+    /** the crossfade weight, which is what the room dissolves the park in on */
+    get weight() { return sp.field.x; },
     get beat() { return beat; },
     get phase() { return phase; },
     get hint() { return hint; },

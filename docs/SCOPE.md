@@ -109,6 +109,14 @@ meeting other dogs, unlocking toys — while dodging the gait cycle entirely.
 
 Grounded in `docs/nintendogs-design-reference.md` §6 and §7. Read those first.
 
+**A contest happens somewhere, and it is not the living room.** Added after the fact, because both
+contests shipped as the room with its lights turned down and it read as a game with one room and
+several moods. The obedience trial is held in a **show ring** — mown stripes, a rope, bunting, a
+crowd — and the disc game in a **park**. Two places rather than one shared backdrop: a park is loose
+and empty, a ring is watched, and sharing an outdoor photograph between them would say that competing
+and playing are the same occasion. His floor line and his lighting are untouched by either
+(ARCHITECTURE §32).
+
 ### Obedience Trial — the primary contest, and build this one properly
 
 Perfect fit for the frontal rig, and it's the mechanical payoff of the whole training system.

@@ -79,6 +79,7 @@ GATES = [
     ("weargate",       "weargate.py",       [], False),
     ("decorgate",      "decorgate.py",      [], False),
     ("discgate",       "discgate.py",       [], False),
+    ("placegate",      "placegate.py",      [], False),
     ("bowlperf",       "bowlperf.py",       [], False),
     ("bowlgate",       "bowlgate.py",       [], False),
     ("breedproof",     "breedproof.py",     [], False),

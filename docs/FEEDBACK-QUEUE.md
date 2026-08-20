@@ -359,3 +359,61 @@ the same root: **the save tracks time once globally when it needs to track it pe
 > the floor and trust are untouched and are deliberately not reachable from that path: needs are
 > physical and recoverable, the bond is not. Done together with item 4, as this note asked.
 > ARCHITECTURE 22.
+
+---
+
+# Second round, 2026-08-19
+
+From playing 8.16.0 on the phone the evening it went out. Both of these are about the disc game,
+which is the newest thing in the build and therefore the least played.
+
+---
+
+## 8. The disc cannot be flicked at all ✅ FIXED on `feature/disc` (cache 8.16.1)
+
+> "it seems like i cannot flick the disc at all"
+
+**Reported within minutes of 8.16.0 going out, and it was as bad as it sounds: the whole activity
+was dead on arrival.** `scenes/room.js` routed the `down` event to the disc layer and nothing else.
+A flick is not one event — it is a `down`, a trail of `move`s that the release velocity is measured
+from, and an `up` that actually throws. Only the first ever arrived, so she could pick the disc up
+and then nothing in the world could happen.
+
+**Why the gate missed it:** `tools/discgate.py` drove `disc.pointer(ev)` directly. That is the
+layer's own handler, and it worked perfectly — the break was one level up, in the scene that decides
+which layer gets a pointer at all. A gate that calls past the thing under test is not testing it.
+
+> **Fixed, and the gate was fixed with it.** One branch each in the `move`, `up` and `cancel` paths,
+> matching what every other capture in the room already does. `discgate` now drives
+> `scene.pointer(app, ev)` — the same entry point a thumb uses — so the routing is inside the test
+> rather than beside it. ARCHITECTURE §31.5.
+
+---
+
+## 9. The contests happen in the living room ✅ FIXED on `feature/outdoor-places` (cache 8.17.0)
+
+> "also, when we change to disc we should change to a different background that shows outdoors. same
+> goes for when we go the ring. this should then be a proper competition space and not the living
+> room again"
+
+**Right, and it was already written down as a fault before he said it.** §31.7 listed *"the field is
+a dim, not a place"* and noted that a park *"would be better and is a scene-art job"*. Both contests
+signalled themselves by turning the living room's lights down: the trial put a mat and a spotlight on
+the rug, and the disc game dimmed the wall. That reads as a game that has one room and some moods,
+not as a dog who goes places.
+
+**Fix:** two real places — a park for the disc and a show ring for the obedience trial — and *two*,
+not one, because a park is loose and empty while a ring is mown, roped and watched. Sharing a
+backdrop would say that competing and playing are the same occasion.
+
+The hard part was never the backdrop. A place is a backdrop **plus everything that must not be in
+it**: the first render put a sunlit park behind him with both of his bowls and his tennis ball still
+sitting in the grass.
+
+> **Done.** `src/scenes/outdoors.js`, baked once per place like the room is. His floor line does not
+> move — he stands in the park exactly where he stands on the rug — and he is deliberately not
+> relit, which `tools/placegate.py` proves by rendering the same frozen dog with the place drawn and
+> not drawn and requiring his coat to be byte-identical. The sill, both bowls and the ball stay at
+> home now. The trial's indoor dim wash is gone, its spotlight is a third of the strength doing what
+> daylight does, and its mat is warm sand instead of a blue-grey that read as a puddle on grass.
+> ARCHITECTURE §32.
