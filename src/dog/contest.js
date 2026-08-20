@@ -169,7 +169,11 @@ const C = {
   board: '#3a2114', boardEdge: 'rgba(255,240,206,0.20)',
   ink: '#fff0d4', inkDim: 'rgba(255,240,212,0.72)',
   card: '#fff6e4', cardInk: '#5d3018',
-  mat: '#7d9c90', matEdge: '#5f7d72',
+  /* THE MAT, RECOLOURED FOR OUTDOORS. #7d9c90 over #5f7d72 was a cool blue-grey,
+     chosen against the room's warm boards; on the show ring's grass it read as a
+     puddle he was being asked to sit in. Warm sand with a trodden edge instead —
+     the mat every ring in the country actually uses. */
+  mat: '#d8c6a0', matEdge: '#ab9268',
   gold: '#e8b45c', goldD: '#bf8c37',
   ribbon: '#cf6e58', ribbonD: '#a8503d',
   chip: 'rgba(255,246,228,0.92)', chipDown: 'rgba(255,232,190,0.98)',
@@ -835,14 +839,14 @@ export function createContest(rig, opts = {}) {
     const BX = (g.view && g.view.bleedX) || 0;
     const BY = (g.view && g.view.bleedY) || 0;
     c.save();
-    /* cool and dim the room */
-    c.globalAlpha = w * R.dim;
-    c.fillStyle = '#241a2e';
-    c.fillRect(-BX, -BY, VW + BX * 2, VH + BY * 2);
-    c.globalAlpha = w * R.chill;
-    c.fillStyle = '#3d5a6b';
-    c.fillRect(-BX, -BY, VW + BX * 2, VH + BY * 2);
-    c.globalAlpha = 1;
+    /* THE WASH IS GONE, AND THAT IS THE POINT. This used to dim and cool the
+       LIVING ROOM — `R.dim` over #241a2e and `R.chill` over #3d5a6b — because a
+       trial held on the rug had to be signalled somehow, and turning the lights
+       down was the only signal available. `scenes/outdoors.js` now puts him in a
+       show ring, so the signal is the place: mown stripes, a rope, bunting and a
+       crowd. Two washes over a sunlit field would only make the field look like a
+       living room at dusk, which is exactly the complaint that got the ring
+       built. `R.dim`/`R.chill` stay in BALANCE, unread, next to this note.
 
     /* the mat he performs on */
     const M = R.mat;
@@ -858,12 +862,19 @@ export function createContest(rig, opts = {}) {
     ell(c, M.at[0], M.at[1], M.r[0] - 18, M.r[1] - 12); c.stroke();
     c.setLineDash([]);
 
-    /* THE SPOTLIGHT, drawn here so it lands on the mat and under him */
+    /* WHAT THE SPOTLIGHT BECAME. It was a stage light: a hot pool on the rug
+       that made the dimmed room recede. Outdoors at eleven in the morning there
+       is no stage light, so the same radial does a job daylight really does do —
+       it lifts the mown grass around the mat, the way an open field is brightest
+       where nothing shades it. Same geometry, a third of the strength, and it is
+       still drawn UNDER him so he is never the thing being tinted (rule 2 of
+       scenes/outdoors.js). */
     const S = R.spot;
+    const sa = S.alpha * R.spotOutdoor;
     const rg = c.createRadialGradient(S.at[0], S.at[1], 20, S.at[0], S.at[1], S.r);
-    rg.addColorStop(0, `rgba(255,244,214,${(S.alpha * w).toFixed(3)})`);
-    rg.addColorStop(0.55, `rgba(255,240,200,${(S.alpha * 0.42 * w).toFixed(3)})`);
-    rg.addColorStop(1, 'rgba(255,240,200,0)');
+    rg.addColorStop(0, `rgba(255,250,226,${(sa * w).toFixed(3)})`);
+    rg.addColorStop(0.55, `rgba(255,248,220,${(sa * 0.42 * w).toFixed(3)})`);
+    rg.addColorStop(1, 'rgba(255,248,220,0)');
     c.globalAlpha = 1;
     c.fillStyle = rg;
     c.save();

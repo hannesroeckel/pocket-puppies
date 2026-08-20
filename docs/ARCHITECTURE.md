@@ -3726,5 +3726,127 @@ each goes where it says.
   `proud-yip`/`huff`, which is honest reuse but means a catch and a trick sound alike.
 - **No rival, no field, no placing** — by design, but it does mean the card has nothing to compare
   against except her own best. The best is on the entry panel for that reason.
-- **The field is a dim, not a place.** The trial gets a mat, a spotlight and a judge's board; the disc
-  game gets the room with the lights down. A park would be better and is a scene-art job.
+- ~~**The field is a dim, not a place.**~~ **Fixed in §32.** The trial got a mat, a spotlight and a
+  judge’s board; the disc game got the room with the lights down. A park would be better and is a
+  scene-art job — which is what she said the next day, in almost those words.
+
+
+## 32. Two places he competes in (`feature/outdoor-places`) — as built
+
+§31.7 wrote down that the disc field was *"a dim, not a place"* and that a park *"would be better and
+is a scene-art job"*. The next message said the same thing from the other side:
+
+> *"when we change to disc we should change to a different background that shows outdoors. same goes
+> for when we go the ring. this should then be a proper competition space and not the living room
+> again"*
+
+Cache **8.17.0**, no schema change, one new module (`src/scenes/outdoors.js`).
+
+### 32.1 Two places, not one background
+
+A park is loose, sunlit and empty. A show ring is mown, roped and watched. Sharing one backdrop
+between them would say that competing and playing are the same occasion, and the whole point of the
+trial is that it is an occasion. So `drawPark` and `drawRing`, sharing only `ground()` — sky, two hill
+bands, a treeline, grass — and even that takes a `phase`, so the hills and the trees are not the same
+silhouette twice.
+
+| | the park (disc) | the show ring (obedience) |
+|---|---|---|
+| ground | one wide mown band, doing what the room's rug does | mown stripes converging from the horizon |
+| furniture | none. Daisies and tufts | rope on posts with a real sag, bunting, a worn mat patch |
+| who is there | nobody | 34 faceless shapes on the far side of the rope |
+| light | sun from `VW*0.16`, the side the room's window is **not** on | flat and high, like a ring at eleven in the morning |
+| sky | five clouds, `phase` 0 | five clouds, `phase` 2.05 — a different sky |
+
+### 32.2 Three rules the scenes obey
+
+1. **The floor line does not move.** `BALANCE.view.floorY` is where the room's wall meets its floor,
+   and `rig.floorV`, the bowl's base, every planted paw and the reach line all resolve against it. The
+   grass meets the sky on that exact line, so he stands in the park exactly where he stands in the
+   room, and nothing about his placement, his shadow or the reachable play area changes.
+2. **The dog is not relit.** His shading was tuned over eight stages and re-verified against the bowl,
+   three breeds and every trick. A background change may not touch it, so there is no outdoor tint on
+   him and the scenes are painted to sit under a warmly-lit dog rather than demanding he change. This
+   is asserted rather than promised — see 32.4.
+3. **Baked, like the room.** One offscreen canvas per place, built on first need and dropped on resize
+   or exit; the per-frame cost is one `drawImage` and a `globalAlpha`.
+
+   **One place is resident at a time, and none when he is home.** A full-screen offscreen canvas on a
+   3x phone is a 1290×2790 bitmap — about 14MB — and iOS caps *total* canvas memory rather than
+   per-canvas size, a failure that appears as a blank white rectangle and never as an error. The room
+   already holds two (`roomCv`, `ovCv`), so the park and the ring are never both alive and neither
+   outlives the contest that opened it. Re-baking on the next entry is a few milliseconds of flat
+   fills; carrying 28MB around all day is not.
+
+### 32.3 A place is a backdrop plus everything that must not be in it
+
+The first render was the whole lesson. The park drew correctly and the living room came with it: the
+picture frame ghosting through mid-fade, and **both bowls and the tennis ball sitting in the grass.**
+A backdrop swap is a third of the job. So `scenes/room.js` grew one function that everything asks:
+
+```js
+function placeWeight() { … }              // 0 = the living room, 1 = a place that has replaced it
+function outdoors() { return placeWeight() > 0.5; }
+```
+
+and the sill, both resting bowls and the ball each ask it before drawing. Same shape as the surface
+arbiter (§21.4): one answer, read by everyone, rather than each layer keeping its own idea of where he
+is.
+
+`dog/contest.js` lost the other half of the living room. Its `drawBack` dimmed the room over `#241a2e`
+and cooled it over `#3d5a6b`, because a trial held on a rug had to be signalled somehow and turning
+the lights down was the only signal available. Two washes over a sunlit field make the field look like
+a living room at dusk — which is the complaint that got the ring built — so they are gone, and the
+spotlight is a third of its old strength (`ring.spotOutdoor`) doing a job daylight really does do:
+lifting the mown grass around the mat. The mat itself was a cool blue-grey chosen against warm floor
+boards; on grass it read as a puddle he was being asked to sit in, and it is warm sand now.
+
+### 32.4 `tools/placegate.py` — 16 checks
+
+| asserts | how |
+|---|---|
+| the room goes, and goes **all the way** | the wall band is warm in the room and sky in both places, and `placeWeight` settles at **1.000** rather than stalling at the 0.89 that put a picture frame in a field |
+| his things stay at home | the food bowl's home, the water bowl's home and the ball's resting slot are all green-dominant grass |
+| the dog is not relit | a box of his torso is **byte-identical** with the place's art drawn and not drawn, at one frozen instant |
+| two places, not one | the park and the ring differ in the band where the rope, the bunting and the crowd live |
+
+**Every metric is shown a case it must reject.** The warmth test is run against the living room it is
+supposed to fail; the grass test likewise; and the byte comparison is run against a box 30 units lower
+— his paws and the rug — because a comparison that cannot report a difference reports nothing when it
+returns zero (§27.3).
+
+Three of the gate's own bugs are worth keeping, because each was the gate misreading rather than the
+product misbehaving, and each looked exactly like a real defect:
+
+- **it reported a tennis ball in the grass.** The disc waits for her flick at the same resting slot the
+  ball uses, so any box around that slot reads warm whether or not the ball is in it. It throws the
+  disc first now and looks at the ground the disc left.
+- **it reported that a show ring has no sky.** The wall box sat at y 118, which is exactly where
+  `ring.boardTop` hangs a dark brown clipboard. Moved to y 300, after probing both places.
+- **it reported a relit dog.** 145 pixels, all of them the soft rim of an airborne disc blending with
+  two different backdrops. The coat comparison happens before the throw now.
+
+To measure rule 2 at all, `scenes/room.js` exposes a `placeArt` switch used by nothing else: comparing
+park-him against room-him compares two *poses* — he stands differently waiting for a disc than he does
+idling on the rug — so the only honest measurement is the same frozen dog with the place drawn and not
+drawn.
+
+Looked at: `review/park.png`, `review/ring.png`.
+
+The suite is **15 gates, 703/703 checks, 0 failures, 1823.6s (30.4 min)** with this gate in it — the
+running total §28 recorded as 11 gates and 622 checks.
+
+### 32.5 Left imperfect
+
+- **He is still lit for a living room.** Deliberately, and the right call for now — his shading is the
+  most-verified art in the project — but a dog outdoors would have a cooler shadow and a warmer top
+  light. Doing it properly means a light direction on the rig, which touches every breed and every
+  trick and would need `bowlpixels` and `breedproof` re-baselined.
+- **Nothing moves.** Both places are baked stills: no grass in the wind, no cloud drift, no crowd
+  shifting. One `drawImage` a frame is why they cost nothing, and a still park is better than a
+  stuttering one.
+- **The crowd never reacts.** They are there before he performs and identical after. A ripple on a good
+  score is a small thing and would be felt.
+- **The places are only reachable from a contest.** She cannot take him to the park to play with a
+  ball, and there is no walk scene to arrive at — the walk is still an absence in the room (§16). The
+  places exist because the contests do.

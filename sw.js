@@ -109,6 +109,16 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.17.0: THE CONTESTS HAPPEN SOMEWHERE ELSE. ONE NEW MODULE —
+   `src/scenes/outdoors.js` — so this generation MUST move and it MUST appear in
+   PRECACHE below: `scenes/room.js` imports it unconditionally, and a phone that
+   took this generation without it would fail to resolve the import offline and
+   show a blank screen (the failure 8.5.0's note describes). `dog/contest.js` and
+   `state/balance.js` move with it — the ring's indoor dim wash is gone and its
+   spotlight is a third of the strength, because the trial is outdoors in daylight
+   now. No schema change: where he competes is not something a save records.
+   `py tools/check-precache.py` now expects 57 entries.
+
    8.16.1: THE DISC COULD NOT BE THROWN. `scenes/room.js` routed only `down` to
    the disc layer, so the flick's trail of `move` events and its `up` never
    arrived: she could pick the disc up and nothing else could happen. Reported
@@ -194,7 +204,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.16.1';
+const VERSION = '8.17.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -235,6 +245,7 @@ const PRECACHE = [
   './src/engine/rng.js',
   './src/engine/sfx.js',
   './src/engine/spring.js',
+  './src/scenes/outdoors.js',
   './src/scenes/props.js',
   './src/scenes/room.js',
   './src/state/balance.js',

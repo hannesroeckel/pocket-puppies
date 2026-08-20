@@ -40,6 +40,9 @@ import { createTrickList } from '../ui/tricklist.js';
 import { createCollection } from '../ui/collection.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
+/* the two places he competes in — a park for the disc, a show ring for the
+   trial. Baked like the room, and blitted instead of it. */
+import { drawPark, drawRing } from './outdoors.js';
 /* THE REACHABLE PLAY AREA: the bound every interactive prop is clamped to, and
    the per-frame assertion that says so. See ui/reach.js. */
 import reach from '../ui/reach.js';
@@ -405,6 +408,15 @@ export function createRoomScene() {
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
   let shop = null, kennel = null, tricks = null, collection = null;
   let roomCv = null, ovCv = null;
+  /* the competition backdrops, baked on first use and thrown away on resize */
+  let parkCv = null, ringCv = null;
+  /* FOR tools/placegate.py, AND FOR NOTHING ELSE. Rule 2 of scenes/outdoors.js —
+     "the dog is not relit" — cannot be measured by looking at one frame: a disc
+     round poses him differently from an idle room, so comparing park-him with
+     room-him compares two POSES and proves nothing about light. The only honest
+     measurement is the same frozen dog rendered with the place on and off, and
+     his pixels required to come out identical. This switch is that off. */
+  let placeArt = true;
   /* the last view wrapper handed to draw(). Text cannot be measured without
      one, and the toast probe is asked outside of a draw. */
   let lastG = null;
@@ -567,6 +579,28 @@ export function createRoomScene() {
       g.isUnlocked('garland') ? 'garland' : '-',
       g.isUnlocked('portrait') ? 'portrait:' + (g.dog.breedId || '') : '-',
     ].join('|');
+  }
+
+  /**
+   * BAKE ONE OF THE OUTDOOR PLACES.
+   *
+   * The same setup `buildRoom` uses — its transform, its bleed, its seeded RNG —
+   * so a park and the room are the same size, the same scale and the same
+   * distance from the edges, and the crossfade between them cannot slide.
+   *
+   * Seeded from `BALANCE.rng.roomSeed` plus an offset, so the daisies and the
+   * grass tufts are in the same place every time she opens it. A field that
+   * rearranges itself each visit is not a place.
+   */
+  function buildOutdoor(view, which) {
+    const cv = makeOff(view.cw, view.ch);
+    const c = cv.getContext('2d');
+    c.setTransform(view.dpr * view.vs, 0, 0, view.dpr * view.vs,
+      view.dpr * view.offX, view.dpr * view.offY);
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    const r = createRng(BALANCE.rng.roomSeed + (which === 'ring' ? 7717 : 3313));
+    if (which === 'ring') drawRing(c, view, r); else drawPark(c, view, r);
+    return cv;
   }
 
   function buildRoom(view) {
@@ -1127,6 +1161,24 @@ export function createRoomScene() {
       floppy: br.ear !== 'prick',
     };
   }
+
+  /**
+   * HOW MUCH OF A COMPETITION PLACE IS ON SCREEN, 0..1 — and therefore how far
+   * from the living room we are. Read from the owning layer's own fade spring,
+   * so there is one clock for the backdrop, the props and the furniture.
+   *
+   * Anything that belongs to the ROOM asks this before drawing: his bowls, his
+   * ball, the things on his sill. Rendering the park showed both bowls and the
+   * ball sitting on the grass, which is the kind of detail that turns a place
+   * back into a living room with a photograph of a field behind it.
+   */
+  function placeWeight() {
+    const ring = contest ? contest.weight : 0;
+    const field = disc ? disc.weight : 0;
+    return Math.max(ring > 0.004 ? ring : 0, field > 0.004 ? field : 0);
+  }
+  /** true once the place has all but replaced the room */
+  function outdoors() { return placeWeight() > 0.5; }
 
   /** is a virtual point inside a rect? */
   function inRect(r, x, y) {
@@ -1763,6 +1815,7 @@ export function createRoomScene() {
 
     exit() {
       roomCv = null; ovCv = null;
+      parkCv = null; ringCv = null;
       parts.length = 0;
       /* the naming beat owns a real DOM input; it must not outlive the scene */
       if (naming) naming.close();
@@ -1792,6 +1845,8 @@ export function createRoomScene() {
       const view = a.view;
       buildRoom(view);
       buildOverlay(view);
+      /* a resize invalidates them exactly as it invalidates the room */
+      parkCv = null; ringCv = null;
       initMotes();
       if (nav) nav.layout(view.safe.bottom / view.vs);
       if (sheet) sheet.setInset(view.safe.bottom / view.vs);
@@ -2001,16 +2056,62 @@ export function createRoomScene() {
       c.setTransform(1, 0, 0, 1, 0, 0);
       if (shaking) c.translate(sk.x * view.vs * view.dpr, sk.y * view.vs * view.dpr);
       if (roomCv) c.drawImage(roomCv, 0, 0);
+      /* ---- AND THE PLACE HE IS COMPETING IN, OVER THE TOP -----------------
+         Both contests used to happen in the living room with the lights down.
+         Now each has a place, and it dissolves in on the OWNING LAYER'S OWN
+         WEIGHT — the trial's ring wash spring and the disc's field spring —
+         which means the fade in and out is already tuned, already respects
+         `prefers-reduced-motion`, and needs no second clock.
+
+         Baked lazily: she may never open either, and a device that never sees
+         the ring should not pay for two extra full-screen canvases. */
+      const placeW = placeWeight();
+      if (placeArt && placeW > 0.004) {
+        const wantRing = contest.weight > 0.004;
+        if (wantRing && !ringCv) ringCv = buildOutdoor(view, 'ring');
+        if (!wantRing && !parkCv) parkCv = buildOutdoor(view, 'park');
+        /* ONE PLACE AT A TIME, AND NONE AT HOME. A full-screen offscreen canvas
+           on a 3x phone is a 1290x2790 bitmap — around 14MB — and iOS caps total
+           canvas memory rather than per-canvas size, which is the failure that
+           shows up as a blank white rectangle and never as an error. The room
+           already holds two (`roomCv`, `ovCv`), so the park and the ring are
+           never both resident and neither outlives the contest that opened it.
+           The bake is a few milliseconds of flat fills; paying it again on the
+           next entry is cheaper than carrying it around all day. */
+        if (wantRing) parkCv = null; else ringCv = null;
+        const cv = wantRing ? ringCv : parkCv;
+        if (cv) {
+          c.save();
+          c.globalAlpha = clamp(placeW, 0, 1);
+          c.drawImage(cv, 0, 0);
+          c.restore();
+        }
+      } else if (parkCv || ringCv) {
+        /* he is home: give the bitmaps back */
+        parkCv = null; ringCv = null;
+      }
       c.setTransform(1, 0, 0, 1, 0, 0);
       g.toVirtual();
       if (shaking) c.translate(sk.x, sk.y);
       c.lineJoin = 'round'; c.lineCap = 'round';
 
-      drawMotes(c, walk.hidesDog ? (1 / 60) * BALANCE.walk.away.moteSlow : 1 / 60);
+      /* THE DUST STAYS INDOORS TOO. `drawMotes` bands its alpha to a diagonal
+         shaft centred on x 300 — the room's window beam. The park's sun is
+         deliberately on the other side (`VW*0.16`), so motes out there would be
+         dust hanging in a sunbeam that is not in the picture. They are frozen
+         rather than faded: an undrawn mote is an invisible mote, and they pick up
+         where they were when he comes home. */
+      if (!outdoors()) {
+        drawMotes(c, walk.hidesDog ? (1 / 60) * BALANCE.walk.away.moteSlow : 1 / 60);
+      }
 
-      /* what he has brought home, on the sill. Drawn before the melancholy
-         wash, so an empty room dims his collection along with everything else. */
-      drawSill(c);
+      /* WHAT HE HAS BROUGHT HOME, ON THE SILL. Drawn before the melancholy wash,
+         so an empty room dims his collection along with everything else — and
+         not drawn at all while he is out, because the sill, the bowls and the
+         ball belong to the ROOM. A park with a water bowl and a tennis ball lying
+         in the grass is a living room with a photograph of a field behind it,
+         which is what the first render of this feature actually looked like. */
+      if (!outdoors()) drawSill(c);
 
       /* the empty-room wash and today's treasures on the rug */
       walk.drawBack(g);
@@ -2030,10 +2131,10 @@ export function createRoomScene() {
          the number the drag respects are the same number. */
       const SG = BALANCE.care.stage;
       const bry = SG.grabR / SG.grabAspect;
-      if (care.mode !== 'feed') {
+      if (care.mode !== 'feed' && !outdoors()) {
         drawBowl(c, SG.bowlHome[0], reach.clampY(SG.bowlHome[1], bry), SG.bowlScale, 'food', 0, time);
       }
-      if (care.mode !== 'water') {
+      if (care.mode !== 'water' && !outdoors()) {
         drawBowl(c, SG.waterHome[0], reach.clampY(SG.waterHome[1], bry), SG.bowlScale * 0.78, 'water', 0.5, time);
       }
 
@@ -2045,7 +2146,12 @@ export function createRoomScene() {
          BEHIND him and vanished into his silhouette. See `restLine` in
          dog/toy.js. */
       const toyBehind = toy.toy.y < toy.restLine - 2 || toy.depth > 0.02;
-      if (toyBehind) toy.draw(g);
+      /* AND THE BALL IS AT HOME TOO while he is out competing — a tennis ball
+         lying in the grass of a show ring is the living room refusing to leave.
+         `toy.apply` is already refused while the disc is busy, so the ball is
+         asleep at its resting slot and nothing is lost by not drawing it. */
+      const showToy = !outdoors();
+      if (toyBehind && showToy) toy.draw(g);
 
       /* THE CARE PROPS THAT GO UNDER ALL OF HIM: the brushed-out fur pile,
          which really is on the rug behind his paws. The BOWL is not here —
@@ -2082,7 +2188,7 @@ export function createRoomScene() {
       else care.drawMid(g);
       drawParts(c);
 
-      if (!toyBehind) toy.draw(g);
+      if (!toyBehind && showToy) toy.draw(g);
       care.drawFront(g);
       /* the treat, the reward ring and the ghost gesture hints sit in FRONT of
          her, the way the bowl does */
@@ -2462,6 +2568,14 @@ export function createRoomScene() {
        checking its own arithmetic (§27.3's lesson, one floor up). */
     get roomCanvas() { return roomCv; },
     rebuildRoom() { if (app && app.view) buildRoom(app.view); return rugShown; },
+    /* WHERE HE IS, for tools/placegate.py: 0 is the living room, 1 is a
+       competition place that has all but replaced it. One number, because the
+       backdrop, the sill, the bowls and the ball all read it (`placeWeight`). */
+    get placeWeight() { return placeWeight(); },
+    /* the place's ART, on or off, leaving its weight and everything that reads
+       it untouched — see `placeArt` at the top of the file */
+    get placeArt() { return placeArt; },
+    set placeArt(on) { placeArt = !!on; },
     decorSignature: () => decorSig(),
     get toasts() { return toasts; },
     get hud() { return hud; },

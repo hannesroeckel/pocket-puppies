@@ -737,10 +737,12 @@ export const BALANCE = {
       [0, 'Next time'],
     ],
 
-    /* ---- the surface. Reuses the ring's back button and dim on purpose:
-       "get me out of here is in one place in the whole game" (§20 of the ring
-       block above), and a second dimming value would be a second sky. */
+    /* ---- the surface. Reuses the ring's back button on purpose: "get me out of
+       here is in one place in the whole game" (§20 of the ring block above). */
     ui: {
+      /* KEPT, UNREAD, like the ring's own `dim`. This dimmed the living room to
+         make a "field" out of it; the field is a park now (scenes/outdoors.js)
+         and there is nothing to dim — see the no-op `drawBack` in dog/disc.js. */
       dim: 0.20,
       hintY: 96,
       cardY: 300, cardW: 306, cardH: 214, cardR: 22,
@@ -1483,10 +1485,18 @@ export const BALANCE = {
 
     /* ---- THE RING (scene art constants; §11 G) ----------------------- */
     ring: {
-      dim: 0.26, chill: 0.16,        // the cool wash over the empty room
-      /* the spotlight is drawn UNDER the dog and over the room, so the room
-         dims and he does not — which is what a spotlight actually is */
+      /* KEPT, UNREAD. These two dimmed and cooled the living room to say "this
+         is a trial now". The trial happens in a show ring outdoors since
+         scenes/outdoors.js, and the place says it instead — see the note in
+         dog/contest.js `drawBack`. Left here because deleting them would take
+         that note's subject with it. */
+      dim: 0.26, chill: 0.16,
+      /* the pool of light on the mat, drawn UNDER the dog and over the ground.
+         `spotOutdoor` is what is left of a stage light once the stage is a
+         field in daylight: enough to lift the mown grass, not enough to read as
+         a lamp. */
       spot: { at: [186, 660], r: 268, alpha: 0.30 },
+      spotOutdoor: 0.34,
       mat: { at: [192, 708], r: [168, 70] },
       /* THE JUDGE'S BOARD, measured DOWN FROM THE SAFE-AREA TOP EDGE.
          `boardTop` clears the back button (y 62, r 20 -> ends at 82) rather
