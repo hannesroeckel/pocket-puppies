@@ -39,6 +39,15 @@ largest art task in the project and it was deliberately avoided.
 5. **Punish cruelty, not neglect.** The original specifically penalised teasing, hitting the
    pet with toys, and yanking the leash. Reproduce that as *immediate physical reaction*
    (recoil, flinch, retreat, a hurt look) — never as a persistent score penalty or guilt.
+6. **Every mode says how it works, once.** Added after the fact, in the player's words: *"in
+   general we should always include a tutorial for any feature/mode in the game."* One card,
+   the first time she opens that mode, dismiss-only, with a `?` to see it again. Two things
+   this principle explicitly does **not** license: a card in front of the first launch (§4.1
+   of GIFT-READY: *"no UI clutter, no tutorial in front of it"*), and a card after a mistake —
+   an explanation that arrives when she drops the disc **is** the game telling her she got it
+   wrong, whatever the words say, and principle 1 outranks being helpful. Modes that already
+   explain themselves get nothing: the shop is a priced list, the trick list *is* an
+   explainer, and the paw-shake is a discovery on purpose (ARCHITECTURE §33).
 
 ---
 
@@ -69,7 +78,17 @@ obsessively, give it more polish than anything except petting itself.
 **Toys** (frontal-safe per §1 item 5): flick to throw **up-screen**, the toy arcs *away* from
 the viewer scaling down, the dog turns and runs "into" the screen (vertical squash + scale
 fakes the foreshortening), then returns growing larger. **Never throw laterally** — that
-needs the rig we didn't build. The uncertainty is the mechanic: sometimes it returns the toy,
+needs the rig we didn't build.
+
+> **Amended for the disc, and only for the disc (ARCHITECTURE §33).** The player asked for
+> the dog to *"actually catch the disc instead of just staying in place"*, so a disc now comes
+> down up to 72 units to one side of him and he covers the ground to get under it. That is a
+> **translate of `rig.x` with a bounce on it** — no gait cycle, no side of him ever drawn,
+> nothing rotated — which is the same licence `TRICK_POSE.spin` takes to trot a circle and the
+> reunion takes to cross the room. The consequence above still holds in full: **no
+> side-profile rig is being built**, and a real run cycle would still need the raise this
+> document asks for. The **ball** keeps the original ±46 and its "never sideways" hint, because
+> a ball out of reach is a ball he cannot fetch. The uncertainty is the mechanic: sometimes it returns the toy,
 sometimes it chews it, sometimes it loses interest halfway. A toy that always comes back is
 a vending machine.
 

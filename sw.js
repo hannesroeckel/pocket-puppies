@@ -109,6 +109,18 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.18.0: HE CATCHES IT, AND SHE IS TOLD HOW (schema v10). ONE NEW MODULE —
+   `src/ui/howto.js` — so this generation MUST move and it MUST appear in
+   PRECACHE below: `scenes/room.js` and `main.js` both import it unconditionally,
+   and a phone that took this generation without it would fail to resolve the
+   import offline and show a blank screen. SCHEMA v10 adds `flags.howto`, the set
+   of modes she has been shown; `MIGRATIONS[10]` fills it empty, which means an
+   existing save is offered each card once — deliberately, because the person
+   playing that save is the one who said "one doesnt really know what to do".
+   `dog/disc.js` and `state/balance.js` move with it: he runs to the disc, leaps
+   properly, and takes it in his mouth. `py tools/check-precache.py` now expects
+   58 entries.
+
    8.17.0: THE CONTESTS HAPPEN SOMEWHERE ELSE. ONE NEW MODULE —
    `src/scenes/outdoors.js` — so this generation MUST move and it MUST appear in
    PRECACHE below: `scenes/room.js` imports it unconditionally, and a phone that
@@ -204,7 +216,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.17.0';
+const VERSION = '8.18.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -256,6 +268,7 @@ const PRECACHE = [
   './src/state/time.js',
   './src/state/walks.js',
   './src/ui/hud.js',
+  './src/ui/howto.js',
   './src/ui/install.js',
   './src/ui/meter.js',
   './src/ui/naming.js',

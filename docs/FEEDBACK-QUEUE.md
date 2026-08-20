@@ -417,3 +417,78 @@ sitting in the grass.
 > home now. The trial's indoor dim wash is gone, its spotlight is a third of the strength doing what
 > daylight does, and its mat is warm sand instead of a blue-grey that read as a puddle on grass.
 > ARCHITECTURE §32.
+
+---
+
+## 10. The disc game does not say what to do — and nothing else does either ✅ FIXED on `feature/catch-and-howto` (cache 8.18.0)
+
+> "we need an explanation on the disc in the game. one doesnt really know what to do. in
+> general we should always include a tutorial for any feature/mode in the game."
+
+**Right, and the second sentence is the more valuable one.** The disc game asks for three
+things at once and shows none of them: that she flicks, that she taps, and that the tap is
+*timed*. It had a hint line — "Tap to make him jump" — which says what the button does and
+not what the game is.
+
+But the general rule is the fix worth building. There were eight modes in the game and none
+of them introduced itself; the ones that got away with it did so because their gesture is
+their whole content (the shop is a priced list) rather than because anyone had checked.
+
+**Fix:** one reusable card — `src/ui/howto.js` — shown the first time she opens a mode,
+dismiss-only, with a `?` at the top-right to see it again. Seven cards: disc, the ring,
+training, the walk, brushing, the kennel, the collection. The list was drawn up by reading
+every mode rather than by taste, and the modes that explain themselves deliberately get
+nothing.
+
+Two things the rule explicitly does not license, both because they would break something
+older and more important:
+
+- **no card in front of the first launch** — GIFT-READY: *"no UI clutter, no tutorial in
+  front of it"*. The first thing she ever sees is still a puppy.
+- **no card after a mistake.** An explanation that arrives when she drops the disc *is* the
+  game telling her she got it wrong, whatever the words say, and "losing must never feel
+  like rebuke" outranks being helpful.
+
+> **Done.** It is now a design principle in SCOPE rather than a feature: *"every mode says
+> how it works, once."* 35 checks in `tools/howtogate.py`, including that every card fits at
+> the widest pronouns ("they/them/their") and that no card contains a typed-in "he" — a bug
+> no amount of driving the UI would find. Two bugs from the build are written up in
+> ARCHITECTURE §33.4: the card flickered on and off at 60fps because it and the surface
+> arbiter disagreed about who was in charge, and the `?` did nothing on a fast tap because it
+> was reading an animation value as a state.
+
+---
+
+## 11. He does not actually catch the disc ✅ FIXED on `feature/catch-and-howto` (cache 8.18.0)
+
+> "also i want the dg to actually catch the disk instead of just staying in place and jumping
+> lsightly"
+
+**Three separate faults in one sentence, and he was right about all three.** ARCHITECTURE
+§31.7 had even written the first one down as known-imperfect — *"he does not move to the
+disc… he will never run for one"* — which was a decision made for a good reason (no
+side-profile rig) and then never revisited when the reason stopped applying.
+
+| what he saw | what it was |
+|---|---|
+| jumping slightly | 52 units of lift on a dog whose head is 200 units up |
+| staying in place | the disc's path **curved onto his head**, so the throw had no consequence |
+| not actually catching | the disc **stopped dead** at head height and was deleted at the apex of the hop — there was no frame on which he had it |
+
+**Fix:** the disc keeps the line she threw it on and he covers the ground to get under it; the
+leap is 2.45× a trick jump with a real stretch in it; and he takes the disc **in his mouth**,
+carries it through the landing and back toward the middle. A throw nobody taps now falls all
+the way to the grass and lies there.
+
+**It is not a second skill.** He is always under it in time by construction — the run covers
+more ground than the widest throw, in a third of the shortest flight — so her skill is still
+only the timing of the tap. A run she could lose would be a second way to fail at one
+gesture.
+
+> **Done, and it stayed inside the one rule it came close to.** SCOPE says no side-profile rig
+> may be built without raising it first; this is a translate with a bounce on it — no gait
+> cycle, no side of him ever drawn — which is the same licence the trick spin and the reunion
+> already take. That is now written beside the rule instead of left as an inference. The
+> rework also exposed four older bugs, including a disc that **teleported 244 units up the
+> screen** on release and had done since the day it shipped. ARCHITECTURE §33.1–33.3; the disc
+> gate is 47 checks.

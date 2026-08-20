@@ -38,6 +38,9 @@ import { createShop } from '../ui/shop.js';
 import { createKennel } from '../ui/kennel.js';
 import { createTrickList } from '../ui/tricklist.js';
 import { createCollection } from '../ui/collection.js';
+/* HOW EACH MODE WORKS, said once, the first time she opens it. One layer for all
+   of them — see the header of ui/howto.js for why it is not seven chips. */
+import { createHowto } from '../ui/howto.js';
 import { heartPath } from '../ui/meter.js';
 import { drawBowl, drawFind } from './props.js';
 /* the two places he competes in — a park for the disc, a show ring for the
@@ -406,7 +409,7 @@ export function createRoomScene() {
   let care = null, toy = null, reunion = null, naming = null;
   let train = null, voice = null, walk = null, contest = null, disc = null;
   let hud = null, nav = null, toasts = null, sheet = null, install = null;
-  let shop = null, kennel = null, tricks = null, collection = null;
+  let shop = null, kennel = null, tricks = null, collection = null, howto = null;
   let roomCv = null, ovCv = null;
   /* the competition backdrops, baked on first use and thrown away on resize */
   let parkCv = null, ringCv = null;
@@ -789,7 +792,10 @@ export function createRoomScene() {
            agility is cut and must never be built, and disc did not exist. Now
            there are two rows and each goes where it says. */
         { id: 'ring', label: 'The ring', note: 'An obedience trial, in front of a judge' },
-        { id: 'disc', label: 'Disc', note: 'Flick it up and time his jump' },
+        /* the note comes from the layer's own copy, so it is pronoun-correct for
+           whichever dog is in the room. It said "time his jump" in typed-in
+           English, which is wrong the moment there are two dogs. */
+        { id: 'disc', label: 'Disc', note: discEntryNote() },
         { id: 'settings', label: 'Settings', note: 'Sound, name and saving' },
         { id: 'close', label: 'Done' },
       ],
@@ -904,6 +910,14 @@ export function createRoomScene() {
   /** who owns the whole surface right now, or '' */
   function surfaceOwner() {
     if (naming && naming.active) return 'naming';
+    /* THE EXPLAINER CARD, and it is above everything except the two beats that
+       are the gift itself. It is in this list rather than behind a private `if`
+       for the reason §14.1 gives: being here is what stops care, training, the
+       walk, the trial and the disc opening UNDER an open explanation of
+       themselves, without a line being added to any of them. It cannot displace
+       the naming beat or the reunion because `howtoContext()` never hands it a
+       context while either is up. */
+    if (howto && howto.modal) return 'howto';
     if (reunion && reunion.active) return 'reunion';
     /* STAGE 5: the ring is a full surface, and it is in this list rather than
        behind a private `if` in `startContest` — which is the whole point of
@@ -958,7 +972,10 @@ export function createRoomScene() {
    * nothing, and stage 4 established that precedent in `startWalk`.
    */
   function blockedToast(owner) {
-    if (!owner || owner === 'naming' || owner === 'reunion') return;
+    /* SILENT for the beats she is already looking at. A toast that says "one
+       thing at a time" over an open explanation of the thing she is trying to do
+       is the game arguing with itself. */
+    if (!owner || owner === 'naming' || owner === 'reunion' || owner === 'howto') return;
     if (owner === 'disc') {
       toasts.show(disc.COPY.ringBusy ? disc.COPY.ringBusy(app.game.pron) : 'One thing at a time');
       return;
@@ -1179,6 +1196,56 @@ export function createRoomScene() {
   }
   /** true once the place has all but replaced the room */
   function outdoors() { return placeWeight() > 0.5; }
+
+  /**
+   * WHICH MODE SHE IS IN, for the explainer layer — and '' for "just the room".
+   *
+   * This is deliberately not `surfaceOwner()` itself, for two reasons that pull
+   * in opposite directions. Some owners must never get a card: the naming beat
+   * and the reunion are the first minute of the gift, and GIFT-READY §4.1 says
+   * "no UI clutter, no tutorial in front of it". And two modes that need one are
+   * not owners at all — training and brushing happen IN the room, with the dog
+   * still touchable, so they never take the surface.
+   *
+   * A mode gets an explainer by adding a line here and an entry to `HOWTO`. That
+   * is the whole integration: no chip, no hit rect, no layout.
+   */
+  function howtoContext() {
+    /* IT MUST NOT FIGHT ITSELF, and it did. The card takes the surface while it
+       is up (that is the point of it being in `surfaceOwner()`), so the very next
+       frame this function saw an owner of 'howto', reported "she is in no mode at
+       all", and the layer closed the card it had just opened — which made the
+       owner 'disc' again, which reopened it. A card flickering on and off at
+       60fps, from two correct pieces of code disagreeing about who was in
+       charge. While the card is up, the mode underneath it has not changed. */
+    if (howto && howto.modal) return howto.context;
+    const own = surfaceOwner();
+    if (own === 'naming' || own === 'reunion' || own === 'install') return '';
+    if (own === 'contest') return 'ring';
+    if (own === 'disc') return 'disc';
+    /* THE WALK'S CARD WAITS FOR THE MAP, and this is the rule's one named
+       exception — which is really the rule's own logic. SCOPE calls the leash
+       anticipation "the payload of the whole feature": he sees the lead, he
+       cannot stand still, and a card over that covers the thing it is there to
+       explain. The map is the first beat that asks her for a gesture, so it is
+       the first beat worth explaining. Nothing while he is away, either: an
+       empty room is a mood, not a mode. */
+    if (own === 'walk') return walk.beat === 'map' ? 'walk' : '';
+    if (own === 'away') return '';
+    if (own === 'kennel') return 'kennel';
+    if (own === 'collection') return 'collection';
+    if (own === 'shop') return '';            // a priced list explains itself
+    if (own) return '';
+    /* in-room modes, which own no surface */
+    if (train && train.modal) return 'train';
+    if (care && care.mode === 'brush') return 'brush';
+    return '';
+  }
+
+  /** the disc row's note, from the layer that owns the words */
+  function discEntryNote() {
+    return disc ? disc.entryNote() : '';
+  }
 
   /** is a virtual point inside a rect? */
   function inRect(r, x, y) {
@@ -1593,6 +1660,12 @@ export function createRoomScene() {
          Opened by tapping the sill his things stand on. It reads its three
          lists straight out of state/game.js, so what is on the shelf in the
          room and what the panel says is on the shelf are the same array. */
+      /* the explainer layer. It is told which mode is open on every frame and
+         decides for itself whether that is worth a card — see `howtoContext`. */
+      howto = createHowto({
+        game: app.game, reduced: app.reduced,
+        sound: (name) => app.audio.play(name),
+      });
       collection = createCollection({
         game: app.game, reduced: app.reduced,
         sound: (name) => app.audio.play(name),
@@ -1816,6 +1889,7 @@ export function createRoomScene() {
     exit() {
       roomCv = null; ovCv = null;
       parkCv = null; ringCv = null;
+      if (howto) howto.close();
       parts.length = 0;
       /* the naming beat owns a real DOM input; it must not outlive the scene */
       if (naming) naming.close();
@@ -1995,6 +2069,10 @@ export function createRoomScene() {
       if (tricks.isOpen && !train.modal) tricks.stop();
       tricks.update(dt);
       collection.update(dt);
+      /* WHERE SHE IS, every frame, and the layer decides what to do about it.
+         Told rather than asked, the same way the rig is told its drives. */
+      howto.setContext(howtoContext());
+      howto.update(dt);
       /* THE REWARD LANDS IN THE WORLD, on the frame she earns it. `rugBlue` is
          the only unlock that changes the prebuilt room art, so this is the one
          place that has to notice. */
@@ -2246,6 +2324,9 @@ export function createRoomScene() {
          under the naming beat, which the arbiter already makes mutually
          exclusive — the ordering is belt and braces, not a second guard */
       install.draw(g, view);
+      /* THE EXPLAINER, over every mode it explains and under the two beats it
+         must never cover — the same order `surfaceOwner()` puts them in. */
+      howto.draw(g);
       naming.draw(g, view);
     },
 
@@ -2256,6 +2337,26 @@ export function createRoomScene() {
 
       /* the naming beat owns the whole surface while it is up */
       if (naming.active) { naming.pointer(ev, a.view); return; }
+
+      /* THE EXPLAINER CARD, and it consumes EVERYTHING while it is up. A tap
+         that reaches the disc through an explanation of the disc is a tap she
+         did not mean — the same defect the ring's scrim had to fix (§15.4
+         defect 1). Its `?` chip, while the card is shut, claims only a touch
+         that STARTS on it (§21.5's rule for the Tricks pill) and returns false
+         for everything else, so the room carries on as if it were not there. */
+      if (howto.isOpen) {
+        howto.pointer(ev);
+        capture = howto.isOpen ? 'howto' : '';
+        return;
+      }
+      if (capture === 'howto') { capture = ''; if (ev.type !== 'down') return; }
+      if (howto.pointer(ev)) { capture = howto.isOpen ? 'howto' : 'howtoChip'; return; }
+      if (capture === 'howtoChip') {
+        /* the chip's own drag and release: it owns the gesture it started */
+        if (howto.pointer(ev)) { capture = howto.isOpen ? 'howto' : 'howtoChip'; return; }
+        capture = '';
+        if (ev.type !== 'down') return;
+      }
 
       /* THE INSTALL CARD, and it consumes EVERYTHING while it is up — including
          a touch that lands on him. A touch falling through a scrim to the
@@ -2536,6 +2637,7 @@ export function createRoomScene() {
         navIds: nav ? nav.items.map((i) => i.id) : [],
         navUnavailable: nav ? nav.items.filter((i) => i.available === false).map((i) => i.id) : [],
         owner: surfaceOwner(),
+        howto: howto ? howto.debug : null,
       };
     },
     get rig() { return rig; },
@@ -2588,6 +2690,13 @@ export function createRoomScene() {
     },
     navAction: (a, n) => navAction(a, n),
     get collection() { return collection; },
+    get howto() { return howto; },
+    /** what the explainer layer is being told, for tools/howtogate.py */
+    howtoContext: () => howtoContext(),
+    /* whether any line of the open card had to be shrunk or ellipsised. Needs a
+       live `g` to measure with, which only a draw has — same trick `probeToast`
+       uses, and for the same reason. */
+    probeHowto: () => (lastG && howto ? howto.audit(lastG) : null),
     /* drivers the verification harness needs; see window.__pp in main.js */
     openShop() { openShop(); return shop.isOpen; },
     openKennel() { openKennel(); return kennel.isOpen; },

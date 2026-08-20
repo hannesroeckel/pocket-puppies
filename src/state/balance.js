@@ -663,7 +663,12 @@ export const BALANCE = {
        goes further, and the catch has to happen while it is still on screen. */
     fly: {
       dur: [1.05, 1.70],        // seconds, weak flick -> full flick
-      vanishY: 300,             // the top of its arc at full power
+      /* the top of its arc at full power, and the LEAST it must clear the line
+         his jaws reach by. See the note in `release()`: 300 was tuned against a
+         disc that came down to his resting head, and with a real leap under it
+         the arc peaked below the catch and the fall ran upward. */
+      vanishY: 116,
+      minRise: 92,
       hang: 0.30,               // share of the flight held near the apex
       /* WHERE THE HANG IS CENTRED, as a share of the flight — and it is a
          DIFFERENT number from `window.at`, which is when the disc is catchable.
@@ -688,35 +693,117 @@ export const BALANCE = {
       drawR: 1.55,
       flatten: 0.55,
       spin: 9.5,
+      /* HOW LONG IT TAKES TO REACH THE GRASS after it has fallen through the
+         line his jaws reach, as a share of the flight. The disc used to stop
+         dead there and hang in the air until the leap deleted it, so a miss had
+         nothing to look at; it lands now, and lies where it landed until she
+         throws again. */
+      fallTail: 0.42,
+      /* HOW FAR TO EITHER SIDE OF HIM IT CAN COME DOWN. The toy's ±46 exists
+         because a ball out of his reach is a ball he cannot fetch — there is no
+         walk cycle to go and get it. The disc is the opposite case: him covering
+         ground is the thing she asked for, so this is the wide band and
+         `leap.reach` is sized to cover all of it with room left over. */
+      /* 88 was too far: at the extreme left landing he ran to x 74 and his own
+         left edge went off the screen. He is about 85 units wide either side of
+         his origin, so this is the widest drift that keeps all of him on a
+         384-unit screen with his run clamped to `leap.reach`. */
+      drift: 76,
+      /* where the depth ends up once it is lying on the grass at his feet — see
+         the note in `flightAt`'s landing branch */
+      landDepth: 0.22,
     },
 
     /* ---- THE CATCH WINDOW ---------------------------------------------
-       `at` is where in the flight the disc is catchable, as a share: 0.62 is on
-       the way down, which is what a dog jumping at a disc actually does.
-       `half` is the half-width of the window in seconds — inside it, he catches.
-       `grace` is the wider span the SCORE cares about, so a tap that misses by
-       a hair scores better than one that misses by a mile.
+       `half` is the half-width of the window in seconds — inside it, he takes
+       the disc out of the air. `grace` is the wider span the SCORE cares about,
+       so a tap that misses by a hair scores better than one that misses by a
+       mile.
 
        A REAL THUMB, NOT A FRAME. 0.16 either side is ~10 frames at 60fps, which
        is generous by the standards of a timing game and correct by the standards
-       of an eight-year-old on a phone on a bus. */
-    /* `at` 0.86 rather than 0.90 so BEING LATE IS POSSIBLE. At 0.90 the disc
-       lands 0.16s after the window closes, i.e. exactly the window's own
-       half-width, so a late tap could never happen at all: every miss was an
-       early one and "a little late" was dead copy. 0.86 leaves about a fifth of
-       a second of late, which is what makes the window feel like a window. */
-    window: { at: 0.86, half: 0.16, grace: 0.30 },
+       of an eight-year-old on a phone on a bus.
 
-    /* ---- THE LEAP ------------------------------------------------------
+       THERE IS NO `at` ANY MORE, and its absence is the point. It used to say
+       where in the flight the disc was catchable, as a share — 0.86 — and the
+       disc stopped dead at that height and waited for him. The disc now falls
+       through his reach and keeps going, so the moment to tap is not a share of
+       anything: it is "one leap before the disc gets here", i.e. the flight's
+       own duration minus how long the leap takes to reach his jaws. `idealAt()`
+       in dog/disc.js is that subtraction, and it means a slow floaty throw and a
+       hard flat one are both timed against the same physical fact rather than
+       against the same fraction. */
+    window: { half: 0.16, grace: 0.30 },
+
+    /* ---- THE LEAP, AND THE RUN THAT GETS HIM UNDER IT -------------------
        `TRICK_POSE.jump` is driven directly rather than through
        `train.perform`, because a performance's timing comes from the obedience
        roll and a timing game needs the leap to happen NOW. `dur` is the pose's
        own clock; `hold` stretches the airborne part so the catch reads as a
-       catch rather than as a bounce. */
-    /* `height` scales the jump pose's own altitude: a trick jump is a bounce on
-       the spot and this one is going somewhere. Applied to the `hop` TARGET, so
-       the spring still does the work. */
-    leap: { dur: 0.95, hold: 0.22, height: 1.45 },
+       catch rather than as a bounce.
+
+       WHY THESE NUMBERS CHANGED. The player's words: "i want the dog to
+       actually catch the disc instead of just staying in place and jumping
+       slightly". All three parts of that were true and each had its own cause:
+
+         - JUMPING SLIGHTLY. `height` was 1.45, so 1.45 x `rig.trick.hopHeight`
+           (36) = 52 units of lift on a dog whose head is already 200 units up.
+           A trick jump is a bounce on the spot; this one is going somewhere.
+         - STAYING IN PLACE. The disc's x used to converge onto his head during
+           the fall, so wherever she aimed it, it came to him. Now HE goes to it
+           — `reach` is how far he will travel and `runSpeed` is how fast, and
+           the two are sized so he is always under it in time. Her skill stays
+           the timing of the tap and nothing else: a run she could lose would be
+           a second thing to fail at, and losing must never feel like rebuke.
+         - NOT ACTUALLY CATCHING. The disc used to stop dead at his resting head
+           height and hang there until the apex of the hop deleted it. It falls
+           through the catch line now, and if he does not take it out of the air
+           it carries on to the grass and lies there — a miss she can see.
+
+       `catchShare` is where on the way up his jaws close: 0.86 of full lift
+       rather than 1.0, so the disc is met a little below the very peak. That is
+       both what a dog actually does and the more forgiving of the two, since he
+       is still rising when it arrives.
+
+       `apexAt` is the point on the leap's own clock the catch is aimed at, and
+       it is what `idealAt()` subtracts from the flight to decide when the tap
+       should come. It is 0.45 because `TRICK_POSE.jump`'s altitude peaks at
+       u 0.45 and `hold` spreads that peak either side of it. */
+    leap: {
+      dur: 0.95, hold: 0.22,
+      height: 2.45, catchShare: 0.86, apexAt: 0.45,
+      /* the run: units either side of home he will cover, and how fast. `reach`
+         is `fly.drift` plus a margin, so there is no throw he cannot get under;
+         `runSpeed` clears the whole of `reach` in half a second, against a
+         shortest flight of 1.05s. He is never late, by construction. */
+      reach: 84, runSpeed: 214,
+      /* HOW CLOSE TO THE EDGE HE MAY GET, and it is not a guess: his silhouette
+         was measured off the canvas in the park, over three breeds, by scanning
+         the head band for coat-coloured pixels. 135 units to the left ear, 106
+         to 118 to the right, on a 390-unit screen. At `reach` alone he ran to
+         x 106 and the render came back with his left ear cut flat against x 0.
+         Both the landing and the run are clamped to [edge, VW - edge], which
+         makes the band ASYMMETRIC — his home is 14 units left of centre, so
+         there is more room to his right — and she will never see that, because
+         all she sees is him arriving under the disc. */
+      edge: 136,
+      /* the bounds of the run itself. A frontal rig has no walk cycle, so a
+         trot is sold as small bounds with the ears loose behind them — the same
+         trick the reunion uses to bring him across the room (§13.4). */
+      /* `lift` IS IN HOP UNITS, NOT PIXELS, and getting that wrong is worth the
+         note: at 7.5 it read as "seven and a half units of bounce" and was
+         actually seven and a half TIMES a full trick jump — 270 units — so he
+         pogoed across the grass between throws. It never showed up in a
+         screenshot because the run is over before the frame anyone photographs;
+         it showed up as `catchLine()` swinging 254 units while the disc hung, in
+         a gate assertion about something else. A real trot is a sixth of a jump. */
+      bound: { rate: 12.5, lift: 0.16, squash: 0.05 },
+      /* how long he holds it in his jaws before it goes back to her hand, and
+         where it sits: `mouthAt` is a rig-local offset from the muzzle, the same
+         shape `walk.home.carryAt` uses and for the same reason — at +10 it sat
+         over his open mouth and read as chewing rather than carrying. */
+      hold2: 0.62, mouthAt: [1, 14], mouthScale: 0.72,
+    },
 
     /* ---- WHAT A THROW IS WORTH, 0..1 ---------------------------------
        Height and airtime are SCOPE's two named terms; timing is the third
@@ -2691,6 +2778,37 @@ export const BALANCE = {
         woods: { at: [96, 442], r: [62, 54] },
       },
     },
+    /* ---- THE EXPLAINER CARD (ui/howto.js) ------------------------------
+       "in general we should always include a tutorial for any feature/mode in
+       the game". One card, sized from its CONTENT: the training card has four
+       steps and brushing has two, and a fixed height would either crop one or
+       leave a hole in the other.
+
+       `w` is 306, the same width as the disc's entry panel and the trial's card,
+       because three different card widths on one phone reads as three different
+       apps. The step lines were written against it at their longest pronoun
+       expansion ("they/them/their"), which is the check `kennel.js` learned to
+       do the hard way — a sentence measured at 334 units in a 116-unit slot,
+       ellipsised to "She goes to someone wh…", caught only by looking. */
+    howto: {
+      w: 306, r: 22, minTop: 96,
+      padTop: 82,        // from the card's top to the FIRST step's baseline
+      stepGap: 40,       // between step baselines
+      noteGap: 34,       // extra room when there is a closing line
+      padBottom: 84,     // room for the note's descenders and the button
+      /* the step column: a numbered pip and then the words. Tightened from
+         34/12 after `tools/howtogate.py` measured every line and found most of
+         them being SHRUNK from 14px to between 11.5 and 13.5 to fit — which
+         `ui/text.js` does silently, so the card looked fine and was quietly a
+         different size on every row. Between this and shorter copy, every line
+         is now drawn at its intended size. */
+      numX: 30, numR: 11, numGap: 9, textRight: 16,
+      done: { w: 132, h: 44, inset: 22 },
+      /* the room goes quiet behind it, not dark: this is a card, and the dog is
+         still the thing on the screen */
+      scrim: 0.22,
+    },
+
     /* ---- THE COLLECTION (ui/collection.js) -----------------------------
        Opened by tapping the window sill, which is where his things already
        stand — the affordance is the shelf itself rather than a sixth pill in

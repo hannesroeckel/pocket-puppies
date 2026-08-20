@@ -408,6 +408,21 @@ export const MIGRATIONS = {
     s.v = 9;
     return s;
   },
+
+  /* ---- v9 -> v10 : the explainers (stage 9) --------------------------
+     One key: `flags.howto`, the set of modes she has already been shown how to
+     use. Empty for an existing save, deliberately — a save that has been played
+     for a fortnight will be offered the disc card the next time she opens the
+     disc, and that is the right outcome: the card exists BECAUSE the person
+     playing this save said "one doesnt really know what to do". */
+  10: (s) => {
+    if (!s.flags || typeof s.flags !== 'object') s.flags = {};
+    if (!s.flags.howto || typeof s.flags.howto !== 'object' || Array.isArray(s.flags.howto)) {
+      s.flags.howto = {};
+    }
+    s.v = 10;
+    return s;
+  },
 };
 
 export function migrate(raw) {

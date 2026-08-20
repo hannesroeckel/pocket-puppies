@@ -236,16 +236,30 @@ def main():
               "a limp drag is not a throw, and costs her nothing",
               {"phase": weak["phase"], "scores": len(weak["round"]["scores"])})
 
-        # ...and a hard SIDEWAYS flick still goes up, not across. Asserted on the
-        # throw's own target, because the disc legitimately converges on his head
-        # as it falls and no time-based filter can separate the two cleanly.
+        # ...and a hard SIDEWAYS flick comes down BESIDE HIM, not across the room.
+        #
+        # THIS ASSERTION USED TO MEASURE THE WRONG DISTANCE, and it passed anyway,
+        # which is the more interesting half. It compared the landing with WHERE IT
+        # LEFT HER HAND and called anything under 47 units "never across" — a
+        # faithful reading of the old code, where `to.x` was `disc.x + lateral`.
+        # Her hand is in the bottom-right corner, 152 units from where he stands,
+        # so that clamp kept every disc near the CORNER rather than near the DOG,
+        # and it only looked right because the disc then curved onto his head.
+        # With the curve gone he was running at a cap of 58 toward a disc a
+        # screen-width away. The landing is measured from HIM now, and so is this.
         d2 = pg.evaluate("() => __pp.dbg().disc")
         side = pg.evaluate(FLICK, [d2["disc"]["x"], d2["disc"]["y"], -240, -180, 6])
         check(side["phase"] == "fly", "a diagonal flick is still a throw", side["phase"])
-        check(abs(side["fly"]["toX"] - side["fly"]["fromX"]) <= 47,
-              "and a hard sideways flick still goes UP, never across",
-              "aimed %s units sideways from where it left her hand, cap 46"
-              % abs(side["fly"]["toX"] - side["fly"]["fromX"]))
+        home = pg.evaluate("() => Math.round(__pp.loop.scene.rig.home.x)")
+        drift = pg.evaluate("() => __pp.BALANCE.disc.fly.drift")
+        reach = pg.evaluate("() => __pp.BALANCE.disc.leap.reach")
+        offHim = abs(side["fly"]["toX"] - home)
+        check(offHim <= drift + 1,
+              "a hard sideways flick comes down within the drift OF HIM",
+              "%s units to one side of him, cap %s" % (offHim, drift))
+        check(reach >= drift,
+              "and he can cover every landing the drift allows",
+              "reach %s vs drift %s" % (reach, drift))
 
         # and a real TAP on the screen makes him leap — the other thumb gesture
         tapReal = pg.evaluate("""() => {
@@ -444,6 +458,172 @@ def main():
             pg.evaluate("() => __pp.step(1/60, 20)")
             pg.screenshot(path=str(SHOTS / "disc-card.png"))
             ctx.close()
+
+
+        # ---- F. HE GOES TO IT, AND HE COMES DOWN WITH IT -------------------
+        #
+        # The player, on 8.17.0: "i want the dog to actually catch the disc
+        # instead of just staying in place and jumping slightly". Three separate
+        # faults in one sentence, so three separate assertions — and each one is
+        # measured on the thing she was looking at, not on the thing that caused
+        # it.
+        ctx, pg = fresh()
+        pg.evaluate(OPEN)
+        catch = pg.evaluate("""(side) => {
+          const pp = window.__pp, sc = pp.loop.scene, rig = sc.rig;
+          const home = rig.home.x;
+          /* a full sideways flick: it comes down `fly.drift` to one side of him */
+          sc.disc.throwAt(0.9, side);
+          const land = pp.dbg().disc.fly.toX;
+          let g = 0, far = 0, hop = 0;
+          /* run him to it, watching how far he travels and how high he goes */
+          while (g++ < 400 && pp.dbg().disc.untilCatch > 0.004) {
+            pp.step(1/60, 1);
+            far = Math.max(far, Math.abs(rig.x - home));
+          }
+          /* the tap, through the scene, on the moment */
+          sc.pointer(pp.app, { type: 'down', x: 195, y: 520, id: 1,
+                               dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+          let gapAtCatch = 1e9, gotIt = false;
+          let h = 0;
+          while (h++ < 120) {
+            pp.step(1/60, 1);
+            hop = Math.max(hop, rig.springs.hop.x);
+            const d = pp.dbg().disc;
+            if (d.disc.mouth && !gotIt) {
+              gotIt = true;
+              /* how far his HEAD was from the disc when he took it */
+              gapAtCatch = Math.abs((rig.x + rig.pose.headX * rig.s) - land);
+              break;
+            }
+          }
+          const held = pp.dbg().disc;
+          /* and where the disc is drawn while he holds it: at his muzzle */
+          const muz = { x: rig.x + rig.pose.muzX * rig.s,
+                        y: rig.y + rig.pose.muzY * rig.s * (rig.sy || 1) };
+          pp.step(1/60, 40);
+          const later = pp.dbg().disc;
+          return {
+            home: Math.round(home), land: Math.round(land),
+            ranTo: Math.round(far), gapAtCatch: Math.round(gapAtCatch),
+            hop: +hop.toFixed(2), mouth: held.disc.mouth,
+            fromMuzzle: Math.round(Math.hypot(held.disc.x - muz.x, held.disc.y - muz.y)),
+            stillHolding: later.disc.mouth,
+            cameBack: Math.round(Math.abs(rig.x - home)),
+          };
+        }""", 1)
+        check(catch["ranTo"] > 40,
+              "he COVERS GROUND to get under a sideways throw",
+              "%s units from home, to a disc that came down %s units away"
+              % (catch["ranTo"], abs(catch["land"] - catch["home"])))
+        check(catch["gapAtCatch"] < 26,
+              "and his head is under the disc when he takes it",
+              "%s units off" % catch["gapAtCatch"])
+        # the leap, in the units the pose is written in: `hop` 1.0 is a trick
+        # jump, so anything at or under that is the "jumping slightly" she saw.
+        check(catch["hop"] > 1.5,
+              "the leap is a leap, not a hop",
+              "hop %s (a trick jump is 1.0)" % catch["hop"])
+        check(catch["mouth"] and catch["fromMuzzle"] < 34,
+              "the disc ends up IN HIS MOUTH, drawn at his muzzle",
+              "mouth=%s, %s units from the muzzle" % (catch["mouth"], catch["fromMuzzle"]))
+        check(catch["stillHolding"],
+              "he is still holding it after he lands — a catch has an after")
+        check(catch["cameBack"] < catch["ranTo"],
+              "and he brings it back toward the middle",
+              "%s units from home, having run %s" % (catch["cameBack"], catch["ranTo"]))
+        ctx.close()
+
+        # ---- F2. ALL OF HIM STAYS ON THE SCREEN ---------------------------
+        # The first run of this feature sent him to x 106 for a hard leftward
+        # flick and the render came back with his left ear cut flat against x 0.
+        # His silhouette was then MEASURED (135 units to the left ear, 106-118 to
+        # the right, three breeds) and `leap.edge` is that measurement — so this
+        # drives both extremes and asserts he never leaves the frame.
+        ctx, pg = fresh()
+        pg.evaluate(OPEN)
+        edges = pg.evaluate("""(edge) => {
+          const pp = window.__pp, sc = pp.loop.scene, rig = sc.rig;
+          const VW = pp.BALANCE.view.W;
+          const out = [];
+          for (const side of [-1, 1]) {
+            let w = 0;
+            while (w++ < 900 && pp.dbg().disc.phase !== 'ready') pp.step(1/60, 2);
+            sc.disc.throwAt(0.9, side);
+            let lo = 1e9, hi = -1e9, g = 0;
+            while (g++ < 300 && pp.dbg().disc.phase === 'fly') {
+              pp.step(1/60, 1);
+              lo = Math.min(lo, rig.x); hi = Math.max(hi, rig.x);
+            }
+            out.push({ side, lo: Math.round(lo), hi: Math.round(hi),
+                       leftEdge: Math.round(lo - edge), rightEdge: Math.round(VW - (hi + edge)) });
+          }
+          return out;
+        }""", pg.evaluate("() => __pp.BALANCE.disc.leap.edge"))
+        for e in edges:
+            check(e["leftEdge"] >= 0 and e["rightEdge"] >= 0,
+                  "a full %s flick keeps all of him on screen"
+                  % ("leftward" if e["side"] < 0 else "rightward"),
+                  "stood between x %s and %s; %s units of him spare on the left, %s on the right"
+                  % (e["lo"], e["hi"], e["leftEdge"], e["rightEdge"]))
+        ctx.close()
+
+        # ---- G. A MISS LANDS, AND THE ROOM GETS HIM BACK -------------------
+        # The disc used to stop dead at head height and hang in the air until the
+        # apex of the leap deleted it: the catch had no moment and the miss had no
+        # consequence. It falls through and lands now.
+        ctx, pg = fresh()
+        pg.evaluate(OPEN)
+        miss = pg.evaluate("""() => {
+          const pp = window.__pp, sc = pp.loop.scene, rig = sc.rig;
+          sc.disc.throwAt(0.85, -1);
+          let g = 0, lowest = -1e9, hovered = 0, lastY = -1e9;
+          while (g++ < 500) {
+            pp.step(1/60, 1);
+            const d = pp.dbg().disc;
+            lowest = Math.max(lowest, d.disc.y);
+            /* HOVERING IS THE OLD BUG, AND ONLY BELOW THE CATCH LINE IS THE
+               OLD BUG. A disc HANGS near the apex on purpose — `fly.hang` is
+               0.30 of the flight and that is the part she times against — so a
+               standstill detector that watched the whole flight flagged 34
+               frames of the intended design and called it the defect. What must
+               never happen is the disc stopping where his jaws are and waiting
+               to be collected, which is what it used to do. */
+            if (Math.abs(d.disc.y - lastY) < 0.25 && !d.disc.down
+              && d.disc.y > d.him.catchY - 10) hovered++;
+            lastY = d.disc.y;
+            if (d.disc.down) break;
+          }
+          const d = pp.dbg().disc;
+          const ground = rig.y - 6;
+          /* then leave the field mid-round, through the real back button, and
+             see what state the room is handed. Driven with `scene.pointer` for
+             the reason 8.16.1 exists: a gate that calls past the routing is not
+             testing the routing. */
+          const B = pp.BALANCE.contest.ring.back;
+          sc.pointer(pp.app, { type: 'down', x: B.x, y: B.y, id: 1,
+                               dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+          pp.step(1/60, 30);
+          return {
+            down: d.disc.down, y: Math.round(d.disc.y), ground: Math.round(ground),
+            scale: d.disc.s, hovered,
+            rigBack: Math.round(Math.abs(rig.x - rig.home.x)), sy: rig.sy,
+          };
+        }""")
+        check(miss["down"], "a throw nobody taps falls all the way to the grass", miss)
+        check(abs(miss["y"] - miss["ground"]) <= 14,
+              "and comes to rest at his feet, not in the air",
+              "y %s, the grass at his paws is %s" % (miss["y"], miss["ground"]))
+        check(miss["scale"] > 0.7,
+              "drawn at his depth once it is down there, not still in the distance",
+              miss["scale"])
+        check(miss["hovered"] < 6,
+              "and it never stops at his jaws waiting to be collected",
+              "%s frames at a standstill at or below the catch line" % miss["hovered"])
+        check(miss["rigBack"] == 0 and abs(miss["sy"] - 1) < 1e-6,
+              "leaving mid-round hands the room a dog standing where it left him",
+              miss)
+        ctx.close()
 
         check(not errors, "no page errors and no console warnings", errors[:4])
         b.close()
