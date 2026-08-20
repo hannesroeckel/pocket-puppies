@@ -58,6 +58,11 @@ const FU = BALANCE.fur;
    A profile with no `tuft` key takes the original code path exactly, which
    is why the Shiba is untouched.
    ========================================================================== */
+/* ALREADY EXPORTED, at the bottom of this file with EAR_STYLE — which is how
+   `dog/side.js` shares these numbers rather than copying them. A profile dog
+   with its own scallop depth and its own curl density would drift away from this
+   one coat by coat; sharing the table means the two views can only disagree
+   about SHAPE, which is the thing they are supposed to disagree about. */
 const FUR_TYPE = {
   short: { scallop: 1.0, lobe: 1.0, alpha: 1.0 },
   long: { scallop: 2.3, lobe: 1.7, alpha: 1.15 },

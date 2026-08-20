@@ -2122,6 +2122,60 @@ export const BALANCE = {
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },
 
   /* ---- rig motion ---------------------------------------------------- */
+  /* ==================================================================
+     THE PROFILE DOG (dog/side.js)
+
+     Raised and approved after eight stages of not having one: "Actually I do
+     want a side and back profile of the dogs". Built against
+     `docs/reference/side-run-cycle.png`.
+
+     EVERY NUMBER IN HERE IS A MULTIPLIER ON A FRONTAL PROPORTION, never an
+     absolute. `breed.proportions` already says how big this dog's head and body
+     and legs are, per breed, and a second set of absolute sizes would mean a
+     Shiba in profile and a Shiba face-on were two different dogs. So this block
+     is the ART DIRECTION — what changes when you walk around him — and the
+     breed table stays the single source of truth for how big he is.
+     ================================================================== */
+  side: {
+    /* a puppy in profile is LONGER than he is wide face-on, and his chest is
+       deeper than his flank is tall */
+    body: { long: 0.62, deep: 0.40 },
+    /* the head is huge and sits forward and high, over the shoulders */
+    head: { w: 0.44, h: 0.42, fwd: 0.52, up: 0.62 },
+    /* the muzzle is the FRONT OF THE FACE now, not a shape stuck on it */
+    muzzle: { w: 0.30, h: 0.24, x: 0.62, y: 0.30 },
+    nose: { x: 0.72, y: 0.12, r: 0.30 },
+    eye: { x: 0.30, y: -0.02, r: 1.0 },
+    /* one ear, hanging off the near cheek, swinging with the stride */
+    ear: { w: 0.62, h: 0.92, x: 0.18, y: 0.10, angle: 0.10 },
+    tail: { x: 0.86, y: 0.30, w: 0.30, h: 0.46, angle: -0.9 },
+    /* the legs: stubs, no joints (the reference has none), with the hind pair
+       a little longer and the paw a little wider than the leg */
+    leg: { len: 1.15, w: 1.05, hind: 1.06, paw: 0.62, shoulderX: 0.52, hipX: 0.62 },
+    cream: { w: 0.44, h: 0.42, alpha: 0.85 },
+    shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
+    /* ---- THE GAIT ----------------------------------------------------
+       A BOUND, not a trot, because that is what the reference draws: two
+       extended frames and two gathered ones, both front legs together. A trot
+       (diagonal pairs) is what a dog on a lead actually does and it is the
+       obvious next variant, but the art contract is the reference.
+
+       `lagFar` is why he reads as four legs rather than two: the far leg of a
+       pair is a fraction of a cycle behind the near one. */
+    gait: {
+      hz: 2.1,            // cycles per second at a normal trot
+      bob: 9,             // how far the whole dog lifts, once per cycle
+      stretch: 0.5,       // body lengthening on the extension
+      reach: 13,          // how far a paw travels fore and aft
+      paw: 7,             // how far it comes off the ground
+      foreshorten: 0.22,  // how much a leg shortens as it swings under him
+      lagFar: 0.08,       // the far leg of a pair, behind the near one
+      headBob: 3.2,
+      tail: 0.22,
+      ear: 0.30,
+    },
+  },
+
   rig: {
     place: { x: 178, y: 706, scale: 1.34 },
     breathIn: 0.38,
