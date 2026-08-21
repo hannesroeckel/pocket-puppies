@@ -109,6 +109,21 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.19.0: THE DOG CAN BE SEEN FROM THE SIDE. FIVE NEW MODULES, and four of them
+   are load-bearing for the dog you already have: `dog/part.js` (the coat),
+   `dog/coat.js` (the tufted mass), `dog/face.js` (eye, nose, mouth) and
+   `dog/coatstate.js` (muddy, soapy, wet, glossy) all came OUT of `dog/draw.js`,
+   which now imports them. A phone that took this generation without them would
+   fail to resolve an import and show a blank screen — the exact failure 8.5.0's
+   note describes, and the reason this list is checked rather than trusted.
+   `dog/side.js` is the fifth and is the only one nothing imports yet: it is the
+   profile dog, complete and rendering, waiting on the walk to use it. It ships
+   because a module the tree contains and the cache does not is a 404 waiting for
+   whoever wires it up. `py tools/check-precache.py` now expects 63 entries.
+
+   The frontal dog is BYTE-IDENTICAL across all of it: seven extraction batches,
+   each proven with `breedproof` and `bowlpixels` before the next began.
+
    8.18.0: HE CATCHES IT, AND SHE IS TOLD HOW (schema v10). ONE NEW MODULE —
    `src/ui/howto.js` — so this generation MUST move and it MUST appear in
    PRECACHE below: `scenes/room.js` and `main.js` both import it unconditionally,
@@ -216,7 +231,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.18.0';
+const VERSION = '8.19.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -239,6 +254,11 @@ const PRECACHE = [
   './src/dog/anim/tricks.js',
   './src/dog/breeds.js',
   './src/dog/care.js',
+  './src/dog/coat.js',
+  './src/dog/coatstate.js',
+  './src/dog/face.js',
+  './src/dog/part.js',
+  './src/dog/side.js',
   './src/dog/contest.js',
   './src/dog/disc.js',
   './src/dog/draw.js',
