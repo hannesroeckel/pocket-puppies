@@ -2173,7 +2173,10 @@ export const BALANCE = {
     },
     /* the tail read as a SECOND RUMP at 0.30 x 0.46 — a scalloped mass the size
        of his hindquarters, at mid-height. A plume is small, high and behind. */
-    tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15 },
+    /* `curl` and `carry` are how much `breed.proportions.tailCurl` / `tailCarry`
+       rotate the plume: a Shiba's 0.72 curl lifts it over the back, a doodle's
+       0.1 leaves it out behind. */
+    tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15, curl: 1.15, carry: 0.55 },
     /* the legs: stubs, no joints (the reference has none), with the hind pair
        a little longer and the paw a little wider than the leg */
     /* thicker than the frontal legs, not thinner: in profile a leg is a whole
@@ -2188,6 +2191,9 @@ export const BALANCE = {
        `bow` is the knee: without it a leg is a rod. */
     leg: { len: 1.34, w: 0.78, hind: 1.04, paw: 0.44, bow: 5.0,
       shoulderX: 0.56, hipX: 0.68 },
+    /* THE NECK: withers to the back of the jaw, wider at the chest end, and
+       drawn with NO contour — see the rule quoted in side.js's `neck`. */
+    neck: { fromX: 0.52, fromY: 0.34, toX: 0.22, toY: 0.40, w0: 0.70, w1: 0.52 },
     cream: { w: 0.44, h: 0.42, alpha: 0.85 },
     shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
     /* ---- THE GAIT ----------------------------------------------------

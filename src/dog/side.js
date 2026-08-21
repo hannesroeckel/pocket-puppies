@@ -60,11 +60,11 @@
    test, and it is not one a gate can make — it is one to look at.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
-import { TAU, clamp, pt, hump, ell } from '../engine/draw.js';
+import { TAU, clamp, lerp, pt, hump, ell } from '../engine/draw.js';
 import { FUR_TYPE } from './draw.js';
 import { buildFluff, fluffMass } from './coat.js';
 import { createFurredPart, drawLimb } from './part.js';
-import { crClosed } from '../engine/draw.js';
+import { crClosed, ribbon } from '../engine/draw.js';
 
 const S = BALANCE.side;
 
@@ -277,6 +277,43 @@ export function createSideDog(rig) {
     c.restore();
   }
 
+  /**
+   * THE NECK — the join, without which the head is a ball on a chest.
+   *
+   * NOT an extraction, and worth being straight about that: `dog/draw.js`'s
+   * `drawNeck` is written against the frontal pose — a short column from the
+   * withers to the underside of a head directly above them — and the profile's
+   * neck runs forward as well as up. What IS shared is the rule, which is the
+   * part that matters:
+   *
+   *   "NO outline pass: the neck is always sandwiched between two outlined
+   *    shapes, and a dark border on it reads as a separate collar-shaped object
+   *    rather than as part of the animal. Shape and shading only."
+   *
+   * So: a ribbon from the withers to the back of the jaw, darker at the throat,
+   * and no contour anywhere.
+   */
+  function neck(c, bodyY, hx, hy) {
+    const N = S.neck || {};
+    const x0 = g.bodyHW * (N.fromX === undefined ? 0.52 : N.fromX);
+    const y0 = bodyY - g.bodyHH * (N.fromY === undefined ? 0.34 : N.fromY);
+    const x1 = hx - g.headHW * (N.toX === undefined ? 0.22 : N.toX);
+    const y1 = hy + g.headHH * (N.toY === undefined ? 0.40 : N.toY);
+    const w0 = g.bodyHH * (N.w0 === undefined ? 0.70 : N.w0);
+    const w1 = g.headHH * (N.w1 === undefined ? 0.52 : N.w1);
+    const nodes = [pt(x0, y0), pt(lerp(x0, x1, 0.4), lerp(y0, y1, 0.4)),
+      pt(lerp(x0, x1, 0.75), lerp(y0, y1, 0.75)), pt(x1, y1)];
+    c.save();
+    c.beginPath();
+    ribbon(c, nodes, [w0, lerp(w0, w1, 0.45), lerp(w0, w1, 0.8), w1]);
+    const ng = c.createLinearGradient(0, y0 - w0, 0, y1 + w1);
+    ng.addColorStop(0, pal.coat);
+    ng.addColorStop(1, pal.coatSh);
+    c.fillStyle = ng;
+    c.fill();
+    c.restore();
+  }
+
   /** a plain tufted mass, for the interior patches that have no edge to break */
   function mass(c, key, x, y, rot, hw, hh, main, dark, alpha) {
     c.save();
@@ -338,8 +375,15 @@ export function createSideDog(rig) {
     /* far legs, the tail, then the body over both */
     leg(c, g.bodyHW * S.leg.shoulderX * 0.80, hipY, p.front[0], true, 0.94);
     leg(c, -g.bodyHW * S.leg.hipX * 0.80, hipY, p.hind[0], true, 0.94);
+    /* THE TAIL IS CARRIED THE WAY THE BREED CARRIES IT. `tailCurl` is 0.72 on
+       the Shiba and about 0.1 on the two doodles — the difference between a tail
+       curled over the back and a plume held out behind — and `tailCarry` (negative
+       on both doodles) lowers the base angle. Both are already in the breed table
+       and the frontal dog already reads them; the profile just did not. */
+    const carry = (P.tailCurl || 0) * (S.tail.curl || 1.15)
+      + (P.tailCarry || 0) * (S.tail.carry || 0.55);
     furred(c, 'tail', -g.bodyHW * S.tail.x, bodyY - g.bodyHH * S.tail.y,
-      S.tail.angle + p.tail, g.tailHH, main, a);
+      S.tail.angle - carry + p.tail, g.tailHH, main, a);
     furred(c, 'body', 0, bodyY, 0, g.bodyHH, main, a);
     mass(c, 'chest', g.bodyHW * 0.34, bodyY + g.bodyHH * 0.30, 0,
       g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, pal.cream, pal.creamSh, a * S.cream.alpha);
@@ -348,7 +392,8 @@ export function createSideDog(rig) {
     leg(c, g.bodyHW * S.leg.shoulderX, hipY, p.front[1], false, 1);
     leg(c, -g.bodyHW * S.leg.hipX, hipY, p.hind[1], false, 1);
 
-    /* the head over the shoulders, the face, then the ear over all of it */
+    /* the join, then the head over the shoulders, the face, then the ear */
+    neck(c, bodyY, headX, headY);
     furred(c, 'head', headX, headY, 0, g.headHH, main, a);
     drawFace(c, headX, headY, a);
     furred(c, 'ear', headX - g.headHW * EAR.x, headY + g.headHH * EAR.y,
