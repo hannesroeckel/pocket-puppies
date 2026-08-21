@@ -128,3 +128,77 @@ it currently says a gait cycle must not be built without re-reading SCOPE, which
 | master | clean, 8.18.0 live and unaffected — nothing imports `side.js` |
 | render loop | `py tools/sideshots.py [--breed x] [--scale n]` → `review/side-<breed>.png`, drawn at the reference's exact size and grid |
 | next step | §2.1, on a fresh context, finished and proven before anything else begins |
+
+---
+
+# 5. The measurement that settled it (2026-08-21)
+
+Three passes of tuning later, the verdict was still:
+
+> *"no it still doesnt look like a proper dog, especially comparing to how he looks in the current
+> game"*
+
+Correct, and here is the number that explains it:
+
+> **`dog/draw.js` has 28 drawing functions. The profile uses 2 of them.**
+
+The extraction stopped at the tufted mass (`buildFluff` + `fluffMass`) because that fixed the worst
+of it and looked like progress. But the frontal dog's LOOK is not the mass — it is everything layered
+on top of it, and none of that came across:
+
+| missing | what it contributes |
+|---|---|
+| `drawFringe` | the fringe of many small lobes straddling the rim. The FUR_TYPE comment says this is the difference between "a visible ring of beads" and fur |
+| `drawFlyaway` | the loose curls escaping the silhouette |
+| `drawFur` + `buildPart` + `sampleOutline` | the per-part coat, on outlines that deform with pose, wet and petting |
+| `drawEarChain` / `drawEar` | ears as SPRING CHAINS of segments. The profile has one rotated lobe, which is why it reads as pasted on however it is moved |
+| `drawLeg` + `ik()` | two-bone legs with joints. The profile has pills |
+| `drawFurnishings` (+ `fluffBake`) | beard, brows, topknot — most of the cockapoo's face |
+| `initGrads` | the body and head gradients: form, rather than flat fill |
+| `drawMarkings` / `markingFor` | the breed's markings |
+| `drawEye` / `drawEyePair` / `drawNose` / `drawMouth` / `drawFace` | the actual face, rather than an approximation of it |
+| `drawNeck`, `drawTail`, `drawTailRoot` | the joins, and a tail that is a tail |
+| `drawSoil` / `drawFoam` / `drawWet` / `drawGloss` | muddy, soapy, wet, glossy — every care state |
+
+**Tuning polygon coordinates cannot close that gap.** Three rounds were spent moving an ear that was
+never going to work, because the thing it needs to be is a spring chain.
+
+## 5.1 The decision
+
+**Finish the extraction properly.** Chosen over the two shortcuts, and both were real options:
+
+- *coat texture + ear chains only* would give a simplified version of the dog rather than the dog.
+- *sprites from the reference* would look exactly like the reference — but the reference is a
+  **cockapoo** and the gift puppy is a **schnoodle**, so it would show the wrong dog, and generating
+  a consistent four-frame sheet per breed is not something image models do reliably.
+
+The extraction also pays for itself beyond the walk: agility, fetch at distance, and him going to the
+bowl all need the same parts.
+
+## 5.2 The order, and the rule
+
+**One batch per session. Gates green before the next one starts.** `bowlpixels` and `breedproof` are
+the proof, and they only mean anything on a finished batch — half-extracted is the worst state
+`draw.js` can be in.
+
+| # | batch | why this order |
+|---|---|---|
+| 1 | `initGrads` + `buildPart` + `sampleOutline` + `drawFur` + `drawFringe` + `drawFlyaway` | the coat, and the biggest single visual jump. Everything else sits on top of it |
+| 2 | `drawEarChain` + `drawEar` | the ear is the loudest wrong thing in the profile today |
+| 3 | `drawLeg` + `lobe` + `ik` | pills become limbs |
+| 4 | `drawEye` + `drawEyePair` + `drawNose` + `drawMouth` + `drawFace` | the face, exactly rather than approximately |
+| 5 | `drawFurnishings` + `fluffBake` + `drawMarkings` + `markingFor` | breed identity: the beard, the brows, the topknot |
+| 6 | `drawNeck` + `drawTail` + `drawTailRoot` | the joins |
+| 7 | `drawSoil` + `drawFoam` + `drawWet` + `drawGloss` | muddy and wet in profile — needed before the walk's return |
+
+Each batch: move the function unchanged, thread what it closed over as arguments, run
+`py tools/breedproof.py --fast` then `py tools/bowlpixels.py`, and commit only on pixel-identical.
+Then use it from `side.js` and look at the render before starting the next.
+
+## 5.3 What is already done
+
+- **`buildFluff` + `fluffMass` → `dog/coat.js`**, proven pixel-identical (`breedproof --fast` 63/63,
+  `bowlpixels` ALL PASS). `fluffMass` takes `pal` as an argument; nothing else changed.
+- `side.js` composes five tufted masses through the shared pipeline, with a working bound gait, and
+  reads as a small dog rather than as a knock-off — but as a *simplified* one, which is the gap
+  above.
