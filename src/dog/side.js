@@ -65,6 +65,7 @@ import { FUR_TYPE } from './draw.js';
 import { buildFluff, fluffMass } from './coat.js';
 import { createFurredPart, drawLimb } from './part.js';
 import { drawEye, drawNose, drawMouth } from './face.js';
+import { drawSoil, drawFoam, drawWet, drawGloss } from './coatstate.js';
 import { crClosed, ribbon } from '../engine/draw.js';
 
 const S = BALANCE.side;
@@ -119,6 +120,27 @@ const SHAPE = {
     [-0.90, 0.10], [-0.52, -0.52], [0.06, -0.82], [0.62, -0.66],
     [0.92, -0.14], [0.86, 0.44], [0.36, 0.82], [-0.28, 0.76],
     [-0.76, 0.52],
+  ],
+  /* ---- THE FURNISHINGS, IN PROFILE -------------------------------------
+     AND THIS IS NEW ART, NOT AN EXTRACTION. Worth being exact about, because
+     every other batch of this work was a move: a breed's furnishing `path` is
+     authored in FRONTAL head-local space, where a beard is a symmetric mass
+     spanning both cheeks under a muzzle pointing at you. Side-on it is a wedge
+     hanging off one jaw. There is no transform between those two shapes — they
+     are different drawings of the same fur.
+
+     What IS taken from the breed, so a Schnoodle cannot be a Schnoodle face-on
+     and something else in profile: whether it has the furnishing at all, its
+     colour and shade keys, and its tuft amplitude, cycles and power. Matched by
+     the `tag` the breed table already carries. */
+  beard: [
+    [0.72, -0.60], [0.30, -0.80], [-0.28, -0.70], [-0.66, -0.30],
+    [-0.72, 0.30], [-0.40, 0.82], [0.16, 1.00], [0.62, 0.72],
+    [0.86, 0.10],
+  ],
+  moustache: [
+    [0.86, -0.44], [0.34, -0.78], [-0.30, -0.62], [-0.70, -0.10],
+    [-0.52, 0.56], [0.06, 0.86], [0.62, 0.62], [0.92, 0.14],
   ],
   /* the pale chest and belly, inside the body's front half */
   chest: [
@@ -216,6 +238,27 @@ export function createSideDog(rig) {
     tail: partOf(poly(SHAPE.tail, g.tailHW, g.tailHH),
       { phase: 4.11, tuftK: T.bodyScale, refH: g.tailHH, salt: 8.2 }),
   };
+  /** the breed's own furnishing entry for a tag, or null */
+  function furnOf(tag) {
+    return (breed.furnishings || []).find((f) => f.tag === tag && f.kind === 'fluff') || null;
+  }
+  /* set by drawFace, consumed after the furnishings — see `mouthOver` */
+  let lateMouth = null;
+  const FURN = ['beard', 'moustache'].map((tag) => {
+    const f = furnOf(tag);
+    if (!f) return null;
+    const W = S.furn[tag];
+    const hw = P.muzzleW * S.muzzle.w * W.w, hh = P.muzzleH * S.muzzle.h * W.h;
+    return {
+      tag, f, hw, hh,
+      geo: buildFluff(SHAPE[tag].map((q) => pt(q[0] * hw, q[1] * hh)),
+        tag === 'beard' ? 41.3 : 47.9,
+        f.tuftAmp === undefined ? 2.4 : f.tuftAmp,
+        f.tuftCycles || 12, f.tuftPow || 0.8, f.rim),
+      spec: { shadeIn: f.shadeIn, contact: { alpha: 0.14, dy: 0.08 } },
+    };
+  }).filter(Boolean);
+
   /* the pale chest stays a plain tufted mass: it is an INTERIOR patch, so it has
      no edge to break and a fringe on it would poke lobes through the flank */
   const geo = {
@@ -266,9 +309,10 @@ export function createSideDog(rig) {
    * then the fill, then everything else clipped INSIDE the silhouette so no
    * texture can protrude, then the flyaway curls outside the clip on purpose.
    */
-  function furred(c, key, x, y, rot, hh, fill, alpha) {
+  function furred(c, key, x, y, rot, hh, fill, alpha, coat, region) {
     const P2 = parts[key];
-    const b = P2.build(null, 1, 1, x, y, 1, null, 0);
+    const wet = coat ? clamp(coat.wet || 0, 0, 1) : 0;
+    const b = P2.build(null, 1, 1, x, y, 1, null, wet);
     c.save();
     c.globalAlpha = alpha;
     c.translate(x, y);
@@ -279,9 +323,20 @@ export function createSideDog(rig) {
     c.beginPath(); crClosed(c, b.p, 1);
     c.fillStyle = fill; c.fill();
     c.save(); c.clip();
-    P2.fur(c, hh, x, y, 0);
+    P2.fur(c, hh, x, y, wet);
+    /* THE CARE STATE, INSIDE THE CLIP AND IN THE FRONTAL DOG'S OWN ORDER: wet
+       and gloss are lighting, so they go under the dirt — muck sits ON the coat,
+       and painting it first let the rim light wash it out (the first render of a
+       filthy dog came back spotless). */
+    if (coat && region) {
+      const hw2 = key === 'head' ? g.headHW : g.bodyHW;
+      drawWet(c, coat, hw2, hh, null);
+      drawGloss(c, coat, hw2, hh, null);
+      drawSoil(c, coat, region, hw2, hh, null);
+      drawFoam(c, coat, region, hw2, hh, null);
+    }
     c.restore();
-    P2.flyaway(c, hh, 0);
+    P2.flyaway(c, hh, wet);
     c.restore();
   }
 
@@ -392,7 +447,7 @@ export function createSideDog(rig) {
       + (P.tailCarry || 0) * (S.tail.carry || 0.55);
     furred(c, 'tail', -g.bodyHW * S.tail.x, bodyY - g.bodyHH * S.tail.y,
       S.tail.angle - carry + p.tail, g.tailHH, main, a);
-    furred(c, 'body', 0, bodyY, 0, g.bodyHH, main, a);
+    furred(c, 'body', 0, bodyY, 0, g.bodyHH, main, a, o.coat, 'body');
     mass(c, 'chest', g.bodyHW * 0.34, bodyY + g.bodyHH * 0.30, 0,
       g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, pal.cream, pal.creamSh, a * S.cream.alpha);
 
@@ -402,8 +457,22 @@ export function createSideDog(rig) {
 
     /* the join, then the head over the shoulders, the face, then the ear */
     neck(c, bodyY, headX, headY);
-    furred(c, 'head', headX, headY, 0, g.headHH, main, a);
+    furred(c, 'head', headX, headY, 0, g.headHH, main, a, o.coat, 'head');
     drawFace(c, headX, headY, a);
+    /* the beard and the moustache, over the face and under the ear */
+    for (const F of FURN) {
+      const W = S.furn[F.tag];
+      c.save();
+      c.translate(headX + g.headHW * W.x, headY + g.headHH * W.y);
+      fluffMass(c, F.spec, F.geo, 1, pal[F.f.color] || pal.cream,
+        pal[F.f.shade] || pal.creamSh, F.hw, F.hh, a, pal);
+      c.restore();
+    }
+    if (lateMouth) {
+      const L = lateMouth;
+      drawMouth(c, L.at[0], L.at[1], 0, L.at[2], 0, L.opts);
+      lateMouth = null;
+    }
     furred(c, 'ear', headX - g.headHW * EAR.x, headY + g.headHH * EAR.y,
       EAR.angle + p.ear, g.earHH, main, a);
 
@@ -442,9 +511,17 @@ export function createSideDog(rig) {
 
     /* THE MOUTH FIRST, then the nose over it: the nose is the nearer object and
        a mouth line crossing it reads as a crack. `smi` comes from the rig's own
-       smile spring, so he smiles in profile for the same reasons he does face-on. */
+       smile spring, so he smiles in profile for the same reasons he does face-on.
+
+       UNLESS THE BREED WEARS A BEARD. `face.mouthOver` exists for exactly this
+       and draw.js says why: "a breed whose beard and moustache cover the jaw
+       otherwise has no mouth at all ... the mouth is this game's primary mood
+       channel, so on such a breed it is the LAST thing drawn". Same rule here —
+       `lateMouth` is picked up after the furnishings. */
     const smi = clamp(rig.springs.smile ? rig.springs.smile.x : 0.4, 0, 1);
-    drawMouth(c, mx + mw * S.mouth.x, my + mh * S.mouth.y, 0, smi, 0, opts);
+    const mouthAt = [mx + mw * S.mouth.x, my + mh * S.mouth.y, smi];
+    if ((breed.face || {}).mouthOver) lateMouth = { at: mouthAt, opts };
+    else drawMouth(c, mouthAt[0], mouthAt[1], 0, smi, 0, opts);
     drawNose(c, mx + mw * S.nose.x, my - mh * S.nose.y, opts);
 
     /* ONE EYE, and the lid shape is what makes it an eye rather than a lens.

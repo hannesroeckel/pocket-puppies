@@ -55,6 +55,9 @@ function render(breedId, phases, opts = {}) {
       face: opts.face === undefined ? -1 : opts.face,
       phase: ph,
       run: opts.run === undefined ? 1 : opts.run,
+      /* the care state, so a muddy or soaking profile can be looked at — the
+         walk's whole payoff is him coming home with something on him */
+      coat: opts.coat || null,
     });
   });
   return { geom: side.debug, breed: rig.breed.id };

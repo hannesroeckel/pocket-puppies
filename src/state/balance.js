@@ -2148,6 +2148,16 @@ export const BALANCE = {
        (it reads it as `D.muzY`); `mouth` is where the mouth sits on the muzzle */
     nose: { x: 0.72, y: 0.12, r: 0.30 },
     mouth: { x: 0.10, y: 0.42 },
+    /* WHERE THE FURNISHINGS SIT IN PROFILE. New art, matched to the breed's own
+       furnishing entry by tag — see the note in side.js's SHAPE block. */
+    /* SIZED OFF THE MUZZLE, and the first go was not: at `w 0.62` of the BREED's
+       muzzle width the beard came out twice the width of the PROFILE muzzle
+       (which is `muzzle.w` 0.30 of the same number) and buried the whole face in
+       a pale blob. These are multiples of the profile muzzle's own half-extents. */
+    furn: {
+      beard: { w: 1.15, h: 1.30, x: 0.44, y: 0.52 },
+      moustache: { w: 0.62, h: 0.52, x: 0.60, y: 0.28 },
+    },
     /* the eye is drawn by dog/face.js now, which wants a WIDTH and a lid
        aspect rather than a radius: `w` across, `aspect` how tall against that,
        `tilt` the lid rotation that gives him his expression. */

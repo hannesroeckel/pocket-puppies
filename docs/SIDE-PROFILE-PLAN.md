@@ -202,3 +202,81 @@ Then use it from `side.js` and look at the render before starting the next.
 - `side.js` composes five tufted masses through the shared pipeline, with a working bound gait, and
   reads as a small dog rather than as a knock-off — but as a *simplified* one, which is the gap
   above.
+
+---
+
+# 6. The extraction, done (2026-08-21)
+
+> *"go ahead and dont stop until its finsihed. all dogs matter"*
+
+All seven batches are in, each moved unchanged and each proven with
+`breedproof --fast` (63/63) and `bowlpixels` (ALL PASS) before the next began.
+**The frontal dog never moved by a pixel.**
+
+| # | batch | landed as | notes |
+|---|---|---|---|
+| 1 | coat | `dog/part.js` `createFurredPart` | tuft profile, scallop, fringe, flyaway, clumps — plus `hash1`, `lobe`, `sampleOutline` |
+| 2 | ears | `BALANCE.side.ear.{drop,prick}` | read off `breed.ear`, the same capability EAR_STYLE reads |
+| 3 | legs | `dog/part.js` `drawLimb` | taken before batch 2: capsule legs were the loudest fault once the coat was right |
+| 4 | face | `dog/face.js` | the authored lid shape, the sliding catchlight, the eight-point nose, the mouth's five breed multipliers |
+| 5 | furnishings | `BALANCE.side.furn` + `SHAPE.beard/moustache` | **new art, not a move — see below** |
+| 6 | neck + tail | `side.js` `neck()`, `tail.curl/carry` | the neck shares draw.js's RULE, not its code — also below |
+| 7 | care washes | `dog/coatstate.js` | muddy, soapy, wet, glossy. Closed over exactly one thing (`rig.drive`) |
+
+`dog/draw.js` went from 2278 lines to about 1679, and none of what left it was
+rewritten on the way out.
+
+## 6.1 Two things that are NOT extractions, said plainly
+
+**Batch 5 is new art.** A breed's furnishing `path` is authored in frontal
+head-local space, where a beard is a symmetric mass spanning both cheeks under a
+muzzle pointing at you. Side-on it is a wedge hanging off one jaw. There is no
+transform between those two shapes — they are different drawings of the same fur.
+What IS taken from the breed table: whether the furnishing exists, its colour and
+shade keys, and its tuft amplitude, cycles and power, matched by the `tag` the
+table already carries. So a Schnoodle cannot be a Schnoodle face-on and something
+else in profile, but the shape itself was drawn here.
+
+**The neck shares a rule, not code.** `draw.js`'s `drawNeck` is written against
+the frontal pose. What transferred is the constraint, quoted in place: no outline
+pass, because a neck is always sandwiched between two outlined shapes and a dark
+border on it reads as a separate collar-shaped object.
+
+## 6.2 What looking caught that no gate could
+
+Every one of these passed every assertion and was wrong on screen:
+
+- the legs were sized for a stroked capsule; on a real tapering limb they came
+  back as **four boots with mittens on**
+- the ear was **44.4 half-units against a head of 44.7** — as tall as his whole
+  skull — and read as a tongue hanging to his chest
+- the Shiba wore a **spaniel's ear**, because the profile never read `breed.ear`
+- `gait.reach` was tuned against legs a third shorter, so the four frames came
+  back nearly identical: a dog on a conveyor belt
+- `dog/face.js` sizes the nose off `D.muzY`, which is a POSITION in the frontal
+  rig, not a size. Fed the profile muzzle's height, **he wore sunglasses**
+- the beard was sized off the breed's muzzle width instead of the profile
+  muzzle's, so it was twice the width of the face and buried it
+- the first muddy render came back **spotless with no error at all**: `drawSoil`
+  needs `coat.regions`, and a synthetic `{dirt: 0.8}` paints nothing
+
+## 6.3 Where it stands now
+
+`py tools/sideshots.py [--breed x] [--scale n] [--muddy|--wet]` renders any breed,
+in any care state, at the reference's grid. All three breeds are identifiably
+themselves: the Shiba smooth with prick ears and a cream muzzle, the Schnoodle
+wiry and bearded with a drop ear, the Cockapoo curly and apricot with the long
+spaniel ear its own `earH` asks for.
+
+## 6.4 What remains, in order
+
+1. **The hop-turn** (§2.4) — he bounces on the spot and lands facing the other
+   way. Nothing interpolates between two silhouettes; that reads as a glitch.
+2. **A public seam.** Nothing in the game imports `dog/side.js` yet. It needs to
+   be reachable from the scene, and `src/dog/side.js` needs its PRECACHE entry
+   and a cache bump the moment it ships.
+3. **The walk** (§2.5) — the feature this was approved for. `dog/walk.js`'s own
+   header still says a gait cycle must not be built without re-reading SCOPE,
+   which was true until 2026-08-20 and is now the thing to rewrite.
+4. **The back view**, which was explicitly deferred at the start and is now much
+   cheaper: the parts are all shared, so it is silhouettes plus a tail.
