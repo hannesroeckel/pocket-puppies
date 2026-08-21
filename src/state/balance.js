@@ -2143,9 +2143,15 @@ export const BALANCE = {
     /* the head is huge and sits forward and high, over the shoulders */
     head: { w: 0.44, h: 0.42, fwd: 0.52, up: 0.62 },
     /* the muzzle is the FRONT OF THE FACE now, not a shape stuck on it */
-    muzzle: { w: 0.30, h: 0.24, x: 0.62, y: 0.30 },
+    muzzle: { w: 0.30, h: 0.24, x: 0.62, y: 0.30, face: 1.05 },
+    /* `face` is the muzzle dimension dog/face.js sizes the nose and mouth off
+       (it reads it as `D.muzY`); `mouth` is where the mouth sits on the muzzle */
     nose: { x: 0.72, y: 0.12, r: 0.30 },
-    eye: { x: 0.30, y: -0.02, r: 0.52 },
+    mouth: { x: 0.10, y: 0.42 },
+    /* the eye is drawn by dog/face.js now, which wants a WIDTH and a lid
+       aspect rather than a radius: `w` across, `aspect` how tall against that,
+       `tilt` the lid rotation that gives him his expression. */
+    eye: { x: 0.30, y: -0.02, w: 0.26, aspect: 1.02, tilt: 0.10 },
     /* one ear, hanging off the near cheek, swinging with the stride */
     /* ONE EAR, AND IT IS NOT A PLANK. At w 0.62 / h 0.92 and barely rotated it
        came out as tall as his whole body, hanging down the middle of him over the

@@ -64,6 +64,7 @@ import { TAU, clamp, lerp, pt, hump, ell } from '../engine/draw.js';
 import { FUR_TYPE } from './draw.js';
 import { buildFluff, fluffMass } from './coat.js';
 import { createFurredPart, drawLimb } from './part.js';
+import { drawEye, drawNose, drawMouth } from './face.js';
 import { crClosed, ribbon } from '../engine/draw.js';
 
 const S = BALANCE.side;
@@ -126,6 +127,13 @@ const SHAPE = {
     [0.88, 0.26],
   ],
 };
+
+/** the breed's mouth multipliers, defaulting to 1 exactly as dog/draw.js does */
+function MKof(breed) {
+  const m = (breed.face && breed.face.mouth) || {};
+  const d = (v) => (v === undefined ? 1 : v);
+  return { w: d(m.w), lift: d(m.lift), dip: d(m.dip), philtrum: d(m.philtrum), weight: d(m.weight) };
+}
 
 export function createSideDog(rig) {
   const breed = rig.breed;
@@ -402,11 +410,28 @@ export function createSideDog(rig) {
     c.restore();
   }
 
-  /** the muzzle tip, the nose, the mouth and the one eye */
+  /**
+   * THE FACE — the real one, from dog/face.js.
+   *
+   * The first profile drew its own: a dark ellipse with a white dot for an eye, a
+   * bean for a nose, a quadratic for a mouth. The functions below are the ones
+   * eight stages of looking produced — an authored lid shape, a catchlight that
+   * slides further than the lens, an eight-point nose with a specular, and a
+   * mouth carrying five per-breed multipliers. Same code as face-on; only the
+   * geometry it is handed is different, and only ONE eye is handed to it.
+   */
   function drawFace(c, hx, hy, a) {
     const mx = hx + g.headHW * S.muzzle.x;
     const my = hy + g.headHH * S.muzzle.y;
     const mw = P.muzzleW * S.muzzle.w, mh = P.muzzleH * S.muzzle.h;
+    /* `dog/face.js` sizes the nose and the mouth off `D.muzY`, which in the
+       frontal rig is the muzzle's POSITION on the head, not its size — quirky,
+       but it is what those functions were tuned against. Feeding it the profile
+       muzzle's HEIGHT gave a nose 31 units wide on a 24-unit muzzle: he came back
+       wearing sunglasses. So it is scaled off the profile muzzle's own half-width
+       instead, which is the dimension a nose is actually proportional to. */
+    const opts = { pal, D: { muzY: mw * S.muzzle.face }, R: BALANCE.rig,
+      faceCap: breed.face || {}, MK: MKof(breed) };
 
     /* the pale muzzle, sitting ON the face rather than stuck to the front of it */
     c.save();
@@ -415,47 +440,32 @@ export function createSideDog(rig) {
     ell(c, mx, my, mw, mh); c.fill();
     c.restore();
 
-    /* the nose: a dark bean at the tip, the strongest single mark on him */
-    c.fillStyle = pal.nose;
-    ell(c, mx + mw * S.nose.x, my - mh * S.nose.y, mw * S.nose.r, mw * S.nose.r * 0.88); c.fill();
+    /* THE MOUTH FIRST, then the nose over it: the nose is the nearer object and
+       a mouth line crossing it reads as a crack. `smi` comes from the rig's own
+       smile spring, so he smiles in profile for the same reasons he does face-on. */
+    const smi = clamp(rig.springs.smile ? rig.springs.smile.x : 0.4, 0, 1);
+    drawMouth(c, mx + mw * S.mouth.x, my + mh * S.mouth.y, 0, smi, 0, opts);
+    drawNose(c, mx + mw * S.nose.x, my - mh * S.nose.y, opts);
 
-    /* the mouth, a soft line back from under the nose */
-    c.save();
-    c.strokeStyle = pal.mouth || pal.line;
-    c.globalAlpha = a * 0.8; c.lineWidth = 2.1; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(mx + mw * 0.52, my + mh * 0.34);
-    c.quadraticCurveTo(mx + mw * 0.02, my + mh * 0.74, mx - mw * 0.44, my + mh * 0.44);
-    c.stroke();
-    c.restore();
-
-    /* THE EYE, and there is one of them. Sized off the frontal eye and then
-       HALVED: face-on you read two small eyes in a wide face, and the same
-       radius in profile is a saucer — which is exactly what the first render
-       put on the side of his head. */
+    /* ONE EYE, and the lid shape is what makes it an eye rather than a lens.
+       `side` is -1 so the authored asymmetry faces the nose. */
     const ex = hx + g.headHW * S.eye.x;
     const ey = hy + g.headHH * S.eye.y;
-    const er = g.headHW * 0.245 * (P.eyeSize || 1) * S.eye.r;
-    c.fillStyle = pal.eye;
-    ell(c, ex, ey, er, er * 1.06); c.fill();
-    c.fillStyle = pal.eyeHi || '#ffffff';
-    ell(c, ex + er * 0.36, ey - er * 0.42, er * 0.32, er * 0.28); c.fill();
+    const ew = g.headHW * S.eye.w * (P.eyeSize || 1);
+    const eh = ew * S.eye.aspect;
+    drawEye(c, ex, ey, ew, eh, 1, smi * 0.5, S.eye.tilt, -1, null, opts);
+
     /* the brow: the frontal dog's expression lives in it */
     c.save();
     c.strokeStyle = pal.coatSh; c.globalAlpha = a * 0.5;
     c.lineWidth = 2.6; c.lineCap = 'round';
     c.beginPath();
-    c.moveTo(ex - er * 1.0, ey - er * 2.0);
-    c.quadraticCurveTo(ex + er * 0.2, ey - er * 2.7, ex + er * 1.3, ey - er * 1.8);
+    c.moveTo(ex - ew * 0.5, ey - eh * 1.1);
+    c.quadraticCurveTo(ex + ew * 0.1, ey - eh * 1.5, ex + ew * 0.65, ey - eh * 1.0);
     c.stroke();
     c.restore();
   }
 
-  /**
-   * DRAW HIM. `y` is THE GROUND HE STANDS ON, not his centre — the same contract
-   * `rig.y` has (`rig.floorV`), because a profile dog whose origin was his middle
-   * would need every caller to know how tall he is.
-   */
   return {
     draw,
     pose,
