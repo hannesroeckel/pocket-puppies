@@ -103,6 +103,16 @@ const SHAPE = {
     [0.74, 0.58], [0.46, 0.92], [-0.10, 1.00], [-0.62, 0.78],
     [-0.80, 0.24], [-0.72, -0.34], [-0.56, -0.78],
   ],
+  /* AN ERECT EAR, for a breed that has them. The Shiba came back wearing a
+     spaniel's hanging lobe, which is the "all dogs matter" failure in one
+     picture: `breed.ear` is `prick`, `floppy` or `semi` and the frontal renderer
+     has honoured that from stage 1. A prick ear is narrow at the tip, widens to
+     the base, and stands ON the crown rather than hanging beside the jaw. */
+  earUp: [
+    [0.02, -1.00], [0.34, -0.52], [0.56, 0.10], [0.60, 0.66],
+    [0.20, 1.00], [-0.34, 0.94], [-0.62, 0.48], [-0.52, -0.20],
+    [-0.24, -0.72],
+  ],
   /* the tail: a plume, fat at the tip */
   tail: [
     [-0.90, 0.10], [-0.52, -0.52], [0.06, -0.82], [0.62, -0.66],
@@ -122,6 +132,11 @@ export function createSideDog(rig) {
   const P = breed.proportions;
   const pal = rig.pal;
   const fur = FUR_TYPE[breed.fur.type] || FUR_TYPE.short;
+  /* WHICH EAR THIS DOG HAS. `prick` stands on the crown; `floppy` and `semi`
+     hang beside the jaw. Read off `breed.ear`, the same declarative capability
+     dog/draw.js's EAR_STYLE table reads, so a breed cannot have two answers. */
+  const prick = (breed.ear || 'prick') === 'prick';
+  const EAR = prick ? S.ear.prick : S.ear.drop;
   const tuft = fur.tuft || { cycles: 12, amp: 3, pow: 0.7 };
 
   /* ---- THE PROFILE'S OWN PROPORTIONS -------------------------------------
@@ -132,8 +147,8 @@ export function createSideDog(rig) {
     bodyHH: P.bodyH * S.body.deep,
     headHW: P.headW * P.headScale * S.head.w,
     headHH: P.headH * P.headScale * S.head.h,
-    earHW: P.earW * S.ear.w,
-    earHH: P.earH * S.ear.h,
+    earHW: P.earW * EAR.w,
+    earHH: P.earH * EAR.h,
     tailHW: P.bodyW * S.tail.w * (P.tailLen || 1),
     tailHH: P.bodyH * S.tail.h,
     legLen: P.legLen * S.leg.len,
@@ -188,7 +203,7 @@ export function createSideDog(rig) {
        thing in the first two renders, and the reason is that an ear is mostly
        COAT EDGE — it is nearly all silhouette, so it needs the fringe more than
        the body does. */
-    ear: partOf(poly(SHAPE.ear, g.earHW, g.earHH),
+    ear: partOf(poly(prick ? SHAPE.earUp : SHAPE.ear, g.earHW, g.earHH),
       { phase: 1.07, tuftK: T.headScale, refH: g.earHH, salt: 5.9 }),
     tail: partOf(poly(SHAPE.tail, g.tailHW, g.tailHH),
       { phase: 4.11, tuftK: T.bodyScale, refH: g.tailHH, salt: 8.2 }),
@@ -336,8 +351,8 @@ export function createSideDog(rig) {
     /* the head over the shoulders, the face, then the ear over all of it */
     furred(c, 'head', headX, headY, 0, g.headHH, main, a);
     drawFace(c, headX, headY, a);
-    furred(c, 'ear', headX - g.headHW * S.ear.x, headY + g.headHH * S.ear.y,
-      S.ear.angle + p.ear, g.earHH, main, a);
+    furred(c, 'ear', headX - g.headHW * EAR.x, headY + g.headHH * EAR.y,
+      EAR.angle + p.ear, g.earHH, main, a);
 
     c.restore();
   }

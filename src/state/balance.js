@@ -2161,7 +2161,16 @@ export const BALANCE = {
        it read as a tongue hanging to his chest. A drop ear is about 60% of head
        height and reasonably broad, and it wants to hang from behind the eye with
        its bottom just past the jaw so its silhouette BREAKS the head's. */
-    ear: { w: 0.52, h: 0.44, x: 0.22, y: 0.44, angle: 0.18 },
+    ear: {
+      /* A DROP EAR hangs from behind the eye with its bottom past the jaw, so
+         its silhouette BREAKS the head's — which is what makes it read as an ear
+         side-on rather than as a pale patch on the cheek. */
+      drop: { w: 0.52, h: 0.44, x: 0.22, y: 0.44, angle: 0.18 },
+      /* AN ERECT EAR stands on the crown: above the head's centre, barely
+         behind it, tipped back a little. Its `y` is NEGATIVE, which is the whole
+         difference — everything else here is the same kind of number. */
+      prick: { w: 0.54, h: 0.46, x: 0.34, y: -0.56, angle: 0.24 },
+    },
     /* the tail read as a SECOND RUMP at 0.30 x 0.46 — a scalloped mass the size
        of his hindquarters, at mid-height. A plume is small, high and behind. */
     tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15 },
