@@ -63,6 +63,8 @@ import BALANCE from '../state/balance.js';
 import { TAU, clamp, pt, hump, ell } from '../engine/draw.js';
 import { FUR_TYPE } from './draw.js';
 import { buildFluff, fluffMass } from './coat.js';
+import { createFurredPart, drawLimb } from './part.js';
+import { crClosed } from '../engine/draw.js';
 
 const S = BALANCE.side;
 
@@ -91,10 +93,15 @@ const SHAPE = {
     [-0.34, 0.76], [-0.82, 0.52], [-1.00, 0.04], [-0.90, -0.52],
   ],
   /* one ear: a long soft lobe, wider at the bottom than the top */
+  /* ONE EAR, AND IT HANGS. The first shape was a fat oval and it read as a slice
+     of bread stuck to his cheek: an ear is NARROW where it joins the skull and
+     heavy at the bottom, and it hangs BEHIND the jaw rather than over it. So the
+     top is pinched, the bottom is a broad rounded weight, and the whole thing is
+     taller than it is wide. */
   ear: [
-    [-0.52, -0.86], [0.16, -0.94], [0.62, -0.58], [0.78, 0.00],
-    [0.72, 0.56], [0.34, 0.90], [-0.24, 0.96], [-0.68, 0.62],
-    [-0.86, 0.06], [-0.80, -0.48],
+    [-0.34, -1.00], [0.24, -0.92], [0.52, -0.52], [0.62, 0.06],
+    [0.74, 0.58], [0.46, 0.92], [-0.10, 1.00], [-0.62, 0.78],
+    [-0.80, 0.24], [-0.72, -0.34], [-0.56, -0.78],
   ],
   /* the tail: a plume, fat at the tip */
   tail: [
@@ -146,11 +153,49 @@ export function createSideDog(rig) {
       tuft.pow || 0.7, o.rim);
   }
 
+  /* ---- THE FOUR BIG MASSES ARE REAL FURRED PARTS -------------------------
+     Not tufted outlines with arcs drawn on them — the actual thing dog/part.js
+     builds for the frontal dog: the tuft profile, the scallop, the fringe of
+     lobes behind the edge, the flyaway curls straddling the rim, and the
+     interior clumps. That fringe is the layer whose absence made the first two
+     attempts read as a cutout however the polygons were moved.
+
+     Each gets its own tuft phase and its own salts, so no two parts of him are
+     scalloped in lockstep — the same reason the frontal head and body use 2.39
+     and 0.41. `clumps` is the same list the frontal part uses for that region,
+     so the interior texture is this breed's own coat and not a generic one. */
+  const partOf = (outline, o) => createFurredPart({
+    outline,
+    furType: fur,
+    pal,
+    clumps: o.clumps || [],
+    tuftPhase: o.phase,
+    tuftK: o.tuftK,
+    skirtRefH: o.refH,
+    fringeSalt: o.salt,
+    fringeK: o.fringeK === undefined ? 1 : o.fringeK,
+    flySalt: o.salt + 1.9,
+  });
+  const poly = (shape, hw, hh) => shape.map((q) => pt(q[0] * hw, q[1] * hh));
+  const T = fur.tuft || {};
+  const parts = {
+    body: partOf(poly(SHAPE.body, g.bodyHW, g.bodyHH),
+      { phase: 0.41, tuftK: T.bodyScale, refH: g.bodyHH, salt: 1.3, clumps: rig.fur.body }),
+    head: partOf(poly(SHAPE.head, g.headHW, g.headHH),
+      { phase: 2.39, tuftK: T.headScale, refH: g.headHH, salt: 3.7,
+        fringeK: fur.fringe ? fur.fringe.headScale : 1, clumps: rig.fur.head }),
+    /* THE EAR IS A PART NOW, not a rotated lobe. It is the single loudest wrong
+       thing in the first two renders, and the reason is that an ear is mostly
+       COAT EDGE — it is nearly all silhouette, so it needs the fringe more than
+       the body does. */
+    ear: partOf(poly(SHAPE.ear, g.earHW, g.earHH),
+      { phase: 1.07, tuftK: T.headScale, refH: g.earHH, salt: 5.9 }),
+    tail: partOf(poly(SHAPE.tail, g.tailHW, g.tailHH),
+      { phase: 4.11, tuftK: T.bodyScale, refH: g.tailHH, salt: 8.2 }),
+  };
+  /* the pale chest stays a plain tufted mass: it is an INTERIOR patch, so it has
+     no edge to break and a fringe on it would poke lobes through the flank */
   const geo = {
-    body: tuftOf(SHAPE.body, g.bodyHW, g.bodyHH, 7.1, { scale: tuft.bodyScale || 1 }),
-    head: tuftOf(SHAPE.head, g.headHW, g.headHH, 3.3),
-    ear: tuftOf(SHAPE.ear, g.earHW, g.earHH, 23.5, { amp: 0.9 }),
-    tail: tuftOf(SHAPE.tail, g.tailHW, g.tailHH, 31.7, { amp: 1.1, cycleScale: 0.7 }),
     chest: tuftOf(SHAPE.chest, g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, 19.3,
       { amp: 0.5, cycleScale: 0.8, rim: 0.35 }),
   };
@@ -190,7 +235,34 @@ export function createSideDog(rig) {
     };
   }
 
-  /** one part's mass, at a position, through the SHARED pipeline */
+  /**
+   * ONE FURRED PART, IN THE FRONTAL RENDERER'S OWN LAYER ORDER.
+   *
+   * Copied from `draw.js`'s body pass, because the order IS the look: fringe
+   * behind the silhouette so the edge breaks irregularly, then the outline pass,
+   * then the fill, then everything else clipped INSIDE the silhouette so no
+   * texture can protrude, then the flyaway curls outside the clip on purpose.
+   */
+  function furred(c, key, x, y, rot, hh, fill, alpha) {
+    const P2 = parts[key];
+    const b = P2.build(null, 1, 1, x, y, 1, null, 0);
+    c.save();
+    c.globalAlpha = alpha;
+    c.translate(x, y);
+    if (rot) c.rotate(rot);
+    P2.fringe(c, hh, 0);
+    c.beginPath(); crClosed(c, b.o, 1);
+    c.fillStyle = pal.line; c.fill();
+    c.beginPath(); crClosed(c, b.p, 1);
+    c.fillStyle = fill; c.fill();
+    c.save(); c.clip();
+    P2.fur(c, hh, x, y, 0);
+    c.restore();
+    P2.flyaway(c, hh, 0);
+    c.restore();
+  }
+
+  /** a plain tufted mass, for the interior patches that have no edge to break */
   function mass(c, key, x, y, rot, hw, hh, main, dark, alpha) {
     c.save();
     c.translate(x, y);
@@ -199,28 +271,74 @@ export function createSideDog(rig) {
     c.restore();
   }
 
-  /** a leg: a stub with a rim, because the reference has no joints */
-  function drawLeg(c, hx, hy, l, main, dark, wide) {
+  /**
+   * A LEG — the frontal renderer's own, through dog/part.js's `drawLimb`.
+   *
+   * The first two attempts stroked a line with a round cap, and against a dog
+   * whose legs taper from the hip, bow at the knee and end in a pale paw with
+   * two toe lines, a capsule reads as furniture. `bow` is what makes it a limb
+   * rather than a rod, and here it comes off the stride: the leg bends most as
+   * it swings under him and straightens as it takes his weight.
+   */
+  function leg(c, hx, hy, l, dark, wide) {
     const w = g.legW * (wide || 1);
-    const x = hx + l.dx;
-    const y = hy + l.len + l.dy;
+    const px = hx + l.dx;
+    const py = hy + l.len + l.dy;
+    /* he is drawn nose-right, so a positive bow always bends the knee FORWARD */
+    const bow = (S.leg.bow || 4) * (0.35 + Math.abs(l.dx) / Math.max(1, S.gait.reach));
+    drawLimb(c, hx, hy, px, py, bow * (l.dx >= 0 ? 1 : -1), w, dark, S.leg.paw,
+      { pal, pawScale: 1, stocking: null, tint: pal.coat, tintFar: pal.coatMid });
+  }
+
+  function draw(gg, o = {}) {
+    const c = gg.ctx;
+    const s = o.s === undefined ? rig.s : o.s;
+    const face = (o.face || -1) < 0 ? -1 : 1;
+    const run = clamp(o.run === undefined ? 1 : o.run, 0, 1);
+    const a = o.alpha === undefined ? 1 : o.alpha;
+    const p = pose(o.phase || 0, run);
+    const main = pal.coat, dark = pal.line;
+
     c.save();
-    c.lineCap = 'round';
-    /* the rim first and wider, then the coat on top — the same "dark outside the
-       fill" order the tufted mass uses */
-    for (const pair of [[dark, w + 3.4], [main, w]]) {
-      c.strokeStyle = pair[0];
-      c.lineWidth = pair[1];
-      c.beginPath();
-      c.moveTo(hx, hy);
-      c.quadraticCurveTo(hx + l.dx * 0.55, hy + l.len * 0.55, x, y);
-      c.stroke();
-    }
-    const pr = w * S.leg.paw;
-    c.fillStyle = dark;
-    ell(c, x, y, pr + 1.7, pr * 0.80 + 1.7); c.fill();
-    c.fillStyle = main;
-    ell(c, x, y, pr, pr * 0.80); c.fill();
+    c.globalAlpha = a;
+    c.translate(o.x || 0, o.y || 0);
+    c.scale(face * s, s);
+    c.lineJoin = 'round';
+
+    /* the contact shadow on the ground — smaller and fainter the higher he is.
+       Drawn BEFORE the lift is applied, because the shadow stays on the floor. */
+    const sh = clamp(1 - p.lift / Math.max(1, S.gait.bob), 0.4, 1);
+    c.save();
+    c.globalAlpha = a * S.shadow.alpha * sh;
+    c.fillStyle = S.shadow.ink;
+    ell(c, 0, 0, g.bodyHW * S.shadow.w * sh, g.bodyHH * S.shadow.h * sh); c.fill();
+    c.restore();
+
+    c.translate(0, -p.lift);
+    const bodyY = -(g.legLen + g.bodyHH * 0.82);
+    const headX = g.bodyHW * S.head.fwd;
+    const headY = bodyY - g.bodyHH * S.head.up + p.headDY;
+    const hipY = bodyY + g.bodyHH * 0.40;
+
+    /* far legs, the tail, then the body over both */
+    leg(c, g.bodyHW * S.leg.shoulderX * 0.80, hipY, p.front[0], true, 0.94);
+    leg(c, -g.bodyHW * S.leg.hipX * 0.80, hipY, p.hind[0], true, 0.94);
+    furred(c, 'tail', -g.bodyHW * S.tail.x, bodyY - g.bodyHH * S.tail.y,
+      S.tail.angle + p.tail, g.tailHH, main, a);
+    furred(c, 'body', 0, bodyY, 0, g.bodyHH, main, a);
+    mass(c, 'chest', g.bodyHW * 0.34, bodyY + g.bodyHH * 0.30, 0,
+      g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, pal.cream, pal.creamSh, a * S.cream.alpha);
+
+    /* near legs in front of the body */
+    leg(c, g.bodyHW * S.leg.shoulderX, hipY, p.front[1], false, 1);
+    leg(c, -g.bodyHW * S.leg.hipX, hipY, p.hind[1], false, 1);
+
+    /* the head over the shoulders, the face, then the ear over all of it */
+    furred(c, 'head', headX, headY, 0, g.headHH, main, a);
+    drawFace(c, headX, headY, a);
+    furred(c, 'ear', headX - g.headHW * S.ear.x, headY + g.headHH * S.ear.y,
+      S.ear.angle + p.ear, g.earHH, main, a);
+
     c.restore();
   }
 
@@ -278,58 +396,6 @@ export function createSideDog(rig) {
    * `rig.y` has (`rig.floorV`), because a profile dog whose origin was his middle
    * would need every caller to know how tall he is.
    */
-  function draw(gg, o = {}) {
-    const c = gg.ctx;
-    const s = o.s === undefined ? rig.s : o.s;
-    const face = (o.face || -1) < 0 ? -1 : 1;
-    const run = clamp(o.run === undefined ? 1 : o.run, 0, 1);
-    const a = o.alpha === undefined ? 1 : o.alpha;
-    const p = pose(o.phase || 0, run);
-    const main = pal.coat, dark = pal.line;
-
-    c.save();
-    c.globalAlpha = a;
-    c.translate(o.x || 0, o.y || 0);
-    c.scale(face * s, s);
-    c.lineJoin = 'round';
-
-    /* the contact shadow on the ground — smaller and fainter the higher he is.
-       Drawn BEFORE the lift is applied, because the shadow stays on the floor. */
-    const sh = clamp(1 - p.lift / Math.max(1, S.gait.bob), 0.4, 1);
-    c.save();
-    c.globalAlpha = a * S.shadow.alpha * sh;
-    c.fillStyle = S.shadow.ink;
-    ell(c, 0, 0, g.bodyHW * S.shadow.w * sh, g.bodyHH * S.shadow.h * sh); c.fill();
-    c.restore();
-
-    c.translate(0, -p.lift);
-    const bodyY = -(g.legLen + g.bodyHH * 0.82);
-    const headX = g.bodyHW * S.head.fwd;
-    const headY = bodyY - g.bodyHH * S.head.up + p.headDY;
-    const hipY = bodyY + g.bodyHH * 0.40;
-
-    /* far legs, the tail, then the body over both */
-    drawLeg(c, g.bodyHW * S.leg.shoulderX * 0.80, hipY, p.front[0], pal.coatSh, dark, 0.94);
-    drawLeg(c, -g.bodyHW * S.leg.hipX * 0.80, hipY, p.hind[0], pal.coatSh, dark, 0.94);
-    mass(c, 'tail', -g.bodyHW * S.tail.x, bodyY - g.bodyHH * S.tail.y,
-      S.tail.angle + p.tail, g.tailHW, g.tailHH, main, dark, a);
-    mass(c, 'body', 0, bodyY, 0, g.bodyHW, g.bodyHH, main, dark, a);
-    mass(c, 'chest', g.bodyHW * 0.34, bodyY + g.bodyHH * 0.30, 0,
-      g.bodyHW * S.cream.w, g.bodyHH * S.cream.h, pal.cream, pal.creamSh, a * S.cream.alpha);
-
-    /* near legs in front of the body */
-    drawLeg(c, g.bodyHW * S.leg.shoulderX, hipY, p.front[1], main, dark, 1);
-    drawLeg(c, -g.bodyHW * S.leg.hipX, hipY, p.hind[1], main, dark, 1);
-
-    /* the head over the shoulders, the face, then the ear over all of it */
-    mass(c, 'head', headX, headY, 0, g.headHW, g.headHH, main, dark, a);
-    drawFace(c, headX, headY, a);
-    mass(c, 'ear', headX - g.headHW * S.ear.x, headY + g.headHH * S.ear.y,
-      S.ear.angle + p.ear, g.earHW, g.earHH, main, dark, a);
-
-    c.restore();
-  }
-
   return {
     draw,
     pose,
@@ -339,7 +405,9 @@ export function createSideDog(rig) {
       return {
         breed: breed.id,
         geom: { bodyHW: +g.bodyHW.toFixed(1), bodyHH: +g.bodyHH.toFixed(1),
-          headHW: +g.headHW.toFixed(1), legLen: +g.legLen.toFixed(1) },
+          headHW: +g.headHW.toFixed(1), headHH: +g.headHH.toFixed(1),
+          earHW: +g.earHW.toFixed(1), earHH: +g.earHH.toFixed(1),
+          legLen: +g.legLen.toFixed(1) },
         atQuarter: { lift: +p.lift.toFixed(2), frontDX: +p.front[1].dx.toFixed(2) },
       };
     },

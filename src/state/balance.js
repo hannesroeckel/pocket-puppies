@@ -2152,7 +2152,16 @@ export const BALANCE = {
        front legs — the single worst thing in the first two renders. It is a lobe
        lying back along the cheek: half the size, well behind the eye, and rotated
        enough to follow the jaw. */
-    ear: { w: 0.50, h: 0.46, x: 0.34, y: -0.06, angle: 0.55 },
+    /* AND IT HAS TO HANG PAST THE SKULL. At `y -0.06` the whole ear sat INSIDE
+       the head's outline, so it read as a pale patch on the cheek rather than as
+       an ear: what makes an ear an ear from the side is that its silhouette
+       BREAKS the head's. Lower, taller, and only lightly laid back. */
+    /* MEASURED, not guessed. At h 0.74 the ear came out 44.4 half-units against
+       a head of 44.7 — as tall as his whole skull and only 31 wide, which is why
+       it read as a tongue hanging to his chest. A drop ear is about 60% of head
+       height and reasonably broad, and it wants to hang from behind the eye with
+       its bottom just past the jaw so its silhouette BREAKS the head's. */
+    ear: { w: 0.52, h: 0.44, x: 0.22, y: 0.44, angle: 0.18 },
     /* the tail read as a SECOND RUMP at 0.30 x 0.46 — a scalloped mass the size
        of his hindquarters, at mid-height. A plume is small, high and behind. */
     tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15 },
@@ -2161,7 +2170,15 @@ export const BALANCE = {
     /* thicker than the frontal legs, not thinner: in profile a leg is a whole
        limb rather than a strip of one, and at 1.05 they read as wire. Shorter,
        too — the reference puppy is low to the ground. */
-    leg: { len: 0.98, w: 1.55, hind: 1.04, paw: 0.70, shoulderX: 0.56, hipX: 0.68 },
+    /* RETUNED FOR A REAL LIMB. `len 0.98 / w 1.55 / paw 0.70` were tuned against
+       the first renderer, which stroked a line with a round cap: to read as a leg
+       at all, a capsule has to be thick. `drawLimb` (dog/part.js, the frontal
+       dog's own leg) tapers from the hip, bows at the knee and draws its own pale
+       paw at `w * 1.06 * paw` — so the old width came back as four boots with a
+       mitten on each. Thinner, longer, and a paw barely wider than the ankle.
+       `bow` is the knee: without it a leg is a rod. */
+    leg: { len: 1.34, w: 0.78, hind: 1.04, paw: 0.44, bow: 5.0,
+      shoulderX: 0.56, hipX: 0.68 },
     cream: { w: 0.44, h: 0.42, alpha: 0.85 },
     shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
     /* ---- THE GAIT ----------------------------------------------------
@@ -2176,7 +2193,10 @@ export const BALANCE = {
       hz: 2.1,            // cycles per second at a normal trot
       bob: 9,             // how far the whole dog lifts, once per cycle
       stretch: 0.5,       // body lengthening on the extension
-      reach: 13,          // how far a paw travels fore and aft
+      /* how far a paw travels fore and aft. 13 was tuned against legs a third
+         shorter; on a real limb the four frames came back nearly identical, and
+         a bound whose frames look the same is a dog on a conveyor belt. */
+      reach: 19,
       paw: 7,             // how far it comes off the ground
       foreshorten: 0.22,  // how much a leg shortens as it swings under him
       lagFar: 0.08,       // the far leg of a pair, behind the near one
