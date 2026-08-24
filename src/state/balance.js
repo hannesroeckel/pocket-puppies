@@ -2212,6 +2212,17 @@ export const BALANCE = {
     neck: { fromX: 0.52, fromY: 0.34, toX: 0.22, toY: 0.40, w0: 0.70, w1: 0.52 },
     cream: { w: 0.44, h: 0.42, alpha: 0.85 },
     shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
+    /* ---- THE SPRITE SHEETS (dog/sidesprite.js) ------------------------
+       The human drew the profile dog himself after the drawn one was rejected
+       twice, so `assets/side-*.webp` is art and this is how it is placed.
+
+       `height` is HOW TALL HE IS IN VIRTUAL UNITS at `rig.s === 1`, measured off
+       the drawn profile — 150 units — so swapping between the sprite and the
+       drawn dog cannot change the size of the animal. The shadow is ours: the
+       painted ones were keyed out by the slicer because a painted shadow cannot
+       shrink when he leaves the ground. */
+    sprite: { height: 150, shadowW: 0.32, shadowH: 0.055 },
+
     /* ---- THE GAIT ----------------------------------------------------
        A BOUND, not a trot, because that is what the reference draws: two
        extended frames and two gathered ones, both front legs together. A trot

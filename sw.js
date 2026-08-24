@@ -109,6 +109,16 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.20.0: THE PROFILE DOG IS THE HUMAN'S OWN ART. Four new entries and two of
+   them are IMAGES, which is a first for this project: the dog has been drawn from
+   springs since stage 1, and `src/assets/side-*.webp` are painted sheets. They
+   went in because the drawn profile was rejected twice and he made better ones
+   ("i built the side view of the schnoodle with chatgpt as yours looked bad").
+   Two breeds have sheets; the Shiba has none and falls back to the drawn profile,
+   which is why `dog/side.js` was kept. `py tools/check-precache.py` now expects 67
+   entries and now also checks `.webp`, because a sheet on disk and absent from
+   this list is a dog who vanishes the moment the phone goes offline.
+
    8.19.0: THE DOG CAN BE SEEN FROM THE SIDE. FIVE NEW MODULES, and four of them
    are load-bearing for the dog you already have: `dog/part.js` (the coat),
    `dog/coat.js` (the tufted mass), `dog/face.js` (eye, nose, mouth) and
@@ -231,7 +241,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.19.0';
+const VERSION = '8.20.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -253,6 +263,16 @@ const PRECACHE = [
   './src/dog/anim/index.js',
   './src/dog/anim/tricks.js',
   './src/dog/breeds.js',
+  /* ---- THE PROFILE SPRITES ------------------------------------------
+     The human's own art (docs/reference/side-walk-*.png, sliced by
+     tools/make-sidesprites.py). WebP because the sheets are soft gradients over
+     flat areas, which is PNG's worst case: 111KB against 923KB for one breed,
+     and everything here is precached for offline so every byte is permanent.
+     Safari has decoded WebP since iOS 14. */
+  './src/assets/side-meta.js',
+  './src/assets/side-cockapoo.webp',
+  './src/assets/side-schnoodle.webp',
+  './src/dog/sidesprite.js',
   './src/dog/care.js',
   './src/dog/coat.js',
   './src/dog/coatstate.js',

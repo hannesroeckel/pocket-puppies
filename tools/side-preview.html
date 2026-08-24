@@ -26,6 +26,7 @@
 <script type="module">
 import { createRig } from '../src/dog/rig.js';
 import { createSideDog } from '../src/dog/side.js';
+import { createSideSprite, hasSideSprite } from '../src/dog/sidesprite.js';
 import BALANCE from '../src/state/balance.js';
 
 const cv = document.getElementById('cv');
@@ -63,7 +64,30 @@ function render(breedId, phases, opts = {}) {
   return { geom: side.debug, breed: rig.breed.id };
 }
 
+/* THE SPRITE, drawn the same way and at the same scale, so the two can be put
+   side by side and compared honestly rather than from memory. */
+async function renderSprite(breedId, phases, opts = {}) {
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#7fae62';
+  c.fillRect(0, 0, cv.width, cv.height);
+  const rig = createRig({ breed: breedId, reduced: false });
+  const sp = createSideSprite(rig);
+  if (!sp) return { error: 'no sheet for ' + breedId };
+  for (let i = 0; i < 60 && !sp.ready; i++) await new Promise((r) => setTimeout(r, 50));
+  const g = { ctx: c, view: null };
+  const s = opts.scale === undefined ? 2.6 : opts.scale;
+  const groundY = cv.height * 0.72;
+  phases.forEach((ph, i) => {
+    sp.draw(g, { x: CELL * (i + 0.5), y: groundY, s,
+      face: opts.face === undefined ? -1 : opts.face,
+      phase: ph, run: opts.run === undefined ? 1 : opts.run });
+  });
+  return sp.debug;
+}
+
 window.__side = {
+  renderSprite,
+  hasSideSprite,
   render,
   /* the four keys of the reference: extended, gathered, extended, compressed */
   keys: [0.0, 0.25, 0.5, 0.75],
