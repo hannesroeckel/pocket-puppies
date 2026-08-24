@@ -25,6 +25,16 @@ Consequence to hold onto: **no side-profile rig is being built.** If any later s
 itself wanting one, stop and raise it rather than quietly building one — it is the single
 largest art task in the project and it was deliberately avoided.
 
+> **RAISED AND APPROVED, 2026-08-20.** *"Actually I do want a side and back profile of the dogs
+> ... these new views would make improve the game a lot"*. The rule did its job: stage 8 wanted
+> a gait cycle for the disc game, stopped, and asked. There is a profile dog now — the human's
+> own art (`src/assets/side-*.webp`) with a drawn fallback (`src/dog/side.js`) — and it is used
+> for exactly one thing: **he trots out of the room when a walk begins** (ARCHITECTURE §33).
+>
+> What the approval did NOT change, and neither should anything later: the walk is still
+> anticipation → absence → return, the **return is still frontal** (he comes home muddy, and a
+> painted sheet cannot get dirty), and **agility is still cut**. The back view is still unbuilt.
+
 ## Design principles that outrank faithfulness
 
 1. **The dog never resents her.** Affection has a ratcheting floor; decay is capped at 36h;
