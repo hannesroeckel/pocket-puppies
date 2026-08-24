@@ -943,6 +943,22 @@ export const BALANCE = {
     /* ---- BEAT 3: ABSENCE -------------------------------------------
        The room is empty and DELIBERATELY A LITTLE MELANCHOLY. She may close
        the app entirely; nothing here ticks. */
+    /* ---- BEAT 2.5: THE DEPARTURE ------------------------------------
+       He trots out of frame instead of blinking out of it. The only beat that
+       uses the profile dog, and the reason `dog/side.js` and the sprite sheets
+       exist at all.
+
+       `dur` is short on purpose: this is a send-off, not a journey. The absence
+       is the point of the feature and the clock for it started the moment she
+       pressed Set off (state/walks.js), so these two seconds are inside the
+       walk, not added to it.
+
+       `stride` is HOW FAR HE TRAVELS PER GAIT CYCLE. Driving the cycle off
+       distance rather than off time is what stops him moonwalking — a stride has
+       to be a stride whatever the frame rate did. Measured against the sheet: his
+       four frames cover about one body length, and he is ~150 units tall. */
+    off: { dur: 2.1, exit: 150, stride: 92, scale: 1, fade: 0.28, ramp: 0.24 },
+
     away: {
       /* the cool wash over the empty room */
       chill: 0.34, dim: 0.22, moteSlow: 0.45,
@@ -2221,7 +2237,13 @@ export const BALANCE = {
        drawn dog cannot change the size of the animal. The shadow is ours: the
        painted ones were keyed out by the slicer because a painted shadow cannot
        shrink when he leaves the ground. */
-    sprite: { height: 150, shadowW: 0.32, shadowH: 0.055 },
+    /* `height` IS HOW TALL HE IS IN VIRTUAL UNITS at `rig.s === 1`, and 150 was a
+       guess that came back as a small dog next to the frontal one. Derived
+       instead: the frontal body is `bodyHW` 64.5 half-units, so 129 across; the
+       same body in profile is a bit over twice as long, ~280; and the sheets are
+       1.12 wide for every 1 tall, so 280 / 1.12 = 250. He is the same animal seen
+       from the side, which is the entire claim the profile has to make. */
+    sprite: { height: 250, shadowW: 0.32, shadowH: 0.055 },
 
     /* ---- THE GAIT ----------------------------------------------------
        A BOUND, not a trot, because that is what the reference draws: two
