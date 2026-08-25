@@ -4122,11 +4122,22 @@ body: 250).
 who is not drawn, that the walk's own clock is untouched by the departure, and that the Shiba walks
 out drawn.
 
-### 33.5 Left imperfect
+### 33.5 All three, and what the fallback is for now (8.21.0)
+
+He drew the Shiba too, so **every breed walks out as his own art** and the drawn profile is no longer
+visible anywhere in the game. Its silhouette is genuinely different rather than a recolour — prick
+ears, a curled tail, cream points, smooth coat — which is the whole reason a per-breed sheet was worth
+asking for instead of a tint.
+
+`dog/side.js` stays, and not out of sentiment: a breed added later has no sheet, and
+`hasSideSprite()` returning false is the path that keeps that dog walking. `tools/walkgate.py` asserts
+both halves — that no breed in the game is missing a sheet, and that an unknown breed would still fall
+back — because the second one now has nothing in the game to exercise it.
+
+### 33.6 Left imperfect
 
 - **The back view is still not built**, and it was deferred at the start. It is much cheaper now: the
-  parts are shared, so it is silhouettes and a tail — or two more sheets.
-- **The Shiba has no sheet.** It falls back to the drawn profile, which is visibly a different hand.
+  parts are shared, so it is silhouettes and a tail — or three more sheets.
 - **He only ever walks out.** The return, the disc, the ring and the room are all still frontal. The
   profile dog exists for two seconds per walk.
 - **`dog/side.js` is now a fallback rather than the plan.** Seven batches of extraction stand on their

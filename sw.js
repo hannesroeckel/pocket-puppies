@@ -109,6 +109,14 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.21.0: ALL THREE DOGS WALK OUT AS HIS OWN ART. `side-shiba.webp` completes
+   the set — prick ears, a curled tail and cream points, which is a genuinely
+   different silhouette from the two doodles rather than a recolour. The drawn
+   profile (`dog/side.js`) is no longer visible anywhere in the game: it stays as
+   the fallback for any breed added later without a sheet, which is a real path
+   and is asserted by `tools/walkgate.py` rather than assumed.
+   `py tools/check-precache.py` now expects 68 entries.
+
    8.20.0: THE PROFILE DOG IS THE HUMAN'S OWN ART. Four new entries and two of
    them are IMAGES, which is a first for this project: the dog has been drawn from
    springs since stage 1, and `src/assets/side-*.webp` are painted sheets. They
@@ -241,7 +249,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.20.0';
+const VERSION = '8.21.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -272,6 +280,7 @@ const PRECACHE = [
   './src/assets/side-meta.js',
   './src/assets/side-cockapoo.webp',
   './src/assets/side-schnoodle.webp',
+  './src/assets/side-shiba.webp',
   './src/dog/sidesprite.js',
   './src/dog/care.js',
   './src/dog/coat.js',

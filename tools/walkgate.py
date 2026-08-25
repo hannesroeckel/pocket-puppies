@@ -6,6 +6,10 @@ trots out of the room in profile instead of blinking out of it.
 
 WHAT IT ASSERTS, and every one of these is a bug that happened:
 
+  0  EVERY BREED HAS A SHEET. He drew all three ("all dogs matter"), so no breed
+     falls back to the drawn profile any more — and the fallback is asserted to be
+     reachable anyway, for a breed added later.
+
   A  HE IS THERE AT THE START. The first render of this beat was an EMPTY ROOM —
      the sprite sheet had not decoded, `sprite.draw` returned false, and nothing
      drew anything instead. The sheet now starts decoding when the lead comes out,
@@ -149,20 +153,47 @@ def main():
               [clock["durAtStart"], clock["durAtEnd"]])
         ctx.close()
 
-        # ---- the Shiba has no sheet and must still walk out ---------------
-        ctx, pg = fresh(breed="shiba")
-        shiba = pg.evaluate("""() => {
+        # ---- EVERY BREED WALKS OUT AS HIS OWN ART ------------------------
+        #
+        # This assertion used to be the opposite: "a breed with no sheet walks out
+        # as the DRAWN profile", tested on the Shiba, which was the one breed he
+        # had not drawn. He drew it, so the Shiba is no longer the no-sheet case
+        # and nothing in the game is. The invariant worth holding is the one he
+        # stated — "all dogs matter" — so it is asserted directly.
+        ctx, pg = fresh()
+        every = pg.evaluate("""async () => {
           const pp = window.__pp;
-          pp.setOff();
-          const d = pp.dbg().walk;
-          let g = 0, frames = 0;
-          while (g++ < 300 && pp.dbg().walk.leaving) { frames++; pp.step(1/60, 1); }
-          return { kind: d.sideKind, frames, away: pp.dbg().walk.away };
+          const mod = await import('/src/dog/sidesprite.js');
+          const ids = (pp.app && pp.app.breeds) || ['shiba', 'schnoodle', 'cockapoo'];
+          return {
+            ids,
+            missing: ids.filter((id) => !mod.hasSideSprite(id)),
+            /* AND THE FALLBACK IS STILL REACHABLE. With every breed covered, the
+               drawn path has no breed to exercise it — so the question becomes
+               whether it would still answer for a breed added later. */
+            unknownFallsBack: mod.hasSideSprite('nosuchbreed') === false,
+          };
         }""")
-        check(shiba["kind"] == "drawn",
-              "a breed with no sheet walks out as the DRAWN profile", shiba)
-        check(shiba["frames"] > 40 and shiba["away"],
-              "and its departure is the same length and still starts the absence", shiba)
+        check(not every["missing"],
+              "EVERY breed in the game has a sheet of his own art", every)
+        check(every["unknownFallsBack"],
+              "and a breed with no sheet would still fall back to the drawn profile",
+              every["unknownFallsBack"])
+
+        # each of them actually completes a departure
+        for breed in every["ids"]:
+            ctx2, pg2 = fresh(breed=breed)
+            one = pg2.evaluate("""() => {
+              const pp = window.__pp;
+              pp.setOff();
+              const kind = pp.dbg().walk.sideKind;
+              let g = 0, frames = 0;
+              while (g++ < 300 && pp.dbg().walk.leaving) { frames++; pp.step(1/60, 1); }
+              return { kind, frames, away: pp.dbg().walk.away };
+            }""")
+            check(one["kind"] == "sprite" and one["frames"] > 40 and one["away"],
+                  "%s walks out as the sprite and the absence begins" % breed, one)
+            ctx2.close()
         ctx.close()
 
         # ---- G: leaving the scene mid-departure ---------------------------

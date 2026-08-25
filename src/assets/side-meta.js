@@ -22,6 +22,7 @@
 export const SIDE_SPRITES = {
   cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274 },
   schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257 },
+  shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5 },
 };
 
 export default SIDE_SPRITES;
