@@ -49,7 +49,11 @@ for p in ROOT.rglob("*"):
     rel = p.relative_to(ROOT)
     if _skip(rel.parts[0]) or rel.name in EXCLUDE_FILES:
         continue
-    if p.suffix.lower() in (".js", ".html", ".webmanifest", ".png"):
+    # `.webp` IS IN HERE BECAUSE THE PROFILE SPRITES ARE WEBP. They are fetched
+    # at runtime like any module, so a sheet on disk and not in PRECACHE is a dog
+    # who vanishes the moment the phone is offline — the exact class of failure
+    # this checker exists to catch, and it would have missed it silently.
+    if p.suffix.lower() in (".js", ".html", ".webmanifest", ".png", ".webp"):
         on_disk.add(rel.as_posix())
 
 missing = sorted(on_disk - listed)      # shipped but not precached -> breaks offline

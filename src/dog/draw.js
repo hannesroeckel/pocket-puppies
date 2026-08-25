@@ -23,6 +23,23 @@ import BALANCE from '../state/balance.js';
    codebase. scenes/props.js does not import this module, so this direction is
    safe. */
 import { drawFind } from '../scenes/props.js';
+/** the frontal renderer's own leg call, with what `drawLeg` used to close over */
+
+/* THE TUFTED MASS, which the profile view shares — see dog/coat.js. Moved out of
+   this file unchanged; `fluffMass` takes `pal` as an argument now because it can
+   no longer close over it. */
+import { buildFluff, fluffMass } from './coat.js';
+/* A FURRED PART — the coat, in every layer that makes it read as one. Moved out
+   of this file unchanged so dog/side.js can build parts of its own; see the
+   header of dog/part.js. `hash1`, `lobe` and `sampleOutline` come with it,
+   because half this file's other marks are jittered by the same hash. */
+import { createFurredPart, drawLimb, hash1, lobe, sampleOutline } from './part.js';
+import {
+  drawEye as faceEye, drawNose as faceNose, drawMouth as faceMouth,
+} from './face.js';
+import {
+  drawSoil as csSoil, drawFoam as csFoam, drawWet as csWet, drawGloss as csGloss,
+} from './coatstate.js';
 import {
   TAU, clamp, lerp, pt, ell, crClosed, ribbon, resampleClosed, loopNormals, mix, rgba,
 } from '../engine/draw.js';
@@ -58,6 +75,11 @@ const FU = BALANCE.fur;
    A profile with no `tuft` key takes the original code path exactly, which
    is why the Shiba is untouched.
    ========================================================================== */
+/* ALREADY EXPORTED, at the bottom of this file with EAR_STYLE — which is how
+   `dog/side.js` shares these numbers rather than copying them. A profile dog
+   with its own scallop depth and its own curl density would drift away from this
+   one coat by coat; sharing the table means the two views can only disagree
+   about SHAPE, which is the thing they are supposed to disagree about. */
 const FUR_TYPE = {
   short: { scallop: 1.0, lobe: 1.0, alpha: 1.0 },
   long: { scallop: 2.3, lobe: 1.7, alpha: 1.15 },
@@ -285,89 +307,29 @@ export function createDogRenderer(rig) {
   let lateEyes = null;
   let lateNose = null;
 
-  /* ---- static resampled outlines (scaled per frame, never rebuilt) ----
-     A curly breed needs many more points than the Shiba's 42: you cannot
-     express fifteen tufts on fourteen control points. */
-  const sub = furType.resample || FU.resample;
-  const base = {
-    body: resampleClosed(rig.sil.body, sub),
-    head: resampleClosed(rig.sil.head, sub),
-  };
-  /* scratch buffers, reused every frame — zero allocation in the hot path */
-  const buf = {
-    body: { p: base.body.map(() => pt(0, 0)), o: base.body.map(() => pt(0, 0)), n: null },
-    head: { p: base.head.map(() => pt(0, 0)), o: base.head.map(() => pt(0, 0)), n: null },
-  };
-
-  /* ==================================================================
-     THE TUFT PROFILE — precomputed, because it is a pure function of the
-     outline parameter u and therefore never changes. Zero trig per frame.
-
-     |sin(pi*c*u)|^pow is a run of convex arcs meeting at cusps: a scalloped,
-     cloud-like edge. A phase warp makes the lobes uneven and an amplitude
-     modulation makes them different sizes, so it reads as a coat rather than
-     as a machined ripple. The mean is removed so tufting does not silently
-     inflate the dog, then a small net outward bias is added back because a
-     curly coat genuinely does add bulk.
-     ================================================================== */
-  const TU = furType.tuft || null;
-  const tuftProfile = {};
-  if (TU) {
-    for (const key of ['body', 'head']) {
-      const n = base[key].length;
-      const raw = new Float32Array(n);
-      /* a per-part phase so the head and body are not in lockstep */
-      const ph = key === 'head' ? 2.39 : 0.41;
-      let sum = 0;
-      for (let i = 0; i < n; i++) {
-        const u = i / n;
-        const uu = u + TU.warp * Math.sin(u * TAU * 2 + ph);
-        let v = Math.pow(Math.abs(Math.sin(Math.PI * TU.cycles * uu + ph)), TU.pow);
-        v *= 1 + TU.mod * Math.sin(u * TAU * 3 + ph * 1.7);
-        if (TU.oct2) {
-          v += TU.oct2 * Math.pow(Math.abs(Math.sin(Math.PI * TU.cyc2 * uu + ph * 2.3)), TU.pow);
-        }
-        raw[i] = v; sum += v;
-      }
-      const mean = sum / n;
-      const net = TU.net === undefined ? 0.30 : TU.net;
-      const out = new Float32Array(n);
-      /* THE SKIRT. A wiry breed in a schnauzer trim has a two-zone outline:
-         sleek over the back and ribs, then long coat hanging below where the
-         ribcage curves under. That pattern break IS the breed — a wiry dog
-         drawn as uniform fluff reads as a generic doodle. So tuft depth ramps
-         from sleek at the spine to full at the skirt. `skirt: 0` = uniform. */
-      const skirt = TU.skirt || 0;
-      const phh = key === 'head' ? D.headHH : D.bodyHH;
-      /* A clipped head is a different length of coat from the body — and the
-         reverse is true too. The body's silhouette is mostly OCCLUDED (ears,
-         front legs, chest ruff, the rug), so only a narrow strip of flank is
-         ever read; at the head's amplitude that strip came back looking smooth
-         next to an emphatically scalloped skull. `bodyScale` lets a breed spend
-         more tuft where less of it is visible, so the fluffy read is continuous
-         head-to-rump. Both default to 1 = the old uniform behaviour. */
-      const partK = key === 'head'
-        ? (TU.headScale === undefined ? 1 : TU.headScale)
-        : (TU.bodyScale === undefined ? 1 : TU.bodyScale);
-      for (let i = 0; i < n; i++) {
-        /* partK and the skirt MULTIPLY. They used to not: `k = lerp(...)`
-           overwrote partK outright, so any breed that set `skirt` silently
-           threw away its own `bodyScale` and `headScale`. That is why the
-           Schnoodle's flank rendered as a smooth wall with the fluff living
-           entirely in translucent lobes outside it (bodyScale 1.22 never
-           applied), while its clipped head got 2-3x the tuft it asked for
-           (headScale 0.30 never applied). Both numbers were written to fix
-           exactly the defects that then got reported. */
-        let k = partK;
-        if (skirt) {
-          const ny = clamp(base[key][i].y / phh, -1, 1);   // -1 top, +1 bottom
-          k *= lerp(1 - skirt, 1 + skirt * 0.45, (ny + 1) / 2);
-        }
-        out[i] = TU.amp * (raw[i] - mean + net) * k;
-      }
-      tuftProfile[key] = out;
-    }
-  }
+  /* ---- THE TWO FURRED PARTS ------------------------------------------
+     The outlines, the tuft profile, the scallop, the fringe, the flyaway curls
+     and the interior clumps all moved to dog/part.js so the PROFILE view can
+     build parts of its own — see that file's header. The per-part constants
+     that used to be chosen inside those functions with `key === 'head'` are
+     passed here instead, and they are exactly the values this renderer always
+     used: that is what makes the extraction byte-identical rather than close.
+     ------------------------------------------------------------------- */
+  const partOf = (key) => createFurredPart({
+    outline: rig.sil[key],
+    furType,
+    pal,
+    clumps: rig.fur[key],
+    tuftPhase: key === 'head' ? 2.39 : 0.41,
+    tuftK: key === 'head'
+      ? (furType.tuft && furType.tuft.headScale)
+      : (furType.tuft && furType.tuft.bodyScale),
+    skirtRefH: key === 'head' ? D.headHH : D.bodyHH,
+    fringeSalt: key === 'head' ? 3.7 : 1.3,
+    fringeK: key === 'head' && furType.fringe ? furType.fringe.headScale : 1,
+    flySalt: key === 'head' ? 5.1 : 2.6,
+  });
+  const part = { body: partOf('body'), head: partOf('head') };
 
   /* ---- gradients (local space, cached across frames) ------------------ */
   let G = null;
@@ -439,289 +401,6 @@ export function createDogRenderer(rig) {
     G.headShade.addColorStop(0, 'rgba(255,244,214,0.30)');
     G.headShade.addColorStop(0.44, 'rgba(255,244,214,0)');
     G.headShade.addColorStop(1, 'rgba(150,76,34,0.22)');
-  }
-
-  /* ==================================================================
-     Part outline builder: scale -> scallop -> deform -> outline offset
-     ================================================================== */
-  function buildPart(key, pet, sx, sy, ox, oy, gain, warp, wet) {
-    const src = base[key], b = buf[key], n = src.length;
-    const p = b.p, o = b.o;
-    /* 1. scale into pose space (+ optional warp for head yaw/pitch) */
-    for (let i = 0; i < n; i++) {
-      let x = src[i].x * sx, y = src[i].y * sy;
-      if (warp) { const w = warp(x, y); x = w[0]; y = w[1]; }
-      p[i].x = x; p[i].y = y;
-    }
-    /* 2. outward normals of the live shape */
-    let norms = loopNormals(p);
-    b.n = norms;
-    /* 3. gentle fur scallop on the silhouette itself (never a spike) */
-    const S = FU.scallop, amp = S.amp * furType.scallop;
-    for (let i = 0; i < n; i++) {
-      const u = i / n;
-      const w = Math.sin(u * S.cycles * TAU + S.phase) * 0.62
-        + Math.sin(u * (S.cycles + 4) * TAU + 0.4) * 0.38;
-      p[i].x += norms[i].x * w * amp;
-      p[i].y += norms[i].y * w * amp;
-    }
-    /* 3b. THE TUFTED SILHOUETTE. Wet fur collapses, so a soaked curly dog
-           loses most of its tufting — which is a large part of why the bath
-           reads as a bath and not as a blue filter. */
-    if (TU) {
-      const prof = tuftProfile[key];
-      const k = 1 - clamp(wet || 0, 0, 1) * 0.68;
-      for (let i = 0; i < n; i++) {
-        const d = prof[i] * k;
-        p[i].x += norms[i].x * d;
-        p[i].y += norms[i].y * d;
-      }
-      /* the dark outline has to hug the TUFTED shape, not the smooth one it
-         was derived from, or every cusp grows a dark spur. */
-      norms = loopNormals(p);
-      b.n = norms;
-    }
-    /* 4. petting deformation — the body dents and follows the finger */
-    if (pet) {
-      for (let i = 0; i < n; i++) {
-        const d = pet.deformPoint(p[i].x, p[i].y, ox, oy, gain);
-        p[i].x = d[0]; p[i].y = d[1];
-      }
-    }
-    /* 5. outline pass = the same shape pushed out along its normals */
-    const ow = 2.0;
-    for (let i = 0; i < n; i++) {
-      o[i].x = p[i].x + norms[i].x * ow;
-      o[i].y = p[i].y + norms[i].y * ow;
-    }
-    return b;
-  }
-
-  /* ==================================================================
-     ART FIX 1 — fur clumps as soft lobes, tucked inside the silhouette.
-     Positions are resolved against the live outline, so they follow body
-     curvature and every petting dent for free.
-     ================================================================== */
-  function drawFur(c, part, b, hh, ox, oy, wet) {
-    const list = rig.fur[part];
-    if (!list.length) return;
-    const p = b.p, norms = b.n, n = p.length;
-    /* WET FUR LIES DOWN. Flattening the clumps is most of what makes a wet
-       dog read as wet rather than as a dog with a blue filter on it. */
-    const flat = 1 - clamp(wet || 0, 0, 1) * 0.62;
-    const len = FU.lobeLen * hh * furType.lobe * flat;
-    const wid = len * FU.lobeWide;
-    for (let k = 0; k < list.length; k++) {
-      const f = list[k];
-      const fi = f.t * n;
-      const i0 = Math.floor(fi) % n, i1 = (i0 + 1) % n, ft = fi - Math.floor(fi);
-      const px = lerp(p[i0].x, p[i1].x, ft), py = lerp(p[i0].y, p[i1].y, ft);
-      const nx = lerp(norms[i0].x, norms[i1].x, ft), ny = lerp(norms[i0].y, norms[i1].y, ft);
-      /* tangent along the outline: the lobe lies ALONG the body curve */
-      const tx = -ny, ty = nx;
-      const L = len * f.scale, W = wid * f.scale;
-      /* base tucked inside the silhouette */
-      const bx = px - nx * W * FU.inset, by = py - ny * W * FU.inset;
-      const swirl = f.sp.x * FU.kickAngle;
-      const dir = f.curl;
-      /* axis: mostly tangential, biased inward, nudged by the stroke spring */
-      let ax = tx * dir - nx * 0.42, ay = ty * dir - ny * 0.42;
-      const aL = Math.hypot(ax, ay) || 1; ax /= aL; ay /= aL;
-      const ca = Math.cos(swirl * 0.10), sa = Math.sin(swirl * 0.10);
-      const rx = ax * ca - ay * sa, ry = ax * sa + ay * ca;
-
-      /* cache for pet.js's fur ruffle */
-      f.px = bx + ox; f.py = by + oy; f.pa = Math.atan2(ry, rx);
-
-      /* A CURLY coat's interior texture is not straight strands — it is a
-         scatter of little arcs. Same principle (thin, low-alpha, along the
-         body curve), different mark.
-
-         WHY THESE ARE SHORT, FAT AND FAINT. The first pass drew long thin
-         high-contrast arcs (sweep ~2.5 rad at width 1.4), and rendered they read
-         as PEN SCRIBBLE — legible individual strokes, like someone had written
-         on the dog. A curl's read is a soft crescent of shading, so: the sweep
-         is under ~100 degrees, the stroke is WIDE (a wide low-alpha stroke is a
-         soft band, a thin one is a line), the alpha is halved, and the shadow
-         pair is offset by a fraction of the stroke width instead of a fixed
-         1.1 units so the two never separate into two visible marks. */
-      const CU = furType.curl;
-      if (CU) {
-        c.lineWidth = CU.width;
-        c.lineCap = 'round';
-        const cr = L * CU.radius;
-        const shOff = CU.width * (CU.shade === undefined ? 0.55 : CU.shade);
-        for (let j = 0; j < CU.arcs; j++) {
-          const h1 = hash1(k * 7 + j, 2.2), h2 = hash1(k * 7 + j, 8.6);
-          /* spread the arcs across the clump footprint, along the outline */
-          const off = (j - (CU.arcs - 1) / 2) * W * 0.85 + (h1 - 0.5) * W * 0.5;
-          const cx = bx + tx * off + rx * L * (0.20 + h2 * 0.42);
-          const cy = by + ty * off + ry * L * (0.20 + h2 * 0.42);
-          const a0 = Math.atan2(ry, rx) + (h1 - 0.5) * 1.5;
-          const sweep = CU.sweep * (0.75 + h2 * 0.5);
-          const dir = (j + k) % 2 ? 1 : -1;
-          const rr = cr * (0.7 + h1 * 0.6);
-          /* a shadow arc behind, offset a hair, then the light arc: the pair
-             is what gives a curl its roundness */
-          c.strokeStyle = rgba(pal.coatSh, CU.alpha * FU.shadowAlpha * 1.6 * furType.alpha);
-          c.beginPath();
-          c.arc(cx + rx * shOff, cy + ry * shOff, rr, a0 - sweep / 2 * dir, a0 + sweep / 2 * dir, dir < 0);
-          c.stroke();
-          c.strokeStyle = rgba(pal.coatHi, CU.alpha * furType.alpha);
-          c.beginPath();
-          c.arc(cx, cy, rr, a0 - sweep / 2 * dir, a0 + sweep / 2 * dir, dir < 0);
-          c.stroke();
-        }
-        continue;
-      }
-
-      /* A single wide lobe reads as a flat facet — which is the "nub" failure
-         wearing a different costume. Draw each clump as a few THIN tapered
-         strands, fanned along the body curve: overlapping thin strands at low
-         alpha are what actually read as fur. */
-      const ns = FU.strands;
-      const sw = W * FU.strandWide;
-      const strand = (j, tint, alpha, lenScale) => {
-        const fan = (ns > 1 ? (j / (ns - 1) - 0.5) : 0) * FU.fan;
-        const cf = Math.cos(fan), sf = Math.sin(fan);
-        const dx2 = rx * cf - ry * sf, dy2 = rx * sf + ry * cf;
-        const off = (j - (ns - 1) / 2) * sw * 1.6;
-        const taper = 1 - Math.abs(ns > 1 ? (j / (ns - 1) - 0.5) : 0) * 0.55;
-        c.fillStyle = rgba(tint, alpha);
-        lobe(c, bx + tx * off, by + ty * off, dx2, dy2, L * taper * lenScale, sw);
-        c.fill();
-      };
-      /* shadow pass slightly behind: depth, never an outline */
-      for (let j = 0; j < ns; j++) {
-        strand(j, pal.coatSh, FU.contrast * FU.shadowAlpha * furType.alpha, 1.04);
-      }
-      for (let j = 0; j < ns; j++) {
-        strand(j, pal.coatHi, FU.contrast * furType.alpha, 1.0);
-      }
-    }
-  }
-
-  /** deterministic 0..1 jitter — the coat must look the same every frame */
-  function hash1(i, salt) {
-    const v = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
-    return v - Math.floor(v);
-  }
-
-  /** sample the live outline at parameter u -> [x, y, nx, ny] */
-  function sampleOutline(b, u) {
-    const p = b.p, norms = b.n, n = p.length;
-    const fi = ((u % 1) + 1) % 1 * n;
-    const i0 = Math.floor(fi) % n, i1 = (i0 + 1) % n, ft = fi - Math.floor(fi);
-    return [
-      lerp(p[i0].x, p[i1].x, ft), lerp(p[i0].y, p[i1].y, ft),
-      lerp(norms[i0].x, norms[i1].x, ft), lerp(norms[i0].y, norms[i1].y, ft),
-    ];
-  }
-
-  /**
-   * THE UNDER-FRINGE. Overlapping soft lobes drawn BEHIND the part, poking
-   * past the silhouette at irregular intervals. This is what stops a tufted
-   * outline reading as a single scalloped cutout: the edge gains depth and
-   * breaks in places the main path does not, which is how real coat reads.
-   * Drawn before the part's own outline pass, so the part always covers their
-   * roots and they can never look like separate blobs.
-   */
-  function drawFringe(c, key, b, hh, wet) {
-    const FR = furType.fringe;
-    if (!FR) return;
-    const salt = key === 'head' ? 3.7 : 1.3;
-    const partK = key === 'head' ? (FR.headScale === undefined ? 1 : FR.headScale) : 1;
-    const k = (1 - clamp(wet || 0, 0, 1) * 0.70) * partK;
-    const r0 = FR.r * hh * k;
-    /* Below about a unit a fringe lobe cannot read as coat depth at any device
-       scale — it is pure cost. A close-clipped part (a schnauzer head) drops out
-       here entirely and gets its broken edge from the tuft profile instead. */
-    if (r0 < 1.0) return;
-    const N = FR.n;
-    const px = [], py = [], pr = [];
-    for (let j = 0; j < N; j++) {
-      const h1 = hash1(j, salt), h2 = hash1(j, salt + 9.1);
-      const u = (j + FR.jitter * (h1 - 0.5)) / N;
-      const s = sampleOutline(b, u);
-      const rr = r0 * (0.60 + h2 * 0.80);
-      px.push(s[0] + s[2] * rr * FR.out);
-      py.push(s[1] + s[3] * rr * FR.out);
-      pr.push(rr);
-    }
-    /* every dark rim first, then every coat lobe — interleaving them would
-       let one lobe's dark rim print over its neighbour's coat.
-
-       THE RIM IS A FRACTION OF THE LOBE, NEVER A FIXED OFFSET. It used to be
-       `pr + 1.9`, which is fine on a 3-unit lobe and catastrophic on a 0.7-unit
-       one: a 34%-alpha disc almost three times the lobe's radius, sitting
-       outside the silhouette with no coat inside it to hide behind. That is
-       exactly what made the Schnoodle's shoulders and hips come back as
-       semi-transparent grey blobs floating outside the outline — they were not
-       fur, they were rim. Proportional, a rim can only ever read as its own
-       lobe's edge, whatever the coat length. */
-    /* AND A TRANSLUCENT RIM IS A HALO, NOT A LINE. The body's own outline is
-       OPAQUE pal.line; a 34%-alpha disc of the same ink sitting just outside it
-       does not read as the edge of a tuft, it reads as a compression halo
-       around the dog — which is exactly how the Schnoodle's shoulders and hips
-       came back. `rimAlpha` lets a coat ask for a proper ink edge instead, and
-       `rimK`/`rimMax` keep that edge THIN, because an opaque rim as fat as the
-       lobe would swallow the coat inside it. Defaults are the old numbers. */
-    const rimA = FR.rimAlpha === undefined ? FR.alpha : FR.rimAlpha;
-    const rimK = FR.rimK === undefined ? 0.42 : FR.rimK;
-    const rimMax = FR.rimMax === undefined ? 1.9 : FR.rimMax;
-    c.fillStyle = pal.line;
-    c.globalAlpha = rimA;
-    for (let j = 0; j < N; j++) {
-      c.beginPath(); c.arc(px[j], py[j], pr[j] + Math.min(rimMax, pr[j] * rimK), 0, TAU); c.fill();
-    }
-    c.globalAlpha = 1;
-    c.fillStyle = pal.coatMid;
-    for (let j = 0; j < N; j++) { c.beginPath(); c.arc(px[j], py[j], pr[j], 0, TAU); c.fill(); }
-  }
-
-  /**
-   * FLYAWAY CURLS. Individual curls straddling the rim, drawn OUTSIDE the
-   * silhouette clip so they genuinely break the edge. These are the hairs
-   * that sell "fluffy" — but they are thin, low-alpha arcs, because anything
-   * solid poking out of a dog reads as a growth (architecture §6 defect 1).
-   */
-  function drawFlyaway(c, key, b, hh, wet) {
-    const FL = furType.fly;
-    if (!FL) return;
-    const k = 1 - clamp(wet || 0, 0, 1) * 0.80;
-    const L = FL.len * hh * k;
-    if (L < 0.6) return;
-    const salt = key === 'head' ? 5.1 : 2.6;
-    c.lineWidth = FL.width;
-    c.lineCap = 'round';
-    for (let j = 0; j < FL.n; j++) {
-      const h1 = hash1(j, salt), h2 = hash1(j, salt + 4.3), h3 = hash1(j, salt + 7.7);
-      const u = (j + 0.8 * (h1 - 0.5)) / FL.n;
-      const s = sampleOutline(b, u);
-      const ang = Math.atan2(s[3], s[2]);
-      const cr = L * (0.55 + h2 * 0.65);
-      const cx = s[0] + s[2] * cr * 0.42, cy = s[1] + s[3] * cr * 0.42;
-      const sweep = FL.sweep * (0.7 + h3 * 0.6);
-      const dir = j % 2 ? 1 : -1;
-      c.strokeStyle = rgba(j % 3 ? pal.coatHi : pal.coatSh, FL.alpha * (0.6 + h2 * 0.5));
-      c.beginPath();
-      c.arc(cx, cy, cr, ang - sweep / 2 * dir, ang + sweep / 2 * dir, dir < 0);
-      c.stroke();
-    }
-  }
-
-  /** a soft rounded fur lobe: base -> tapered tip, no corners anywhere */
-  function lobe(c, bx, by, ax, ay, len, w) {
-    const nx = -ay, ny = ax;
-    const mx = bx + ax * len * 0.5, my = by + ay * len * 0.5;
-    const tx = bx + ax * len, ty = by + ay * len;
-    const tw = w * 0.34;
-    c.beginPath();
-    c.moveTo(bx + nx * w, by + ny * w);
-    c.quadraticCurveTo(mx + nx * w * 0.95, my + ny * w * 0.95, tx + nx * tw, ty + ny * tw);
-    c.quadraticCurveTo(tx + ax * tw * 1.5, ty + ay * tw * 1.5, tx - nx * tw, ty - ny * tw);
-    c.quadraticCurveTo(mx - nx * w * 0.95, my - ny * w * 0.95, bx - nx * w, by - ny * w);
-    c.closePath();
   }
 
   /* ==================================================================
@@ -825,139 +504,15 @@ export function createDogRenderer(rig) {
      is exactly the space the body and head groups are already drawn in, so
      no transform gymnastics and no drift when she is being dented.
      ================================================================== */
-  const DIRT = { a: '#8a5f38', b: '#6b4526' };
 
-  function drawSoil(c, coat, where, hw, hh) {
-    if (!coat || !coat.regions) return;
-    const wetK = 1 + clamp(coat.wet || 0, 0, 1) * 0.35;   // wet mud is darker
-    for (let i = 0; i < coat.regions.length; i++) {
-      const r = coat.regions[i];
-      if (r.part !== where) continue;
-      const d = clamp(coat.dirt[i] || 0, 0, 1);
-      if (d < 0.012) continue;
-      const x = r.at[0] * hw, y = r.at[1] * hh;
-      const rr = r.r * (0.58 + d * 0.80);
-      /* ---- STAGE 4 FIX: ONE FEATHERED SMUDGE, NOT THREE HARD PASSES -----
-         The original three concentric ellipse fills each had a hard alpha edge,
-         so between about 0.2 and 0.5 dirt they read as PALE CONCENTRIC RINGS —
-         at a glance, bald patches or ringworm rather than muck. Caught by
-         rendering a dirt ladder (0 / 0.25 / 0.45 / 0.7 / 1.0) and looking at
-         it: only 1.0 read as a muddy dog, and stage 4's walks live in exactly
-         the band that failed.
+  /* ---- THE FOUR CARE WASHES, from dog/coatstate.js -------------------
+     Muddy, soapy, wet and glossy. Moved out so the profile can wear them too;
+     these shims pass the one thing they used to close over. */
+  function drawSoil(c, coat, where, hw, hh) { return csSoil(c, coat, where, hw, hh, { drive: rig.drive }); }
+  function drawFoam(c, coat, where, hw, hh) { return csFoam(c, coat, where, hw, hh, { drive: rig.drive }); }
+  function drawWet(c, coat, hw, hh) { return csWet(c, coat, hw, hh, { drive: rig.drive }); }
+  function drawGloss(c, coat, hw, hh) { return csGloss(c, coat, hw, hh, { drive: rig.drive }); }
 
-         A single radial gradient has no interior edge to read as a ring, and
-         the alpha curve is raised so a half-dirty dog is visibly dirty rather
-         than faintly discoloured. The DATA and the erase mechanic are
-         untouched, so wash still works exactly as stage 2 built it. */
-      /* A PLATEAU, then a feather. All-gradient was too diffuse — 0.45 and
-         0.70 dirt rendered almost identically because the ink was spread over
-         too large a radius. Holding the peak flat to 52% of the radius gives
-         the smudge a solid middle (which is what makes it read as muck) while
-         the outer feather keeps it edgeless (which is what stops it reading as
-         a ring). Verified against the same ladder. */
-      const peak = clamp(Math.pow(d, 0.72) * wetK, 0, 0.94);
-      const R = rr * 1.16;
-      const gr = c.createRadialGradient(x, y, rr * 0.05, x, y, R);
-      gr.addColorStop(0, rgba(DIRT.b, peak));
-      gr.addColorStop(0.52, rgba(DIRT.b, peak * 0.94));
-      gr.addColorStop(0.74, rgba(DIRT.a, peak * 0.58));
-      gr.addColorStop(0.90, rgba(DIRT.a, peak * 0.20));
-      gr.addColorStop(1, rgba(DIRT.a, 0));
-      c.globalAlpha = 1;
-      c.fillStyle = gr;
-      c.save();
-      c.translate(x, y); c.scale(1, 0.86); c.rotate(i * 0.7); c.translate(-x, -y);
-      ell(c, x, y, R, R); c.fill();
-      c.restore();
-      /* specks around the edge, so the smudge is not a perfect oval */
-      c.globalAlpha = clamp(d * 0.46, 0, 0.7);
-      c.fillStyle = DIRT.b;
-      for (let k = 0; k < 4; k++) {
-        const a = i * 1.7 + k * 1.9;
-        ell(c, x + Math.cos(a) * rr * (0.86 + (k % 2) * 0.30),
-          y + Math.sin(a) * rr * (0.68 + (k % 2) * 0.26),
-          rr * 0.15, rr * 0.11, a); c.fill();
-      }
-    }
-    c.globalAlpha = 1;
-  }
-
-  function drawFoam(c, coat, where, hw, hh) {
-    if (!coat || !coat.suds || coat.suds < 0.02) return;
-    for (let i = 0; i < coat.regions.length; i++) {
-      const r = coat.regions[i];
-      if (r.part !== where) continue;
-      const f = clamp((coat.foam[i] || 0) * coat.suds, 0, 1);
-      if (f < 0.02) continue;
-      const x = r.at[0] * hw, y = r.at[1] * hh;
-      const rr = r.r * (0.5 + f * 0.55);
-      /* a cluster of overlapping bubbles, not one white blob */
-      for (let k = 0; k < 6; k++) {
-        const a = i * 2.1 + k * 1.05;
-        const dd = rr * (0.2 + (k % 3) * 0.28);
-        const br = rr * (0.34 - (k % 3) * 0.06);
-        c.globalAlpha = clamp(f * 0.80, 0, 0.9);
-        c.fillStyle = 'rgba(255,255,255,0.92)';
-        ell(c, x + Math.cos(a) * dd, y + Math.sin(a) * dd * 0.8, br, br * 0.94); c.fill();
-        c.globalAlpha = clamp(f * 0.9, 0, 1);
-        c.fillStyle = 'rgba(255,255,255,0.98)';
-        ell(c, x + Math.cos(a) * dd - br * 0.3, y + Math.sin(a) * dd * 0.8 - br * 0.32,
-          br * 0.30, br * 0.26); c.fill();
-      }
-    }
-    c.globalAlpha = 1;
-  }
-
-  /** wet: a cool wash, darker streaks, and a much stronger specular */
-  function drawWet(c, coat, hw, hh) {
-    const w = clamp(coat && coat.wet, 0, 1);
-    if (!(w > 0.02)) return;
-    c.globalAlpha = w * 0.20;
-    c.fillStyle = '#4f6a72';
-    c.fillRect(-hw * 1.4, -hh * 1.6, hw * 2.8, hh * 3.2);
-    c.globalAlpha = w * 0.16;
-    c.strokeStyle = '#3d565e';
-    c.lineWidth = 1.6;
-    for (let i = -5; i <= 5; i++) {
-      const x = i * hw * 0.19;
-      c.beginPath();
-      c.moveTo(x, -hh * 1.1);
-      c.quadraticCurveTo(x + 3, 0, x - 2, hh * 1.15);
-      c.stroke();
-    }
-    c.globalAlpha = w * 0.34;
-    c.fillStyle = 'rgba(255,255,255,0.9)';
-    ell(c, hw * 0.42, -hh * 0.52, hw * 0.26, hh * 0.34, -0.5); c.fill();
-    ell(c, -hw * 0.30, -hh * 0.20, hw * 0.13, hh * 0.20, -0.4); c.fill();
-    c.globalAlpha = 1;
-  }
-
-  /** gloss: a specular bloom whose strength IS the brushing progress */
-  function drawGloss(c, coat, hw, hh) {
-    const gl = clamp(coat && coat.gloss, 0, 1);
-    if (!(gl > 0.03)) return;
-    /* the light in this room comes from the upper right (see the window) */
-    c.globalAlpha = 0.06 + gl * 0.26;
-    const g2 = c.createRadialGradient(hw * 0.40, -hh * 0.62, 2, hw * 0.40, -hh * 0.62, hw * 1.05);
-    g2.addColorStop(0, 'rgba(255,250,228,0.85)');
-    g2.addColorStop(0.45, 'rgba(255,246,214,0.22)');
-    g2.addColorStop(1, 'rgba(255,246,214,0)');
-    c.fillStyle = g2;
-    c.fillRect(-hw * 1.4, -hh * 1.6, hw * 2.8, hh * 3.2);
-    /* and a narrow band that travels, so a gleaming coat visibly shines */
-    if (gl > 0.4) {
-      const u = ((coat.sheen || 0) % 1);
-      const y = lerp(-hh * 1.3, hh * 1.3, u);
-      c.globalAlpha = (gl - 0.4) / 0.6 * 0.20;
-      const g3 = c.createLinearGradient(0, y - hh * 0.34, 0, y + hh * 0.34);
-      g3.addColorStop(0, 'rgba(255,252,236,0)');
-      g3.addColorStop(0.5, 'rgba(255,252,236,0.95)');
-      g3.addColorStop(1, 'rgba(255,252,236,0)');
-      c.fillStyle = g3;
-      c.fillRect(-hw * 1.4, y - hh * 0.34, hw * 2.8, hh * 0.68);
-    }
-    c.globalAlpha = 1;
-  }
 
   /**
    * THE NECK BRIDGE. The frontal rig has no drawn neck: the head simply
@@ -1097,102 +652,33 @@ export function createDogRenderer(rig) {
     c.restore();
   }
 
-  /* ==================================================================
-     Legs
-     ================================================================== */
+  /* A LEG. The drawing moved to dog/part.js (the profile needs it); this shim
+     hands it what it used to close over, so all eight call sites are unchanged
+     and the extraction stays provable by the pixel gates. */
   function drawLeg(c, hx, hy, px, py, bow, w, dark, pawScale) {
-    const mx = (hx + px) / 2, my = (hy + py) / 2;
-    const dx = px - hx, dy = py - hy, L = Math.hypot(dx, dy) || 1;
-    const nx = -dy / L, ny = dx / L;
-    const kx = mx + nx * bow, ky = my + ny * bow;
-    const nodes = [pt(hx, hy), pt(kx, ky), pt(lerp(kx, px, 0.55), lerp(ky, py, 0.55)), pt(px, py)];
-    const ws = [w, w * 0.84, w * 0.72, w * 0.66];
-    /* the outline tapers to nothing at the hip, so the leg emerges from under
-       the body instead of being a tube drawn on top of the chest */
-    const outlineTaper = [0, 0.55, 1, 1];
-    c.beginPath(); ribbon(c, nodes, ws.map((v, i) => v + 2.0 * outlineTaper[i]));
-    c.fillStyle = pal.line; c.globalAlpha = dark ? 0.9 : 0.85; c.fill(); c.globalAlpha = 1;
-    c.beginPath(); ribbon(c, nodes, ws);
-    /* coatMid, not coat: the body's lower half is already shaded, so a
-       full-brightness leg pops off the chest */
-    c.fillStyle = dark ? pal.coatSh : pal.coatMid; c.fill();
-    if (!dark && stockingFront) {
-      c.beginPath(); ribbon(c, [nodes[1], nodes[2], nodes[3]],
-        [ws[1] * 0.26, ws[2] * 0.34, ws[3] * 0.50]);
-      c.fillStyle = pal[stockingFront.color];
-      c.globalAlpha = stockingFront.alpha; c.fill(); c.globalAlpha = 1;
-    }
-    const ps = (pawScale === undefined ? 1 : pawScale) * D.pawScale;
-    const pr = w * 1.06 * ps;
-    c.fillStyle = pal.line; ell(c, px, py - 1.2, pr + 1.8, pr * 0.80 + 1.8); c.fill();
-    c.fillStyle = dark ? pal.creamSh : pal.cream; ell(c, px, py - 1.6, pr, pr * 0.80); c.fill();
-    if (!dark) {
-      c.strokeStyle = rgba(pal.line, 0.42); c.lineWidth = 1.3;
-      c.beginPath(); c.moveTo(px - pr * 0.34, py - 1.6); c.lineTo(px - pr * 0.34, py + pr * 0.5); c.stroke();
-      c.beginPath(); c.moveTo(px + pr * 0.34, py - 1.6); c.lineTo(px + pr * 0.34, py + pr * 0.5); c.stroke();
-    }
+    return drawLimb(c, hx, hy, px, py, bow, w, dark, pawScale,
+      { pal, pawScale: D.pawScale, stocking: stockingFront });
   }
 
   /* ==================================================================
      Face
      ================================================================== */
+  /* ---- THE FACE, from dog/face.js ------------------------------------
+     The eye, the nose and the mouth moved out so the profile can draw the real
+     ones (see that file's header). These shims hand them what they used to close
+     over, so every call site in this file is unchanged and the extraction stays
+     provable by the pixel gates. */
   function drawEye(c, ex, ey, w, h, open, smi, tiltA, side, lead) {
-    const hh = h * 0.5 * clamp(open, 0.02, 1.25);
-    const topC = -hh * 1.36;
-    const botC = hh * 1.36 * (1 - smi * 1.92);
-    /* THE EYES LEAD THE HEAD: the lens slides inside the socket ahead of the
-       head rotation. There is no visible sclera, so moving the lens itself is
-       what reads as "she looked". */
-    const EL = R.eyeLead;
-    if (lead) { ex += lead[0] * w * EL.shiftX; ey += lead[1] * h * EL.shiftY; }
-    c.save();
-    c.translate(ex, ey); c.rotate(tiltA * side);
-    c.beginPath();
-    c.moveTo(-w / 2, 0);
-    c.quadraticCurveTo(w * 0.11 * side, topC, w / 2, 0);
-    c.quadraticCurveTo(-w * 0.11 * side, botC, -w / 2, 0);
-    c.closePath();
-    c.restore();
-    c.fillStyle = pal.eye; c.fill();
-    c.strokeStyle = pal.eye; c.lineWidth = 2.1; c.lineJoin = 'round'; c.stroke();
-    /* catchlights on the same screen side in both eyes: one light source */
-    const hv = clamp((open - 0.30) / 0.70, 0, 1) * (1 - smi * 0.62);
-    if (hv > 0.02) {
-      c.save(); c.translate(ex, ey); c.rotate(tiltA * side);
-      /* catchlight slides further than the lens: cheap parallax inside the eye */
-      const cx = lead ? lead[0] * w * EL.catchlight * 0.5 : 0;
-      const cy = lead ? lead[1] * hh * EL.catchlight * 0.5 : 0;
-      /* A SPECULAR MUST STAY SMALL, AND IT MUST SHRINK WITH THE LID.
-         Both radii used to be authored off different axes: ry off `hh` (which
-         collapses as the eye closes) but rx off `w` (which does not). So the
-         moment the eye squinted — every petting frame, every happy blink — the
-         highlight stopped being a round glint and became a WIDE WHITE BAR
-         spanning 42% of the eye on a lens only a couple of units tall. On a
-         narrowed eye that bar is indistinguishable from exposed sclera, and
-         sclera is the single strongest "this dog is uneasy" cue there is. It is
-         most of why the Schnoodle read as sly rather than pleased.
-         `k` is how open the lid actually is; the highlight now narrows with it,
-         so it stays a glint in every pose.
-         OPT-IN, like every other face capability: a breed that does not set
-         `face.eyeHi` resolves kx=1 and s=1 and renders byte-identically to
-         before, so the Shiba and the Cockapoo (whose eyes both read correctly
-         already) are untouched. */
-      const HI = faceCap.eyeHi === undefined ? null : faceCap.eyeHi;
-      const k = HI === null ? 1 : clamp(hh / Math.max(1e-4, h * 0.5), 0, 1.25);
-      const kx = HI === null ? 1 : 0.52 + 0.48 * k;
-      const s = HI === null ? 1 : HI;
-      c.fillStyle = pal.eyeHi; c.globalAlpha = 0.96 * hv;
-      ell(c, w * 0.19 - cx, -hh * 0.40 - cy, w * 0.21 * kx * s, hh * 0.29 * s, -0.45); c.fill();
-      /* the bounce light off the cheek. Shrunk with the lid for the same
-         reason: on a crescent eye this sits in the lower half, which is exactly
-         where sclera would show on an anxious dog. */
-      c.globalAlpha = 0.50 * hv * (HI === null ? 1 : 0.35 + 0.65 * k);
-      ell(c, -w * 0.20, hh * 0.34, w * 0.11 * kx * s, hh * 0.15 * s, 0.3); c.fill();
-      c.globalAlpha = 1; c.restore();
-    }
+    return faceEye(c, ex, ey, w, h, open, smi, tiltA, side, lead,
+      { pal, R, faceCap });
+  }
+  function drawNose(c, nsx, nsy) {
+    return faceNose(c, nsx, nsy, { pal, D, faceCap });
+  }
+  function drawMouth(c, mx, my, op, smi, tg) {
+    return faceMouth(c, mx, my, op, smi, tg, { pal, D, MK });
   }
 
-  /* the pair, so drawFace and the deferred `eyesOver` path cannot drift apart */
   function drawEyePair(c, e) {
     const px = R.parallax;
     const [eX, fEye, eYv, fl, fr, open, smi, lead] = e;
@@ -1215,84 +701,6 @@ export function createDogRenderer(rig) {
    * of the pair was eating four units off each side of it, and a black nose
    * bitten down to a sliver is most of why the Schnoodle's muzzle stopped
    * reading as a face at all. On a real dog the nose sits proud ON the hair.
-   */
-  function drawNose(c, nsx, nsy) {
-    const nw = D.muzY * 0.42 * (faceCap.noseSize === undefined ? 1 : faceCap.noseSize);
-    c.save(); c.translate(nsx, nsy);
-    c.beginPath();
-    crClosed(c, [pt(0, -nw * 0.78), pt(nw * 0.89, -nw * 0.61), pt(nw, nw * 0.17), pt(nw * 0.42, nw * 0.75),
-      pt(0, nw * 0.83), pt(-nw * 0.42, nw * 0.75), pt(-nw, nw * 0.17), pt(-nw * 0.89, -nw * 0.61)], 1);
-    c.fillStyle = pal.nose; c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.32)';
-    ell(c, -nw * 0.30, -nw * 0.33, nw * 0.39, nw * 0.24, -0.4); c.fill();
-    c.restore();
-  }
-
-  function drawMouth(c, mx, my, op, smi, tg) {
-    const cw = (D.muzY * 0.62 + smi * 3.2) * MK.w;
-    const lipY = my;
-    if (op > 0.03) {
-      const oh = op * 20;
-      const mouthPath = () => {
-        c.beginPath();
-        c.moveTo(-cw + mx, lipY - 1);
-        c.quadraticCurveTo(mx, lipY - 3.5, cw + mx, lipY - 1);
-        c.bezierCurveTo(cw * 0.95 + mx, lipY + oh * 0.72, cw * 0.45 + mx, lipY + oh, mx, lipY + oh);
-        c.bezierCurveTo(-cw * 0.45 + mx, lipY + oh, -cw * 0.95 + mx, lipY + oh * 0.72, -cw + mx, lipY - 1);
-        c.closePath();
-      };
-      mouthPath();
-      c.fillStyle = pal.mouth; c.fill();
-      const tl = oh * (0.42 + tg * 0.5);
-      c.save();
-      mouthPath(); c.clip();
-      c.fillStyle = pal.tongue;
-      ell(c, mx, lipY + oh - tl * 0.30, cw * 0.78, tl * 0.92); c.fill();
-      c.strokeStyle = pal.tongueSh; c.lineWidth = 1.6;
-      c.beginPath(); c.moveTo(mx, lipY + oh - tl * 1.1); c.lineTo(mx, lipY + oh); c.stroke();
-      c.restore();
-      /* little teeth, but only on a properly open mouth — on a small grumble
-         they read as a comedy grimace */
-      const th = clamp((op - 0.30) / 0.45, 0, 1);
-      if (th > 0.02) {
-        c.fillStyle = '#fffaf0';
-        const tw2 = 0.16 * th, td = 3.2 * th;
-        c.beginPath(); c.moveTo(mx - cw * (0.42 + tw2), lipY - 0.5); c.lineTo(mx - cw * (0.42 - tw2), lipY - 0.5);
-        c.lineTo(mx - cw * 0.42, lipY + td); c.closePath(); c.fill();
-        c.beginPath(); c.moveTo(mx + cw * (0.42 - tw2), lipY - 0.5); c.lineTo(mx + cw * (0.42 + tw2), lipY - 0.5);
-        c.lineTo(mx + cw * 0.42, lipY + td); c.closePath(); c.fill();
-      }
-      c.strokeStyle = pal.line; c.lineWidth = 2.0;
-      c.beginPath(); c.moveTo(-cw + mx, lipY - 1);
-      c.quadraticCurveTo(mx, lipY - 3.5, cw + mx, lipY - 1); c.stroke();
-    }
-    /* the classic shiba "w" — corners RISE with the smile, so a neutral
-       face never reads as a frown */
-    const dip = (2.6 - smi * 1.1) * MK.dip;
-    const corner = (-2.2 - smi * 5.6) * MK.lift + (op > 0.03 ? 1.4 : 0);
-    c.strokeStyle = pal.line; c.lineWidth = 2.2 * MK.weight; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(mx, lipY - 5.0);
-    c.quadraticCurveTo(mx - cw * 0.52, lipY + dip, mx - cw, lipY + corner);
-    c.stroke();
-    c.beginPath();
-    c.moveTo(mx, lipY - 5.0);
-    c.quadraticCurveTo(mx + cw * 0.52, lipY + dip, mx + cw, lipY + corner);
-    c.stroke();
-    /* the philtrum grows DOWNWARD from a fixed top, so shortening it cannot
-       slide the lip line off the muzzle */
-    c.lineWidth = 1.8 * MK.weight;
-    c.beginPath(); c.moveTo(mx, lipY - 5.2 - 4.3 * MK.philtrum); c.lineTo(mx, lipY - 5.2); c.stroke();
-  }
-
-  /**
-   * A HANGING EAR. `rig.pose.earNodes[e]` is a spring chain resolved in rig.js
-   * in a canonical frame where +x is outward from the skull and +y is down; we
-   * mirror x for the near/far side exactly as the rigid ear does.
-   *
-   * The ear is the single best piece of secondary motion on a floppy breed, so
-   * it is drawn as a real tapered ribbon over the chain rather than a rotated
-   * sprite: the tip genuinely lags, overshoots and settles last.
    */
   function drawEarChain(c, side, e, yawv, back, scaleF) {
     const nodes = rig.pose.earNodes && rig.pose.earNodes[e];
@@ -1566,53 +974,6 @@ export function createDogRenderer(rig) {
                velocity so they swing, 'topknot' takes light head parallax
        mirror  draw both sides
      ================================================================== */
-  /**
-   * A furnishing is ONE COHESIVE MASS with a tufted edge — authored as a
-   * closed outline exactly like a silhouette, then broken along its normals
-   * by the same |sin|^pow profile the coat uses.
-   *
-   * (The first attempt drew each furnishing as a cluster of overlapping
-   * discs. Rendered, a white disc cluster on a dark muzzle reads
-   * unmistakably as SOAP SUDS, not as a beard — the individual circles stay
-   * legible and the eye names them. A single tufted path reads as hair.)
-   *
-   * Paths are static in head-local space, so every one is tufted ONCE here at
-   * construction and only translated/scaled per frame.
-   */
-  function buildFluff(poly, salt, amp, cycles, pow, rim) {
-    const rs = resampleClosed(poly, 4);
-    const n = rs.length;
-    const norms = loopNormals(rs);
-    const raw = new Float32Array(n);
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      const u = i / n;
-      let v = Math.pow(Math.abs(Math.sin(Math.PI * cycles * u + salt)), pow);
-      v *= 1 + 0.34 * Math.sin(u * TAU * 3 + salt * 1.9);
-      raw[i] = v; sum += v;
-    }
-    const mean = sum / n;
-    /* `rim` scales the dark edge. A flat 2 units is right on a beard 45 units
-       deep and far too heavy on a brow only 10 deep: there, rim plus tuft is a
-       dim grey skirt as thick as the pale mass it surrounds, and the brow stops
-       reading as a brow and starts reading as a smudge. */
-    const rw = 2.0 * (rim === undefined ? 1 : rim);
-    const fill = [], dark = [];
-    let y0 = Infinity, y1 = -Infinity;
-    for (let i = 0; i < n; i++) {
-      const d = amp * (raw[i] - mean + 0.34);
-      const x = rs[i].x + norms[i].x * d, y = rs[i].y + norms[i].y * d;
-      fill.push(pt(x, y));
-      dark.push(pt(x + norms[i].x * rw, y + norms[i].y * rw));
-      if (y < y0) y0 = y;
-      if (y > y1) y1 = y;
-    }
-    /* `base` is the SMOOTH resampled contour, before tufting. A contact shadow
-       traced round the ragged edge is just more ragged edge; traced round the
-       smooth one it reads as the form's shadow on the face underneath. */
-    return { fill, dark, base: rs, y0, y1 };
-  }
-
   /* precomputed furnishing geometry, per entry per side */
   const furnish = [];
   {
@@ -1630,66 +991,6 @@ export function createDogRenderer(rig) {
           f.tuftCycles || 9, f.tuftPow || 0.8, f.rim);
       }
       furnish.push({ f, sides, geo });
-    }
-  }
-
-  /**
-   * ONE furnishing side's MASS — contact shadow, dark rim, fill, form shade —
-   * in head-local coordinates.
-   *
-   * Pulled out of drawFurnishings so that the live path and the pre-baked path
-   * below run the exact same drawing code and cannot drift apart. Everything
-   * here is static in head-local space (see buildFluff), which is precisely
-   * what makes the bake possible.
-   */
-  function fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha) {
-    /* CONTACT SHADOW — what stops a furnishing reading as a decal.
-       A pale mass laid on the face with no shadow under it has no stated
-       relationship to the head: it hovers in front of the face. A brow
-       physically OVERHANGS the brow ridge, so it throws a soft shadow down onto
-       the lid — and drawing that shadow is what drops it back ONTO the lid
-       without moving it down over the eye and re-crushing it (the opposite
-       failure). Traced round the SMOOTH base contour, offset down, and mostly
-       hidden behind the mass itself: all that shows is the crescent below the
-       lower edge. */
-    if (f.contact) {
-      const CT = f.contact;
-      const passes = CT.soft === false ? 1 : 2;
-      for (let q = passes; q >= 1; q--) {
-        c.globalAlpha = alpha * (CT.alpha || 0.20) / passes;
-        c.save();
-        c.translate((CT.dx || 0) * hw * sd, (CT.dy === undefined ? 0.06 : CT.dy) * hh * (q / passes));
-        c.beginPath(); crClosed(c, geo.base, 1);
-        c.fillStyle = pal[CT.color] || dark; c.fill();
-        c.restore();
-      }
-      c.globalAlpha = alpha;
-    }
-    c.beginPath(); crClosed(c, geo.dark, 1);
-    c.fillStyle = dark; c.fill();
-    c.beginPath(); crClosed(c, geo.fill, 1);
-    c.fillStyle = main; c.fill();
-    /* a soft inner shade so the mass has volume rather than reading as a
-       flat paper cutout stuck on the face */
-    if (f.shadeIn || f.shadeUnder) {
-      c.beginPath(); crClosed(c, geo.fill, 1);
-      c.save(); c.clip();
-      /* `shadeIn` shades from the TOP down, which is right for a beard
-         hanging in the shadow of the jaw. It is backwards for a brow: an
-         overhanging mass is LIT on top and dark underneath, and shading it
-         the other way lights it from below — one more reason the brows read
-         as pasted on rather than as part of the skull. `shadeUnder` runs the
-         ramp the other way, and over the furnishing's OWN extent rather than
-         the head's, so a shape only a fifth of a head deep actually gets the
-         full ramp instead of a flat slice of it. */
-      const sg = f.shadeUnder
-        ? c.createLinearGradient(0, geo.y1, 0, geo.y0 - (geo.y1 - geo.y0) * 0.25)
-        : c.createLinearGradient(0, -hh * 0.2, 0, hh * 0.5);
-      sg.addColorStop(0, rgba(dark, f.shadeUnder || f.shadeIn));
-      sg.addColorStop(1, rgba(dark, 0));
-      c.fillStyle = sg;
-      c.fillRect(-hw, -hh, hw * 2, hh * 2);
-      c.restore();
     }
   }
 
@@ -1756,7 +1057,7 @@ export function createDogRenderer(rig) {
     const bc = cv.getContext('2d');
     if (!bc) { bakes.set(key, null); return null; }
     bc.setTransform(K, 0, 0, K, -x0 * K, -y0 * K);
-    fluffMass(bc, f, geo, sd, main, dark, hw, hh, 1);
+    fluffMass(bc, f, geo, sd, main, dark, hw, hh, 1, pal);
     const out = { cv, x0, y0, w: x1 - x0, h: y1 - y0 };
     /* the key space is bounded in practice (7 sides x one scale x the pristine
        palette), but never let a resize storm grow it without limit */
@@ -1860,7 +1161,7 @@ export function createDogRenderer(rig) {
           bk = fluffBake(ent, i, sd, main, dark, baseK * Math.max(1, f.scale || 1));
         }
         if (bk) c.drawImage(bk.cv, bk.x0, bk.y0, bk.w, bk.h);
-        else fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha);
+        else fluffMass(c, f, geo, sd, main, dark, hw, hh, alpha, pal);
         c.globalAlpha = 1;
         c.restore();
         /* a few wispy hairs sweeping out of the cluster — this is what makes
@@ -2073,12 +1374,12 @@ export function createDogRenderer(rig) {
 
     /* ---- body ---- */
     const sxB = P.bodyHW / D.bodyHW, syB = P.bodyHH / D.bodyHH;
-    const b = buildPart('body', pet, sxB, syB, P.bodyX, P.bodyY, 1.0, null, wet);
+    const b = part.body.build(pet, sxB, syB, P.bodyX, P.bodyY, 1.0, null, wet);
     c.save();
     c.translate(P.bodyX, P.bodyY);
     c.rotate(P.bodyRot);
     /* coat depth BEHIND the silhouette, so the edge breaks irregularly */
-    drawFringe(c, 'body', b, D.bodyHH, wet);
+    part.body.fringe(c, D.bodyHH, wet);
     /* outline */
     c.beginPath(); crClosed(c, b.o, 1);
     c.fillStyle = pal.line; c.fill();
@@ -2090,7 +1391,7 @@ export function createDogRenderer(rig) {
     c.fillStyle = G.bodyShade;
     c.fillRect(-D.bodyHW * 1.4, -D.bodyHH * 1.6, D.bodyHW * 2.8, D.bodyHH * 3.2);
     drawMarkings(c, 'body', P.bodyHW, P.bodyHH, pet, P.bodyX, P.bodyY, null);
-    drawFur(c, 'body', b, D.bodyHH, P.bodyX, P.bodyY, wet);
+    part.body.fur(c, D.bodyHH, P.bodyX, P.bodyY, wet);
     drawWet(c, coat, P.bodyHW, P.bodyHH);
     drawGloss(c, coat, P.bodyHW, P.bodyHH);
     c.fillStyle = G.rim;
@@ -2102,7 +1403,7 @@ export function createDogRenderer(rig) {
     drawFoam(c, coat, 'body', P.bodyHW, P.bodyHH);
     c.restore();
     /* individual curls breaking the rim — outside the clip on purpose */
-    drawFlyaway(c, 'body', b, D.bodyHH, wet);
+    part.body.flyaway(c, D.bodyHH, wet);
     c.restore();
 
     /* ---- ART FIX 2: blend the tail root into the rump ---- */
@@ -2307,8 +1608,8 @@ export function createDogRenderer(rig) {
       x + yawSkew * (1 - Math.abs(x) / D.headHW * 0.45),
       y * (1 - P.pitch * R.parallax.pitchSquash) - P.pitch * R.parallax.pitchShift,
     ];
-    const hb = buildPart('head', pet, 1, 1, P.headX, P.headY, 1.0, warp, wet);
-    drawFringe(c, 'head', hb, D.headHH, wet);
+    const hb = part.head.build(pet, 1, 1, P.headX, P.headY, 1.0, warp, wet);
+    part.head.fringe(c, D.headHH, wet);
     /* a topknot rises from BEHIND the skull line, then the head covers its
        roots — drawn on top it would read as a hat */
     drawFurnishings(c, 'under', coat);
@@ -2319,7 +1620,7 @@ export function createDogRenderer(rig) {
     c.save(); c.clip();
     c.fillStyle = G.headShade;
     c.fillRect(-D.headHW * 1.3, -D.headHH * 1.3, D.headHW * 2.6, D.headHH * 2.6);
-    drawFur(c, 'head', hb, D.headHH, P.headX, P.headY, wet);
+    part.head.fur(c, D.headHH, P.headX, P.headY, wet);
     drawFace(c, aff, petLevel);
     drawWet(c, coat, D.headHW, D.headHH);
     drawGloss(c, coat, D.headHW, D.headHH);
@@ -2328,7 +1629,7 @@ export function createDogRenderer(rig) {
     drawSoil(c, coat, 'head', D.headHW, D.headHH);
     drawFoam(c, coat, 'head', D.headHW, D.headHH);
     c.restore();
-    drawFlyaway(c, 'head', hb, D.headHH, wet);
+    part.head.flyaway(c, D.headHH, wet);
 
     /* facial furniture that is allowed to break the head silhouette — a
        schnauzer beard hangs well below the jaw, and eyebrows overhang. Drawn

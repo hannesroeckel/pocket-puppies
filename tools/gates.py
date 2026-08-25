@@ -80,6 +80,7 @@ GATES = [
     ("decorgate",      "decorgate.py",      [], False),
     ("discgate",       "discgate.py",       [], False),
     ("placegate",      "placegate.py",      [], False),
+    ("walkgate",       "walkgate.py",       [], False),
     ("howtogate",      "howtogate.py",      [], False),
     ("bowlperf",       "bowlperf.py",       [], False),
     ("bowlgate",       "bowlgate.py",       [], False),

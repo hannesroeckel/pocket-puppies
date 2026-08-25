@@ -943,6 +943,22 @@ export const BALANCE = {
     /* ---- BEAT 3: ABSENCE -------------------------------------------
        The room is empty and DELIBERATELY A LITTLE MELANCHOLY. She may close
        the app entirely; nothing here ticks. */
+    /* ---- BEAT 2.5: THE DEPARTURE ------------------------------------
+       He trots out of frame instead of blinking out of it. The only beat that
+       uses the profile dog, and the reason `dog/side.js` and the sprite sheets
+       exist at all.
+
+       `dur` is short on purpose: this is a send-off, not a journey. The absence
+       is the point of the feature and the clock for it started the moment she
+       pressed Set off (state/walks.js), so these two seconds are inside the
+       walk, not added to it.
+
+       `stride` is HOW FAR HE TRAVELS PER GAIT CYCLE. Driving the cycle off
+       distance rather than off time is what stops him moonwalking — a stride has
+       to be a stride whatever the frame rate did. Measured against the sheet: his
+       four frames cover about one body length, and he is ~150 units tall. */
+    off: { dur: 2.1, exit: 150, stride: 92, scale: 1, fade: 0.28, ramp: 0.24 },
+
     away: {
       /* the cool wash over the empty room */
       chill: 0.34, dim: 0.22, moteSlow: 0.45,
@@ -2122,6 +2138,138 @@ export const BALANCE = {
   springStep: { h: 0.008, maxSub: 6, minDt: 0.009 },
 
   /* ---- rig motion ---------------------------------------------------- */
+  /* ==================================================================
+     THE PROFILE DOG (dog/side.js)
+
+     Raised and approved after eight stages of not having one: "Actually I do
+     want a side and back profile of the dogs". Built against
+     `docs/reference/side-run-cycle.png`.
+
+     EVERY NUMBER IN HERE IS A MULTIPLIER ON A FRONTAL PROPORTION, never an
+     absolute. `breed.proportions` already says how big this dog's head and body
+     and legs are, per breed, and a second set of absolute sizes would mean a
+     Shiba in profile and a Shiba face-on were two different dogs. So this block
+     is the ART DIRECTION — what changes when you walk around him — and the
+     breed table stays the single source of truth for how big he is.
+     ================================================================== */
+  side: {
+    /* a puppy in profile is LONGER than he is wide face-on, and his chest is
+       deeper than his flank is tall */
+    body: { long: 0.62, deep: 0.40 },
+    /* the head is huge and sits forward and high, over the shoulders */
+    head: { w: 0.44, h: 0.42, fwd: 0.52, up: 0.62 },
+    /* the muzzle is the FRONT OF THE FACE now, not a shape stuck on it */
+    muzzle: { w: 0.30, h: 0.24, x: 0.62, y: 0.30, face: 1.05 },
+    /* `face` is the muzzle dimension dog/face.js sizes the nose and mouth off
+       (it reads it as `D.muzY`); `mouth` is where the mouth sits on the muzzle */
+    nose: { x: 0.72, y: 0.12, r: 0.30 },
+    mouth: { x: 0.10, y: 0.42 },
+    /* WHERE THE FURNISHINGS SIT IN PROFILE. New art, matched to the breed's own
+       furnishing entry by tag — see the note in side.js's SHAPE block. */
+    /* SIZED OFF THE MUZZLE, and the first go was not: at `w 0.62` of the BREED's
+       muzzle width the beard came out twice the width of the PROFILE muzzle
+       (which is `muzzle.w` 0.30 of the same number) and buried the whole face in
+       a pale blob. These are multiples of the profile muzzle's own half-extents. */
+    furn: {
+      beard: { w: 1.15, h: 1.30, x: 0.44, y: 0.52 },
+      moustache: { w: 0.62, h: 0.52, x: 0.60, y: 0.28 },
+    },
+    /* the eye is drawn by dog/face.js now, which wants a WIDTH and a lid
+       aspect rather than a radius: `w` across, `aspect` how tall against that,
+       `tilt` the lid rotation that gives him his expression. */
+    eye: { x: 0.30, y: -0.02, w: 0.26, aspect: 1.02, tilt: 0.10 },
+    /* one ear, hanging off the near cheek, swinging with the stride */
+    /* ONE EAR, AND IT IS NOT A PLANK. At w 0.62 / h 0.92 and barely rotated it
+       came out as tall as his whole body, hanging down the middle of him over the
+       front legs — the single worst thing in the first two renders. It is a lobe
+       lying back along the cheek: half the size, well behind the eye, and rotated
+       enough to follow the jaw. */
+    /* AND IT HAS TO HANG PAST THE SKULL. At `y -0.06` the whole ear sat INSIDE
+       the head's outline, so it read as a pale patch on the cheek rather than as
+       an ear: what makes an ear an ear from the side is that its silhouette
+       BREAKS the head's. Lower, taller, and only lightly laid back. */
+    /* MEASURED, not guessed. At h 0.74 the ear came out 44.4 half-units against
+       a head of 44.7 — as tall as his whole skull and only 31 wide, which is why
+       it read as a tongue hanging to his chest. A drop ear is about 60% of head
+       height and reasonably broad, and it wants to hang from behind the eye with
+       its bottom just past the jaw so its silhouette BREAKS the head's. */
+    ear: {
+      /* A DROP EAR hangs from behind the eye with its bottom past the jaw, so
+         its silhouette BREAKS the head's — which is what makes it read as an ear
+         side-on rather than as a pale patch on the cheek. */
+      drop: { w: 0.52, h: 0.44, x: 0.22, y: 0.44, angle: 0.18 },
+      /* AN ERECT EAR stands on the crown: above the head's centre, barely
+         behind it, tipped back a little. Its `y` is NEGATIVE, which is the whole
+         difference — everything else here is the same kind of number. */
+      prick: { w: 0.54, h: 0.46, x: 0.34, y: -0.56, angle: 0.24 },
+    },
+    /* the tail read as a SECOND RUMP at 0.30 x 0.46 — a scalloped mass the size
+       of his hindquarters, at mid-height. A plume is small, high and behind. */
+    /* `curl` and `carry` are how much `breed.proportions.tailCurl` / `tailCarry`
+       rotate the plume: a Shiba's 0.72 curl lifts it over the back, a doodle's
+       0.1 leaves it out behind. */
+    tail: { x: 0.88, y: 0.54, w: 0.19, h: 0.26, angle: -1.15, curl: 1.15, carry: 0.55 },
+    /* the legs: stubs, no joints (the reference has none), with the hind pair
+       a little longer and the paw a little wider than the leg */
+    /* thicker than the frontal legs, not thinner: in profile a leg is a whole
+       limb rather than a strip of one, and at 1.05 they read as wire. Shorter,
+       too — the reference puppy is low to the ground. */
+    /* RETUNED FOR A REAL LIMB. `len 0.98 / w 1.55 / paw 0.70` were tuned against
+       the first renderer, which stroked a line with a round cap: to read as a leg
+       at all, a capsule has to be thick. `drawLimb` (dog/part.js, the frontal
+       dog's own leg) tapers from the hip, bows at the knee and draws its own pale
+       paw at `w * 1.06 * paw` — so the old width came back as four boots with a
+       mitten on each. Thinner, longer, and a paw barely wider than the ankle.
+       `bow` is the knee: without it a leg is a rod. */
+    leg: { len: 1.34, w: 0.78, hind: 1.04, paw: 0.44, bow: 5.0,
+      shoulderX: 0.56, hipX: 0.68 },
+    /* THE NECK: withers to the back of the jaw, wider at the chest end, and
+       drawn with NO contour — see the rule quoted in side.js's `neck`. */
+    neck: { fromX: 0.52, fromY: 0.34, toX: 0.22, toY: 0.40, w0: 0.70, w1: 0.52 },
+    cream: { w: 0.44, h: 0.42, alpha: 0.85 },
+    shadow: { ink: 'rgba(74,58,42,0.22)', alpha: 1, w: 0.92, h: 0.16 },
+    /* ---- THE SPRITE SHEETS (dog/sidesprite.js) ------------------------
+       The human drew the profile dog himself after the drawn one was rejected
+       twice, so `assets/side-*.webp` is art and this is how it is placed.
+
+       `height` is HOW TALL HE IS IN VIRTUAL UNITS at `rig.s === 1`, measured off
+       the drawn profile — 150 units — so swapping between the sprite and the
+       drawn dog cannot change the size of the animal. The shadow is ours: the
+       painted ones were keyed out by the slicer because a painted shadow cannot
+       shrink when he leaves the ground. */
+    /* `height` IS HOW TALL HE IS IN VIRTUAL UNITS at `rig.s === 1`, and 150 was a
+       guess that came back as a small dog next to the frontal one. Derived
+       instead: the frontal body is `bodyHW` 64.5 half-units, so 129 across; the
+       same body in profile is a bit over twice as long, ~280; and the sheets are
+       1.12 wide for every 1 tall, so 280 / 1.12 = 250. He is the same animal seen
+       from the side, which is the entire claim the profile has to make. */
+    sprite: { height: 250, shadowW: 0.32, shadowH: 0.055 },
+
+    /* ---- THE GAIT ----------------------------------------------------
+       A BOUND, not a trot, because that is what the reference draws: two
+       extended frames and two gathered ones, both front legs together. A trot
+       (diagonal pairs) is what a dog on a lead actually does and it is the
+       obvious next variant, but the art contract is the reference.
+
+       `lagFar` is why he reads as four legs rather than two: the far leg of a
+       pair is a fraction of a cycle behind the near one. */
+    gait: {
+      hz: 2.1,            // cycles per second at a normal trot
+      bob: 9,             // how far the whole dog lifts, once per cycle
+      stretch: 0.5,       // body lengthening on the extension
+      /* how far a paw travels fore and aft. 13 was tuned against legs a third
+         shorter; on a real limb the four frames came back nearly identical, and
+         a bound whose frames look the same is a dog on a conveyor belt. */
+      reach: 19,
+      paw: 7,             // how far it comes off the ground
+      foreshorten: 0.22,  // how much a leg shortens as it swings under him
+      lagFar: 0.08,       // the far leg of a pair, behind the near one
+      headBob: 3.2,
+      tail: 0.22,
+      ear: 0.30,
+    },
+  },
+
   rig: {
     place: { x: 178, y: 706, scale: 1.34 },
     breathIn: 0.38,

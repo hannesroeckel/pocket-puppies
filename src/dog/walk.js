@@ -1,14 +1,28 @@
 /* ==========================================================================
    dog/walk.js — WALKS, REFRAMED. Four beats and not one frame of gait.
 
-   THE CONSTRAINT THAT SHAPES EVERYTHING: the rig is NEAR-FRONTAL ONLY. There
-   is no side-profile rig and none is being built — it was the single largest
-   art task in the project and it was consciously avoided (SCOPE.md, "the
-   decision that shapes everything"). If a later stage finds itself wanting a
-   walking gait cycle it must stop and re-read SCOPE.md rather than quietly
-   building one.
+   THE CONSTRAINT THAT SHAPED EVERYTHING, AND WHAT BECAME OF IT. This file was
+   written against "the rig is NEAR-FRONTAL ONLY; there is no side-profile rig and
+   none is being built", and it said that a later stage wanting a gait cycle must
+   stop and re-read SCOPE rather than quietly build one. That happened, in that
+   order: it was raised, and on 2026-08-20 the answer was yes —
 
-   So a walk is not a side-scroll. It is:
+     "Actually I do want a side and back profile of the dogs ... these new views
+      would make improve the game a lot"
+
+   There is a profile dog now (`dog/sidesprite.js`, the human's own art, with
+   `dog/side.js` as the drawn fallback), and the FIVE-line change it bought this
+   file is beat 2.5: he trots out of the room instead of blinking out of it.
+
+   EVERYTHING ELSE STAYED, and deliberately. A walk is still not a side-scroll:
+
+     - the ABSENCE is the point. Watching a dog walk for four minutes is not
+       better than missing him for four minutes.
+     - the RETURN STAYS FRONTAL. He comes home muddy, and mud is a per-region
+       wash on a drawn dog — a painted sheet cannot get dirty. The one beat where
+       his state is the whole payload is the one beat that must not be a sprite.
+
+   So a walk is:
 
      1 PREPARE   the leash comes out and he goes ELECTRIC. This is the payload
                  of the whole feature. It is a frontal animation the existing
@@ -46,6 +60,11 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { Spring, makeSprings, approach } from '../engine/spring.js';
+/* THE PROFILE DOG, for the departure only — see `drawOff` below. The sprite is
+   the human's own art and the drawn one is the fallback for a breed with no
+   sheet; both take the same arguments, so this file does not care which it has. */
+import { createSideSprite, hasSideSprite } from './sidesprite.js';
+import { createSideDog } from './side.js';
 import { TAU, clamp, lerp, smooth, smoother, hump, easeOut3, easeOutBack, roundRect, ell } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
 import { capitalise } from '../state/game.js';
@@ -61,6 +80,7 @@ const W = BALANCE.walk;
 const P4 = W.prep;
 const HM = W.home;
 const AW = W.away;
+const WK = W;
 const VW = BALANCE.view.W;
 const VH = BALANCE.view.H;
 
@@ -85,6 +105,10 @@ const COPY = {
   mapTitle: () => 'Where shall we go?',
   mapHint: () => 'Tap a place, or draw a route with your finger',
   setOff: () => 'Set off',
+  /* beat 2.5: he is walking out. Said while he is still on screen, so the room
+     is not claiming he is here (the idle hint's "<name> is here" was showing over
+     a dog halfway out of the door). */
+  offGo: (P, n) => `Off ${P.they} go${P.s}`,
   routeName: (r) => ({
     park: 'the park', high: 'the high street', river: 'the river', woods: 'the woods',
   }[r] || r),
@@ -183,6 +207,18 @@ export function createWalk(rig, opts = {}) {
 
   let beat = '';                 // '' | 'prep' | 'map' | 'home'  ('away' below)
   let away = false;              // he is out. Kept separate: it is a STATE, not a beat.
+  /* THE DEPARTURE. `off` counts up while he trots out of frame; the profile dog
+     is built lazily on the first walk, because most sessions never take one and a
+     sprite sheet is 111KB of decode nobody asked for. */
+  let off = -1;
+  let sprite = null;             // the human's sheet, if this breed has one
+  let drawn = null;              // the drawn profile: fallback, and the Shiba
+  let sideKind = '';
+  /* WHICH DOG THE DEPARTURE IS USING, decided once when she presses Set off and
+     not revisited. Deciding per frame produced a POP: frame 0 was the drawn
+     profile because the sheet had not decoded, and frame 1 onward was the sprite.
+     One departure, one dog — consistency beats a better second half. */
+  let lockedDrawn = false;
   let t = 0;                     // seconds in the current beat
   let clock = 0;                 // monotonic, own
   let hint = '';
@@ -251,6 +287,11 @@ export function createWalk(rig, opts = {}) {
     if (away) { toast(COPY.awayBusy(Pn())); return false; }
     if (busyElsewhere()) return false;
     beat = 'prep';
+    /* START THE SHEET DECODING NOW. The departure is two beats away — the lead,
+       then the map — which is seconds of real time, and it is the difference
+       between him walking out and him being absent for the first five frames of
+       walking out (which is what the first render showed). */
+    ensureSide();
     t = 0;
     fizz = 0;
     sp.fizz.set(0);
@@ -310,7 +351,18 @@ export function createWalk(rig, opts = {}) {
   function setOff(mix, dur, path) {
     map.close();
     const a = game.startWalk({ mix, dur, path, rng });
-    away = true;
+    /* HE WALKS OUT NOW. `away` is deferred to the end of the departure: while
+       `off` is running he is still HERE, just in profile and on his way. The room
+       hides the frontal dog for both (`hidesDog`), so there is never a moment
+       with two of him on screen. */
+    off = 0;
+    ensureSide();
+    /* the sheet has had the lead beat and the map to decode in; if it still is
+       not here, this departure is the drawn dog's from beginning to end */
+    lockedDrawn = !(sprite && sprite.ready);
+    sideKind = lockedDrawn ? 'drawn' : 'sprite';
+    setHint(COPY.offGo(Pn(), nm()));
+    away = false;
     beat = '';
     t = 0;
     route = a.route;
@@ -443,6 +495,8 @@ export function createWalk(rig, opts = {}) {
     /* leaves an ACTIVE walk alone on purpose: `stop` tears the layer down, it
        does not cancel a walk he is actually on. Only `bringHome` ends one. */
     if (beat === 'home') finishHome();
+    /* a departure interrupted by leaving the scene simply completes: he IS out */
+    if (off >= 0) { off = -1; away = true; }
     beat = '';
     map.close();
     sp.walkW.to(0);
@@ -464,6 +518,15 @@ export function createWalk(rig, opts = {}) {
        first clip after the initial cancel drove pitch from +1.0 to -0.4 — he
        stopped looking at the lead and started sniffing the floor. */
     if (beat === 'prep' || beat === 'map' || beat === 'home') { if (idle) idle.cancel(0.9); }
+    /* THE DEPARTURE, and `away` only becomes true when he is actually gone. The
+       absence beat is a pure function of the wall clock (state/walks.js) and was
+       already started by `startWalk`, so nothing about the walk's duration
+       depends on how long this takes — he is simply visible for the first two
+       seconds of it. */
+    if (off >= 0) {
+      off += dt;
+      if (offU() >= 1) { off = -1; away = true; }
+    }
     if (bloom > 0) bloom = Math.max(0, bloom - dt * 3.4);
     for (let i = dropped.length - 1; i >= 0; i--) dropped[i].life += dt;
     if (card) {
@@ -839,9 +902,91 @@ export function createWalk(rig, opts = {}) {
     }
   }
 
+  /* ==================================================================
+     BEAT 2.5 — THE DEPARTURE
+     ==================================================================
+     He trots out of the room instead of blinking out of it. This is the only
+     thing the profile dog is used for, and the only thing this file needed him
+     for: the absence and the frontal return are unchanged.
+
+     THE SPRITE IF THERE IS ONE, THE DRAWN DOG IF NOT. Two breeds have sheets and
+     the Shiba does not; `hasSideSprite` decides and both take the same arguments,
+     so nothing below knows which it got. Built on the first walk rather than at
+     construction, because most sessions never take one and a sheet is 111KB of
+     decode nobody asked for. */
+  function ensureSide() {
+    if (sprite || drawn) return;
+    if (hasSideSprite(rig.breed.id)) {
+      sprite = createSideSprite(rig);
+      sideKind = sprite ? 'sprite' : '';
+    }
+    if (!sprite) { drawn = createSideDog(rig); sideKind = 'drawn'; }
+  }
+
+  /**
+   * WHICH PROFILE DOG TO DRAW THIS FRAME.
+   *
+   * The sheet is fetched and decoded asynchronously, and the first render of the
+   * departure caught that: frame 0 was an EMPTY ROOM. `sprite.draw` returns false
+   * before the image is ready, and nothing was drawing anything instead — he
+   * simply was not there for the first few frames of walking out.
+   *
+   * Two answers, both needed. `ensureSide` is now called when the LEAD COMES OUT
+   * rather than at Set off, so the sheet has the whole prepare beat and the map to
+   * decode in. And if it still is not ready, the drawn profile stands in — built
+   * lazily here, because on any normal run it is never built at all.
+   */
+  function activeSide() {
+    if (!lockedDrawn && sprite && sprite.ready) return sprite;
+    if (!drawn) { drawn = createSideDog(rig); }
+    return drawn;
+  }
+
+  /** how far through the departure, 0..1 */
+  function offU() {
+    return off < 0 ? 0 : clamp(off / Math.max(0.2, WK.off.dur), 0, 1);
+  }
+
+  /**
+   * DRAW HIM LEAVING. He starts where he was standing and walks off frame-left,
+   * fading only over the last stretch — a dog who dissolves in the middle of the
+   * room is a ghost, and one who is still solid at the frame edge is a cut.
+   */
+  function drawOff(g) {
+    if (off < 0) return;
+    const side = activeSide();
+    if (!side) return;
+    const u = offU();
+    const O = WK.off;
+    /* HE LEAVES AT A WALKING PACE. `easeOut3` was wrong in a way the first render
+       made obvious: it front-loads everything, so he SHOT across the rug and then
+       crept out. A dog walking out of a room accelerates once, from standing, and
+       then holds his speed until he is gone. So: ease in over the first `ramp` of
+       the beat, constant after, and never decelerate — a dog who slows down as he
+       reaches the door has changed his mind. */
+    const K = clamp(O.ramp === undefined ? 0.24 : O.ramp, 0.02, 0.9);
+    const raw = u < K ? (u * u) / (2 * K) : u - K / 2;
+    const pace = raw / (1 - K / 2);
+    const x = lerp(rig.home.x, -O.exit, pace);
+    /* the gait runs on DISTANCE, not on time, or he moonwalks: a stride has to be
+       a stride whatever the frame rate did */
+    const travelled = (rig.home.x + O.exit) * pace;
+    const phase = travelled / Math.max(1, O.stride);
+    side.draw(g, {
+      x,
+      y: rig.floorV,
+      s: rig.home.s * O.scale,
+      face: -1,
+      phase,
+      run: 1,
+      alpha: clamp((1 - u) / Math.max(0.01, O.fade), 0, 1),
+    });
+  }
+
   /** IN FRONT of the dog: the lead, the collar, and whatever is in his mouth */
   function drawFront(g) {
     const c = g.ctx;
+    drawOff(g);
     if (beat === 'prep' || beat === 'map') {
       /* the collar goes on before the lead is drawn over it */
       if (leash.on) {
@@ -1136,9 +1281,16 @@ export function createWalk(rig, opts = {}) {
     /** true while the walk owns the whole surface (chrome hides) */
     get modal() { return beat === 'prep' || beat === 'map' || beat === 'home'; },
     /** true while she must not be petted / fed / trained */
-    get busy() { return away || beat === 'home' || beat === 'prep' || beat === 'map'; },
+    /* THE DEPARTURE COUNTS AS BUSY. `hidesDog` is true while he walks out, so
+       without this the room would happily hand a tap to the petting field and
+       stroke a dog who is not being drawn. */
+    get busy() {
+      return away || off >= 0 || beat === 'home' || beat === 'prep' || beat === 'map';
+    },
     /** true while the room must not draw the dog at all */
-    get hidesDog() { return away; },
+    /* THE FRONTAL DOG IS HIDDEN WHILE HE IS LEAVING TOO, or there are two of him
+       on screen: one standing on the rug and one walking out of the door. */
+    get hidesDog() { return away || off >= 0; },
     /** true while the walk gets the pointer ahead of everything but the sheet */
     get owns() { return beat === 'prep' || beat === 'map' || beat === 'home'; },
     get away() { return away; },
@@ -1197,6 +1349,9 @@ export function createWalk(rig, opts = {}) {
         leash: [Math.round(leash.x), Math.round(leash.y)], held: leash.held, on: leash.on,
         clipT: +clipT.toFixed(2), spin: +spinT.toFixed(2),
         away, prog: +prog.toFixed(3), route, remain: remainWords,
+        /* THE DEPARTURE. Note `beat` already says the string 'off' for "no beat
+           is running", which is a different thing entirely — hence `leaving`. */
+        leaving: off >= 0, leaveU: off < 0 ? 0 : +offU().toFixed(3), sideKind,
         t: +t.toFixed(2), homeIn: +sp.homeIn.x.toFixed(3), carry: +sp.carry.x.toFixed(3),
         carried: carried.map((f) => f.id), dropped: dropped.map((d) => d.id),
         card: card ? card.lines : null,

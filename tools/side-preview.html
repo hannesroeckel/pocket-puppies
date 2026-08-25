@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>side profile — preview</title>
+<!--
+  tools/side-preview.html — THE PROFILE DOG, ON ITS OWN, AT FOUR PHASES.
+
+  A workbench, not a page anyone ships: `dog/side.js` is drawn straight onto a
+  canvas at the same four phases `docs/reference/side-run-cycle.png` shows, so
+  the render and the reference can be put side by side. It deliberately does NOT
+  go through the room — the art has to be right before anything depends on it,
+  and booting the whole scene to look at a silhouette means every change costs a
+  scene mount.
+
+  Driven by tools/sideshots.py. Not in sw.js's PRECACHE: it is a tool, like
+  tools/make-icons.html.
+-->
+<style>
+  html, body { margin: 0; background: #fdf6ea; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="cv" width="1774" height="887"></canvas>
+<script type="module">
+import { createRig } from '../src/dog/rig.js';
+import { createSideDog } from '../src/dog/side.js';
+import { createSideSprite, hasSideSprite } from '../src/dog/sidesprite.js';
+import BALANCE from '../src/state/balance.js';
+
+const cv = document.getElementById('cv');
+const c = cv.getContext('2d');
+
+/* the reference is 1774x887 with four frames across it, so the preview matches
+   that grid exactly — the whole point is to compare them at the same size */
+const FRAMES = 4;
+const CELL = cv.width / FRAMES;
+
+function render(breedId, phases, opts = {}) {
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#fdf6ea';
+  c.fillRect(0, 0, cv.width, cv.height);
+  const rig = createRig({ breed: breedId, reduced: false });
+  const side = createSideDog(rig);
+  /* the reference dogs are about 300px tall in an 887px frame; the rig's own
+     units put him at ~200, so one scale for the whole sheet */
+  const s = opts.scale === undefined ? 1.35 : opts.scale;
+  const groundY = cv.height * 0.68;
+  const g = { ctx: c, view: null };
+  phases.forEach((ph, i) => {
+    side.draw(g, {
+      x: CELL * (i + 0.5),
+      y: groundY,
+      s,
+      face: opts.face === undefined ? -1 : opts.face,
+      phase: ph,
+      run: opts.run === undefined ? 1 : opts.run,
+      /* the care state, so a muddy or soaking profile can be looked at — the
+         walk's whole payoff is him coming home with something on him */
+      coat: opts.coat || null,
+    });
+  });
+  return { geom: side.debug, breed: rig.breed.id };
+}
+
+/* THE SPRITE, drawn the same way and at the same scale, so the two can be put
+   side by side and compared honestly rather than from memory. */
+async function renderSprite(breedId, phases, opts = {}) {
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#7fae62';
+  c.fillRect(0, 0, cv.width, cv.height);
+  const rig = createRig({ breed: breedId, reduced: false });
+  const sp = createSideSprite(rig);
+  if (!sp) return { error: 'no sheet for ' + breedId };
+  for (let i = 0; i < 60 && !sp.ready; i++) await new Promise((r) => setTimeout(r, 50));
+  const g = { ctx: c, view: null };
+  const s = opts.scale === undefined ? 2.6 : opts.scale;
+  const groundY = cv.height * 0.72;
+  phases.forEach((ph, i) => {
+    sp.draw(g, { x: CELL * (i + 0.5), y: groundY, s,
+      face: opts.face === undefined ? -1 : opts.face,
+      phase: ph, run: opts.run === undefined ? 1 : opts.run });
+  });
+  return sp.debug;
+}
+
+window.__side = {
+  renderSprite,
+  hasSideSprite,
+  render,
+  /* the four keys of the reference: extended, gathered, extended, compressed */
+  keys: [0.0, 0.25, 0.5, 0.75],
+  breeds: ['cockapoo', 'schnoodle', 'shiba'],
+  BALANCE,
+};
+/* a first draw so the page is never blank */
+window.__side.last = render('cockapoo', window.__side.keys);
+</script>
+</body>
+</html>

@@ -4025,3 +4025,110 @@ Looked at: `review/howto-disc.png`, `howto-train.png`, `howto-brush.png`, and
   is not called, because a footfall loop needs a cadence and the run has no gait to hang one on.
 - **The explainers are per save, not per dog.** Right for a mode, but it means a second dog's first
   trial is unexplained even though it is her first trial *with him*.
+
+
+## 33. The dog has a side (`feature/side-profile`) — as built
+
+`docs/SCOPE.md` said on day one: *"no side-profile rig is being built. If any later stage finds itself
+wanting one, stop and raise it rather than quietly building one."* It was raised, and on 2026-08-20:
+
+> *"Actually I do want a side and back profile of the dogs, we even had a image with chatgpt
+> generated for this as a reference. these new views would make improve the game a lot"*
+
+Cache **8.20.0**, no schema change, six new modules and two images.
+
+### 33.1 What was built, and in what order it was thrown away
+
+Three attempts, and the first two were mine.
+
+**The drawn profile, v1.** `dog/side.js` composed body, head, ear, muzzle, legs and tail as polygons
+and drew its own coat: one sine-modulated outline and some interior arcs. Verdict: *"that looks
+horrible. cant we do it from scratch wihtout the reference image?"*
+
+**The drawn profile, v2 — the extraction.** The diagnosis was a number: **`dog/draw.js` had 28 drawing
+functions and the profile used 2 of them.** So seven batches moved the real ones out, each proven
+pixel-identical on the frontal dog before the next began:
+
+| batch | landed as | what it is |
+|---|---|---|
+| 1 | `dog/part.js` `createFurredPart` | the coat: tuft profile, scallop, **fringe**, flyaway, clumps |
+| 2 | `BALANCE.side.ear.{drop,prick}` | the ear a breed actually has, off `breed.ear` |
+| 3 | `dog/part.js` `drawLimb` | tapered ribbon, bowed knee, real paw |
+| 4 | `dog/face.js` | the authored lid, the sliding catchlight, the eight-point nose |
+| 5 | `BALANCE.side.furn` | the beard and moustache — **new art, not a move** |
+| 6 | `side.js` `neck()`, `tail.curl/carry` | the join; the tail each breed carries |
+| 7 | `dog/coatstate.js` | muddy, soapy, wet, glossy |
+
+`draw.js` went from 2278 lines to 1679 and nothing that left it was rewritten on the way.
+Verdict: *"no it still doesnt look like a proper dog, especially comparing to how he looks in the
+current game."*
+
+**The sheets.** He drew it himself, twice:
+
+> *"i built the side view of the schnoodle with chatgpt as yours looked bad. pull it from my
+> downloads folder"* — *"the cockapoo one is also in the downloads folder"*
+
+Measured against my drawn one, the **proportions were close** (his aspect 0.98 against my 1.12, legs
+25% of height against my 30%) and the **craft was not**: one confident contour with the texture inside
+it, articulated legs that clearly number four, a real neck, a chest tuck, soft volume shading.
+
+### 33.2 The pipeline
+
+```
+docs/reference/side-walk-<breed>.png   the art (four frames, 1774x887)
+  -> tools/make-sidesprites.py         key, trim, align, downscale  -> src/assets/side-<breed>.webp
+  -> tools/side-meta.py                collect                      -> src/assets/side-meta.js
+  -> src/dog/sidesprite.js             draw
+```
+
+**Four things the slicer must do, each found by doing it wrong:**
+
+- **flood-fill the background, don't threshold it.** A threshold cannot separate the drawn shadow from
+  his own pale muzzle — the shadow is *further* from cream than the muzzle is. At a threshold that
+  spared his face, the standing frame kept its shadow, counted it as ink, and sat 16px higher than the
+  other three.
+- **feather the rim only.** Applied by colour distance to every kept pixel, his near-white eye
+  catchlights came out half-transparent and the grass showed through: **he had green eyes.**
+- **align on the ground and the body centre**, not on each frame's own box. A walking leg reaches
+  further than a standing one, so per-frame trimming makes him bob and slide.
+- **WebP, not PNG** — 111KB against 923KB. Soft gradients over flat areas is PNG's worst case, and
+  everything here is precached forever.
+
+The painted shadows are keyed out on purpose: `sidesprite.js` draws the game's own, which shrinks as
+he leaves the ground. A painted one cannot.
+
+### 33.3 What a sprite cannot do
+
+Written into the module so nobody rediscovers it: **no mud, no suds, no wet cling, no collar or
+ribbon, no per-dog palette jitter.** And it is per breed — the Shiba has no sheet, `hasSideSprite()`
+says so, and the **drawn profile is the fallback**. That is why `dog/side.js` was kept rather than
+deleted: two dogs walk out as the human's art and one walks out as ours.
+
+### 33.4 Beat 2.5 — the departure
+
+The only place the profile is used, and the only place it needed to be.
+
+**The absence is still the point**, and **the return stays frontal** — he comes home muddy, and mud is
+a per-region wash on a drawn dog. The one beat where his state *is* the payload is the one beat that
+must not be a sprite.
+
+Four defects the first renders caught: frame 0 was an **empty room** (the sheet had not decoded and
+nothing stood in); then frame 0 was the drawn dog and frame 1 the sprite, **a pop mid-departure** (the
+choice is locked at Set off now); `easeOut3` **front-loaded the motion** so he shot across the rug and
+crept out; and `sprite.height` 150 was a guess that came back a **small dog** (derived from the frontal
+body: 250).
+
+`tools/walkgate.py` — 15 checks, including that there is never two of him, that a tap cannot pet a dog
+who is not drawn, that the walk's own clock is untouched by the departure, and that the Shiba walks
+out drawn.
+
+### 33.5 Left imperfect
+
+- **The back view is still not built**, and it was deferred at the start. It is much cheaper now: the
+  parts are shared, so it is silhouettes and a tail — or two more sheets.
+- **The Shiba has no sheet.** It falls back to the drawn profile, which is visibly a different hand.
+- **He only ever walks out.** The return, the disc, the ring and the room are all still frontal. The
+  profile dog exists for two seconds per walk.
+- **`dog/side.js` is now a fallback rather than the plan.** Seven batches of extraction stand on their
+  own — the frontal dog is better factored and provably unchanged — but the drawn profile itself is
+  used by one breed on one beat.
