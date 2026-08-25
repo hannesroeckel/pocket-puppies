@@ -420,6 +420,11 @@ export function createRoomScene() {
      measurement is the same frozen dog rendered with the place on and off, and
      his pixels required to come out identical. This switch is that off. */
   let placeArt = true;
+  /* DID THE ROOM'S FLOOR LAYER RUN THIS FRAME — the empty-room wash and today's
+     finds on the rug. For tools/placegate.py: whether a find is BEING DRAWN in the
+     park is not reliably measurable in pixels, because the band they land in is
+     mostly dog, and that is precisely how this defect reached the phone. */
+  let drewRoomFloor = true;
   /* the last view wrapper handed to draw(). Text cannot be measured without
      one, and the toast probe is asked outside of a draw. */
   let lastG = null;
@@ -2191,8 +2196,18 @@ export function createRoomScene() {
          which is what the first render of this feature actually looked like. */
       if (!outdoors()) drawSill(c);
 
-      /* the empty-room wash and today's treasures on the rug */
-      walk.drawBack(g);
+      /* THE EMPTY-ROOM WASH AND TODAY'S TREASURES ON THE RUG — and they stay in
+         the room, like the bowls and the ball do.
+
+         REPORTED FROM THE PHONE: "some pieces that lie on the gourn in the house
+         also get carried other to the other two locaitons which doesnt make any
+         sense". Exactly right, and it is the same defect 8.17.0 fixed for the
+         bowls, the sill and the ball with one omission — `walk.drawBack` draws
+         what he brought home "still lying on the rug", and the rug is not in the
+         park. A place is a backdrop PLUS everything that must not be in it, and
+         this was the piece that got missed. */
+      drewRoomFloor = !outdoors();
+      if (drewRoomFloor) walk.drawBack(g);
       /* THE RING WASH GOES UNDER HIM. That is what makes the spotlight a
          spotlight: the room dims, and the dog drawn after it does not. */
       contest.drawBack(g);
@@ -2637,6 +2652,7 @@ export function createRoomScene() {
         navIds: nav ? nav.items.map((i) => i.id) : [],
         navUnavailable: nav ? nav.items.filter((i) => i.available === false).map((i) => i.id) : [],
         owner: surfaceOwner(),
+        drewRoomFloor,
         howto: howto ? howto.debug : null,
       };
     },

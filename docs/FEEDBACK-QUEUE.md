@@ -492,3 +492,49 @@ gesture.
 > rework also exposed four older bugs, including a disc that **teleported 244 units up the
 > screen** on release and had done since the day it shipped. ARCHITECTURE §33.1–33.3; the disc
 > gate is 47 checks.
+
+---
+
+## 10. The ball cannot be seen ✅ FIXED on `feature/side-profile` (cache 8.21.0)
+
+> "if i press play i cannot see the ball in the game"
+
+**Not hidden — CAMOUFLAGED, and the code says so plainly.** The ball is drawn with a
+cream base (`#f7f0dd`), a coral stripe (`#cf6e58`) and a teal one (`PC.teal`). The rug's
+border rings are cream, coral and teal, in stripes of about the same width. Its resting
+slot sits on that border, so the ball was three matching stripes lying on three matching
+stripes — and its contour was `rgba(124,74,47,0.38)`, which is not a contour, it is a
+suggestion.
+
+Rendered and zoomed to be sure: at 3x the ball is genuinely hard to pick out, and once
+you know where it is you cannot un-see it. It has been like that since its home moved
+into the reachable band (queue item 1c, 8.7.1) — the fix for one defect walked it onto
+the one patch of floor it could disappear into.
+
+> **Fixed.** The contour is opaque (`rgba(96,56,32,0.92)` at 2.1) like every other prop
+> in the room, which is what makes an object read as an object on any background. The
+> position did not need to move; the outline was doing no work.
+
+---
+
+## 11. Things on the floor followed him outdoors ✅ FIXED on `feature/side-profile` (cache 8.21.0)
+
+> "also some pieces that lie on the gourn in the house also get carried other to the
+> other two locaitons which doesnt make any sense"
+
+**Right, and it is the same defect 8.17.0 already fixed — with one thing missed.** When
+the park and the show ring were built, the rule was written down: *a place is a backdrop
+PLUS everything that must not be in it*. The sill, both bowls, the tennis ball and the
+window's dust motes were all made to stay at home. `walk.drawBack` — which draws what he
+brought home *"still lying on the rug"* — was not, and the room called it
+unconditionally. So today's finds lay in the grass of the park and on the mat of the show
+ring.
+
+`tools/placegate.py` asserted the bowls and the ball and never the finds, which is
+exactly why this shipped.
+
+> **Fixed**, one line, and the gate now covers it. The pixel test that would have caught
+> it does not work: the band finds land in is centred 18 units from where the dog stands,
+> so a box over it is mostly DOG — which is how the first attempt at the assertion read
+> his warm coat and reported that the park was not green. It asserts the draw call
+> instead: the room runs the floor layer, the park does not.

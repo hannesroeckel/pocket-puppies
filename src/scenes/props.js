@@ -509,7 +509,15 @@ export function drawBall(c, bx, by, s, spin = 0, shadowAt, variant) {
   c.beginPath(); c.moveTo(-18, 8); c.quadraticCurveTo(0, 1, 18, 8);
   c.lineTo(18, 13); c.quadraticCurveTo(0, 6, -18, 13); c.closePath(); c.fill();
   c.restore();
-  c.strokeStyle = 'rgba(124,74,47,0.38)'; c.lineWidth = 1.6; ell(c, 0, 0, 16, 16); c.stroke();
+  /* ---- THE OUTLINE HAS TO CARRY THE BALL, and at 0.38 alpha it did not ----
+     REPORTED FROM THE PHONE: "if i press play i cannot see the ball in the game."
+     He was not wrong and it was not hidden — it was CAMOUFLAGED. The ball is
+     cream, coral and teal; the rug's border rings are cream, coral and teal, in
+     stripes of about the same width. Sitting in its resting slot on that border
+     it disappeared into it, and a 38%-alpha contour had nothing to say about it.
+     An opaque contour is what makes an object an object on any background, which
+     is how every other prop in this room is drawn. */
+  c.strokeStyle = 'rgba(96,56,32,0.92)'; c.lineWidth = 2.1; ell(c, 0, 0, 16, 16); c.stroke();
   c.fillStyle = 'rgba(255,255,255,0.6)'; ell(c, -6, -7, 4.6, 3.2, -0.6); c.fill();
   c.restore();
 }

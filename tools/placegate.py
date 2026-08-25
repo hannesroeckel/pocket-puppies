@@ -325,6 +325,84 @@ def main():
         if shots:
             pg.screenshot(path=str(SHOTS / "ring.png"))
 
+        # ---- B2. WHAT HE BROUGHT HOME STAYS HOME -------------------------
+        #
+        # REPORTED FROM THE PHONE, and this gate should have caught it: "some
+        # pieces that lie on the gourn in the house also get carried other to the
+        # other two locaitons which doesnt make any sense". `walk.drawBack` draws
+        # today's finds "still lying on the rug", the room called it
+        # unconditionally, and the rug is not in the park.
+        #
+        # The bowls and the ball were asserted; the finds were not, which is why
+        # they shipped. Same measurement, on the rug where they land.
+        finds = pg.evaluate("""() => {
+          const pp = window.__pp, sc = pp.loop.scene;
+          /* LEAVE THE RING FIRST. Section D left the trial open, and the surface
+             arbiter is exclusive by design — so the walk could not start and the
+             first run of this check measured the ring's own MAT (warm sand) where
+             it expected grass. Out through the real back button. */
+          const B = pp.BALANCE.contest.ring.back;
+          for (let i = 0; i < 4 && sc.debug.owner; i++) {
+            sc.pointer(pp.app, { type: 'down', x: B.x, y: B.y, id: 1,
+              dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+            pp.step(1/60, 40);
+          }
+          /* a real walk, brought home, so there are real finds on the real rug */
+          sc.startWalk(); pp.step(1/60, 40);
+          pp.setOff(); 
+          let g = 0;
+          while (g++ < 400 && pp.dbg().walk.leaving) pp.step(1/60, 1);
+          pp.bringHome();
+          pp.runHome();
+          const d = pp.dbg().walk;
+          /* DISMISS THE CARD. A finished walk leaves a modal card up, and the
+             surface arbiter correctly refuses to open the disc field over it —
+             which is what the first run of this check actually measured: a disc
+             weight of 0 and four cascading failures that had nothing to do with
+             the finds. */
+          for (let i = 0; i < 4 && sc.debug.owner; i++) {
+            sc.pointer(pp.app, { type: 'down', x: 195, y: 700, id: 1,
+              dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+            pp.step(1/60, 30);
+          }
+          const R = pp.BALANCE.walk.home;
+          /* WHERE THE FINDS ACTUALLY ARE, not the whole band they can land in.
+             The band is `dropTo[0] ± 34` at y 726, centred 18 units from where the
+             dog stands — so a box over the whole of it is mostly DOG, and the
+             first run of this check read his warm coat and reported that the park
+             was not green. `droppedAt` gives the real positions; this takes the
+             one furthest from him and looks at that. */
+          const at = (sc.walk.debug.droppedAt || []).slice()
+            .sort((p1, p2) => Math.abs(p2[0] - sc.rig.x) - Math.abs(p1[0] - sc.rig.x))[0];
+          const box = at ? [at[0] - 22, at[1] - 24, 44, 40]
+            : [R.dropTo[0] + R.dropSpread - 20, R.dropTo[1] - 24, 44, 40];
+          const inRoom = __pl.mean(box);
+          return { dropped: d.dropped, box, inRoom, owner: sc.debug.owner };
+        }""")
+        check(not finds["owner"],
+              "the surface is free again after the walk's card is dismissed",
+              finds["owner"])
+        check(len(finds["dropped"]) > 0,
+              "CONTROL: he really did bring something home and it is on the rug",
+              finds["dropped"])
+        park2 = pg.evaluate("""(box) => {
+          const pp = window.__pp, sc = pp.loop.scene;
+          const inRoom = pp.dbg().drewRoomFloor;
+          sc.startDisc(); pp.step(1/60, 20);
+          sc.disc.enterRound(); pp.step(1/60, 150);
+          return {
+            weight: +sc.placeWeight.toFixed(3),
+            drewInRoom: inRoom, drewInPark: pp.dbg().drewRoomFloor,
+            grass: __pl.mean(box),
+          };
+        }""", finds["box"])
+        check(park2["weight"] > 0.99, "the park is fully up for that reading", park2)
+        check(park2["drewInRoom"] is True,
+              "CONTROL: the room DOES draw what he brought home", park2["drewInRoom"])
+        check(park2["drewInPark"] is False,
+              "and the park does not — his finds stay on the rug, where the rug is",
+              park2["drewInPark"])
+
         check(not errors, "no page errors and no console warnings", errors[:4])
         b.close()
 

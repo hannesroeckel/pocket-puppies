@@ -1354,6 +1354,10 @@ export function createWalk(rig, opts = {}) {
         leaving: off >= 0, leaveU: off < 0 ? 0 : +offU().toFixed(3), sideKind,
         t: +t.toFixed(2), homeIn: +sp.homeIn.x.toFixed(3), carry: +sp.carry.x.toFixed(3),
         carried: carried.map((f) => f.id), dropped: dropped.map((d) => d.id),
+        /* WHERE they are, for tools/placegate.py: the ids alone cannot say whether
+           a find is being drawn in the park, and the band they land in is mostly
+           dog. */
+        droppedAt: dropped.map((d) => [Math.round(d.x), Math.round(d.y)]),
         card: card ? card.lines : null,
         walksToday: game.walksToday, total: game.walksTotal,
         coins: game.state.player.coins,
