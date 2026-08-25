@@ -27,6 +27,7 @@
 import { createRig } from '../src/dog/rig.js';
 import { createSideDog } from '../src/dog/side.js';
 import { createSideSprite, hasSideSprite } from '../src/dog/sidesprite.js';
+import { drawStrip } from '../src/scenes/outdoors.js';
 import BALANCE from '../src/state/balance.js';
 
 const cv = document.getElementById('cv');
@@ -85,8 +86,33 @@ async function renderSprite(breedId, phases, opts = {}) {
   return sp.debug;
 }
 
+/* THE STROLL STRIP, TILED AND SCROLLED, with the seam deliberately put on
+   screen: draw it at two offsets a tile apart and slide it, and if the join is
+   visible at all it will be visible here. */
+async function renderStroll(breedId, scroll, opts = {}) {
+  const W = opts.tile === undefined ? 900 : opts.tile;
+  const H = cv.height;
+  const strip = document.createElement('canvas');
+  strip.width = W; strip.height = H;
+  drawStrip(strip.getContext('2d'), W, H, { floorY: H * 0.62 });
+  c.clearRect(0, 0, cv.width, cv.height);
+  const off = ((scroll % W) + W) % W;
+  for (let x = -off; x < cv.width + W; x += W) c.drawImage(strip, x, 0);
+  const rig = createRig({ breed: breedId, reduced: false });
+  const sp = createSideSprite(rig);
+  if (sp) {
+    for (let i = 0; i < 60 && !sp.ready; i++) await new Promise((r) => setTimeout(r, 50));
+    sp.draw({ ctx: c, view: null }, {
+      x: cv.width * 0.36, y: H * 0.62 + H * 0.20, s: 2.2,
+      face: -1, phase: scroll / 92, run: 1,
+    });
+  }
+  return { tile: W, off: Math.round(off) };
+}
+
 window.__side = {
   renderSprite,
+  renderStroll,
   hasSideSprite,
   render,
   /* the four keys of the reference: extended, gathered, extended, compressed */

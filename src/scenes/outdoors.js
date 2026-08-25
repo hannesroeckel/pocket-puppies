@@ -336,4 +336,128 @@ export function drawRing(c, view, rng) {
   c.restore();
 }
 
-export default { drawPark, drawRing };
+
+
+/* ==========================================================================
+   THE STROLL STRIP — the park as a SEAMLESS TILE, for a walk you can watch.
+
+   Asked for directly: "cant we now not use the side profile to have an actual
+   walk instead of just sending the dogs away?"
+
+   WHY THIS IS A DIFFERENT FUNCTION AND NOT `drawPark` WITH AN OFFSET. `drawPark`
+   is baked once at screen width and blitted; every shape in it is placed by
+   ABSOLUTE x — hills at `sin(x * 0.008)`, clumps at `i * (w / 26)`, tufts at
+   random x. Scrolling that means either redrawing 26 clumps and 150 tufts every
+   frame (the most expensive thing in the game, per §32.2 rule 3) or tiling a bake
+   whose left and right edges do not match, which is a visible seam sliding past
+   every few seconds.
+
+   So this is periodic BY CONSTRUCTION: every wave is a function of `u = x / w`
+   with a WHOLE NUMBER of cycles, and every scattered thing is placed at a hashed
+   `u` and drawn again one tile to the right when it would straddle the join. Draw
+   it twice, offset by `w`, and there is no seam to find.
+
+   It is deliberately NOT the same picture as `drawPark`: a strolling dog passes
+   things, so this has more of them, and the mown ellipse and the single sun that
+   anchor a static scene are gone.
+   ========================================================================== */
+export function drawStrip(c, w, h, o = {}) {
+  const P = o.palette === 'ring' ? RING : PARK;
+  const floor = o.floorY === undefined ? h * 0.62 : o.floorY;
+  const hash = (i, s) => {
+    const v = Math.sin((i + 1) * 12.9898 + s * 78.233) * 43758.5453;
+    return v - Math.floor(v);
+  };
+
+  /* sky */
+  const sky = c.createLinearGradient(0, 0, 0, floor);
+  sky.addColorStop(0, P.skyTop);
+  sky.addColorStop(1, P.skyLow);
+  c.fillStyle = sky;
+  c.fillRect(0, 0, w, floor);
+
+  /* clouds: hashed u, so the same tile always has the same sky */
+  for (let i = 0; i < 7; i++) {
+    const cx = w * ((i + 0.5) / 7 + (hash(i, 3.1) - 0.5) * 0.08);
+    const cy = floor * (0.10 + hash(i, 7.7) * 0.42);
+    const r = floor * (0.055 + hash(i, 11.3) * 0.03);
+    c.save();
+    c.globalAlpha = 0.5;
+    c.fillStyle = '#ffffff';
+    c.beginPath();
+    c.ellipse(cx, cy, r * 1.55, r * 0.46, 0, 0, TAU);
+    c.ellipse(cx - r * 0.62, cy - r * 0.16, r * 0.66, r * 0.42, 0, 0, TAU);
+    c.ellipse(cx + r * 0.28, cy - r * 0.34, r * 0.82, r * 0.56, 0, 0, TAU);
+    c.fill();
+    c.restore();
+  }
+
+  /* TWO HILL BANDS, as whole numbers of cycles across the tile. That is the
+     entire seam trick: sin(2*PI*k*u) closes on itself at u = 1. */
+  const band = (yAt, amp, k1, k2, fill) => {
+    c.fillStyle = fill;
+    c.beginPath();
+    c.moveTo(0, floor);
+    for (let x = 0; x <= w; x += 6) {
+      const u = x / w;
+      const y = yAt - Math.sin(TAU * k1 * u) * amp - Math.sin(TAU * k2 * u + 1.7) * amp * 0.36;
+      c.lineTo(x, y);
+    }
+    c.lineTo(w, floor); c.closePath(); c.fill();
+  };
+  band(floor - h * 0.13, h * 0.035, 2, 5, P.hillFar);
+  band(floor - h * 0.07, h * 0.022, 3, 7, P.hillNear);
+
+  /* the treeline: clumps at hashed u, redrawn one tile over when they straddle */
+  const trees = Math.max(8, Math.round(w / 68));
+  for (let i = 0; i < trees; i++) {
+    const u = (i + 0.5) / trees + (hash(i, 2.7) - 0.5) * 0.5 / trees;
+    const r = h * (0.026 + hash(i, 5.5) * 0.012);
+    const y = floor - h * 0.045 + (hash(i, 9.1) - 0.5) * h * 0.012;
+    for (const dx of [0, w, -w]) {
+      const x = u * w + dx;
+      if (x < -r * 2 || x > w + r * 2) continue;
+      c.fillStyle = i % 3 === 0 ? P.treeLight : P.treeDark;
+      ell(c, x, y, r * 1.3, r * 0.96); c.fill();
+      c.fillStyle = i % 3 === 0 ? P.treeDark : P.treeLight;
+      ell(c, x - r * 0.4, y - r * 0.3, r * 0.66, r * 0.5); c.fill();
+    }
+  }
+
+  /* grass */
+  const gr = c.createLinearGradient(0, floor, 0, h);
+  gr.addColorStop(0, P.grassTop);
+  gr.addColorStop(0.42, P.grassMid);
+  gr.addColorStop(1, P.grassLow);
+  c.fillStyle = gr;
+  c.fillRect(0, floor, w, h - floor);
+
+  /* tufts and daisies, hashed so the tile is stable, wrapped so the join hides */
+  c.strokeStyle = 'rgba(74,104,58,0.30)';
+  c.lineWidth = 1.6; c.lineCap = 'round';
+  const n = Math.max(30, Math.round(w / 9));
+  for (let i = 0; i < n; i++) {
+    const x = hash(i, 17.3) * w;
+    const y = floor + 6 + hash(i, 23.9) * (h - floor - 8);
+    const len = 4 + (y - floor) / (h - floor) * 8;
+    c.beginPath();
+    c.moveTo(x, y);
+    c.lineTo(x + (hash(i, 31.1) - 0.5) * 3, y - len);
+    c.stroke();
+  }
+  for (let i = 0; i < Math.round(n / 7); i++) {
+    const x = hash(i, 41.7) * w;
+    const y = floor + (h - floor) * (0.35 + hash(i, 43.3) * 0.6);
+    const s = 0.8 + hash(i, 47.1) * 0.5;
+    c.fillStyle = PARK.daisy;
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * TAU;
+      ell(c, x + Math.cos(a) * 3.1 * s, y + Math.sin(a) * 3.1 * s, 2.1 * s, 1.7 * s, a);
+      c.fill();
+    }
+    c.fillStyle = PARK.daisyEye;
+    ell(c, x, y, 1.5 * s, 1.3 * s); c.fill();
+  }
+}
+
+export default { drawPark, drawRing, drawStrip };
