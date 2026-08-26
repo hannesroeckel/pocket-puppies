@@ -360,6 +360,14 @@ export function drawRing(c, view, rng) {
    It is deliberately NOT the same picture as `drawPark`: a strolling dog passes
    things, so this has more of them, and the mown ellipse and the single sun that
    anchor a static scene are gone.
+
+   THE HORIZON IS A CLEAN CUT, BY CONSTRUCTION. The grass is a full-width
+   `fillRect` from `floorY` down and it is drawn AFTER the hills and the
+   treeline, so no shape survives across the line however the clumps happen to
+   be hashed. A caller wanting two parallax planes can therefore blit the two
+   halves of ONE bake at two different rates with nothing to cut in half — which
+   is the whole reason `dog/stroll.js` needs one canvas rather than two, and it
+   is why this note is here rather than there.
    ========================================================================== */
 export function drawStrip(c, w, h, o = {}) {
   const P = o.palette === 'ring' ? RING : PARK;
@@ -376,32 +384,53 @@ export function drawStrip(c, w, h, o = {}) {
   c.fillStyle = sky;
   c.fillRect(0, 0, w, floor);
 
-  /* clouds: hashed u, so the same tile always has the same sky */
+  /* CLOUDS: hashed u, so the same tile always has the same sky — AND WRAPPED,
+     which they were not.
+     This is the one thing in here that was periodic by construction everywhere
+     except in the piece with the most sky behind it. Every wave closes on itself
+     and every tree clump is redrawn one tile over, but a cloud straddling the
+     join was simply CLIPPED — so the first stroll rendered with a hard vertical
+     line down two thirds of the screen, sliding past every few seconds, from a
+     tile that was otherwise perfectly seamless. It cost nothing to find and it
+     was invisible in the static review shots the tile was signed off on
+     (`review/stroll-0..3.png` put the join over GRASS). */
   for (let i = 0; i < 7; i++) {
-    const cx = w * ((i + 0.5) / 7 + (hash(i, 3.1) - 0.5) * 0.08);
+    const u = (i + 0.5) / 7 + (hash(i, 3.1) - 0.5) * 0.08;
     const cy = floor * (0.10 + hash(i, 7.7) * 0.42);
     const r = floor * (0.055 + hash(i, 11.3) * 0.03);
-    c.save();
-    c.globalAlpha = 0.5;
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.ellipse(cx, cy, r * 1.55, r * 0.46, 0, 0, TAU);
-    c.ellipse(cx - r * 0.62, cy - r * 0.16, r * 0.66, r * 0.42, 0, 0, TAU);
-    c.ellipse(cx + r * 0.28, cy - r * 0.34, r * 0.82, r * 0.56, 0, 0, TAU);
-    c.fill();
-    c.restore();
+    for (const dx of [0, w, -w]) {
+      const cx = u * w + dx;
+      /* the widest lobe reaches 1.55r left and right of centre */
+      if (cx < -r * 2.4 || cx > w + r * 2.4) continue;
+      c.save();
+      c.globalAlpha = 0.5;
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      c.ellipse(cx, cy, r * 1.55, r * 0.46, 0, 0, TAU);
+      c.ellipse(cx - r * 0.62, cy - r * 0.16, r * 0.66, r * 0.42, 0, 0, TAU);
+      c.ellipse(cx + r * 0.28, cy - r * 0.34, r * 0.82, r * 0.56, 0, 0, TAU);
+      c.fill();
+      c.restore();
+    }
   }
 
   /* TWO HILL BANDS, as whole numbers of cycles across the tile. That is the
      entire seam trick: sin(2*PI*k*u) closes on itself at u = 1. */
+  /* SAMPLED IN A WHOLE NUMBER OF STEPS, NOT EVERY 6 UNITS. `x += 6` only lands
+     on `w` when the tile happens to be a multiple of 6: at any other width the
+     last sample fell short and the closing `lineTo(w, floor)` cut a thin
+     triangular NOTCH out of the skyline at the right-hand edge — a seam that
+     appeared and disappeared with the device's width, which is the worst kind.
+     Stepping `i / N` puts a sample on u = 1 exactly, where the wave closes. */
   const band = (yAt, amp, k1, k2, fill) => {
+    const N = Math.max(24, Math.ceil(w / 6));
     c.fillStyle = fill;
     c.beginPath();
     c.moveTo(0, floor);
-    for (let x = 0; x <= w; x += 6) {
-      const u = x / w;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
       const y = yAt - Math.sin(TAU * k1 * u) * amp - Math.sin(TAU * k2 * u + 1.7) * amp * 0.36;
-      c.lineTo(x, y);
+      c.lineTo(u * w, y);
     }
     c.lineTo(w, floor); c.closePath(); c.fill();
   };
@@ -432,31 +461,45 @@ export function drawStrip(c, w, h, o = {}) {
   c.fillStyle = gr;
   c.fillRect(0, floor, w, h - floor);
 
-  /* tufts and daisies, hashed so the tile is stable, wrapped so the join hides */
+  /* TUFTS AND DAISIES, hashed so the tile is stable and WRAPPED so the join
+     hides — which the comment claimed and the code did not do. Both sat at a
+     hashed x and were drawn once, so one straddling the edge was clipped in half
+     and its other half never appeared on the far side. A half daisy is small;
+     it is also exactly the kind of small that the eye finds instantly once it is
+     sliding past every few seconds. */
   c.strokeStyle = 'rgba(74,104,58,0.30)';
   c.lineWidth = 1.6; c.lineCap = 'round';
   const n = Math.max(30, Math.round(w / 9));
   for (let i = 0; i < n; i++) {
-    const x = hash(i, 17.3) * w;
+    const hx = hash(i, 17.3) * w;
     const y = floor + 6 + hash(i, 23.9) * (h - floor - 8);
     const len = 4 + (y - floor) / (h - floor) * 8;
-    c.beginPath();
-    c.moveTo(x, y);
-    c.lineTo(x + (hash(i, 31.1) - 0.5) * 3, y - len);
-    c.stroke();
+    const lean = (hash(i, 31.1) - 0.5) * 3;
+    for (const dx of [0, w, -w]) {
+      const x = hx + dx;
+      if (x < -6 || x > w + 6) continue;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + lean, y - len);
+      c.stroke();
+    }
   }
   for (let i = 0; i < Math.round(n / 7); i++) {
-    const x = hash(i, 41.7) * w;
+    const hx = hash(i, 41.7) * w;
     const y = floor + (h - floor) * (0.35 + hash(i, 43.3) * 0.6);
     const s = 0.8 + hash(i, 47.1) * 0.5;
-    c.fillStyle = PARK.daisy;
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * TAU;
-      ell(c, x + Math.cos(a) * 3.1 * s, y + Math.sin(a) * 3.1 * s, 2.1 * s, 1.7 * s, a);
-      c.fill();
+    for (const dx of [0, w, -w]) {
+      const x = hx + dx;
+      if (x < -7 * s || x > w + 7 * s) continue;
+      c.fillStyle = PARK.daisy;
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * TAU;
+        ell(c, x + Math.cos(a) * 3.1 * s, y + Math.sin(a) * 3.1 * s, 2.1 * s, 1.7 * s, a);
+        c.fill();
+      }
+      c.fillStyle = PARK.daisyEye;
+      ell(c, x, y, 1.5 * s, 1.3 * s); c.fill();
     }
-    c.fillStyle = PARK.daisyEye;
-    ell(c, x, y, 1.5 * s, 1.3 * s); c.fill();
   }
 }
 

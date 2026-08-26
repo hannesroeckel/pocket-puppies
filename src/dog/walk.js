@@ -39,6 +39,15 @@
      4 RETURN    he comes back MUDDIER, TIREDER, HAPPIER, AND CARRYING
                  SOMETHING. Discovery lives entirely in what he brings home.
 
+     2.75 STROLL  and then, on 2026-08-25: "cant we now not use the side profile
+                 to have an actual walk instead of just sending the dogs away?"
+                 So the first half-minute of beat 3 is WATCHED — the road goes
+                 past him and she taps the things he passes, which is what turns
+                 a find from something a timer awarded into something the two of
+                 them found. `dog/stroll.js`. All three of the things above
+                 survived it: it sits INSIDE the walk's own duration, it hands
+                 over to the same absence, and the return is untouched.
+
    anticipation -> absence -> return. Emotionally stronger than watching a dog
    walk sideways, and a fraction of the art.
 
@@ -65,6 +74,10 @@ import { Spring, makeSprings, approach } from '../engine/spring.js';
    sheet; both take the same arguments, so this file does not care which it has. */
 import { createSideSprite, hasSideSprite } from './sidesprite.js';
 import { createSideDog } from './side.js';
+/* BEAT 2.75, the stroll: the half minute of the walk she gets to WATCH, and to
+   tap. It owns the road, the finds drifting past and her taps; this file owns
+   when it starts, when it hands over to the absence, and every word it says. */
+import { createStroll } from './stroll.js';
 import { TAU, clamp, lerp, smooth, smoother, hump, easeOut3, easeOutBack, roundRect, ell } from '../engine/draw.js';
 import { rng as sharedRng } from '../engine/rng.js';
 import { capitalise } from '../state/game.js';
@@ -109,6 +122,14 @@ const COPY = {
      is not claiming he is here (the idle hint's "<name> is here" was showing over
      a dog halfway out of the door). */
   offGo: (P, n) => `Off ${P.they} go${P.s}`,
+  /* ---- beat 2.75: the stroll ----
+     ONE LINE, SAID ONCE. It is an invitation, not an instruction: she is not
+     told to tap anything, she is told he finds things, and the ring pulsing on
+     the grass does the rest. */
+  strollHint: (P) => `Tap what ${P.they} find${P.s}`,
+  strollGot: (P, thing) => `${capitalise(P.they)} picked up ${thing}`,
+  /* ...and the hand-off to the absence, which is the beat that was always here */
+  strollOn: (P, n) => `${n || capitalise(P.they)} carries on up the road`,
   routeName: (r) => ({
     park: 'the park', high: 'the high street', river: 'the river', woods: 'the woods',
   }[r] || r),
@@ -144,6 +165,10 @@ const COPY = {
   homeMuddy: (P, n) => `${n || capitalise(P.they)} ${P.is} filthy and delighted`,
   homeTired: (P, n) => `${n || capitalise(P.they)} ${P.has} had a lovely time`,
   broughtHome: (P, n, thing) => `${n || capitalise(P.they)} brought ${thing} home`,
+  /* she spotted it herself, on the stroll — the line that makes a find hers
+     rather than the timer's. Never says how many when it is more than one:
+     "The 2 you spotted" is a receipt, not a sentence. */
+  spotted: (k) => (k === 1 ? 'The one you spotted' : 'Everything you spotted'),
   metSomeone: (P, who) => `${capitalise(P.they)} made friends with ${who}`,
   gotCoins: (n) => (n === 1 ? 'A coin in the gutter' : `${n} coins`),
   newToy: (P, thing) => `${thing} — ${P.theirs} now`,
@@ -260,6 +285,30 @@ export function createWalk(rig, opts = {}) {
     onCancel: () => { map.close(); beat = 'prep'; t = 0; setHint(COPY.clipOn(game.pron)); },
   });
 
+  /* ---- BEAT 2.75, the stroll -------------------------------------------
+     Handed `activeSide` rather than a dog: the choice between the sprite and the
+     drawn profile is LOCKED for one departure (see `lockedDrawn`), and the
+     stroll is the same journey continuing, so it must not be free to make that
+     choice again a second later and swap dogs halfway down the road.
+
+     `onEnd` is the whole hand-off. Whatever ends the stroll — it ran its course,
+     she tapped the way out, or the walk finished underneath it — the next thing
+     that happens is the absence beat, which is exactly what used to happen the
+     instant he left the room. */
+  const stroll = createStroll(rig, {
+    game, rng, reduced,
+    sound, spawn,
+    side: () => activeSide(),
+    onEnd: (reason) => {
+      away = true;
+      /* SAID ONLY WHEN SHE IS STILL LOOKING AT IT. 'walk-over' means the return
+         is about to play over the top of it, and 'torn' means the screen is
+         being taken down under her — a line about him carrying on up the road in
+         either case is the game talking to an empty room. */
+      if (reason === 'done' || reason === 'left') toast(COPY.strollOn(Pn(), nm()));
+    },
+  });
+
   const Pn = () => game.pron;
   const nm = () => (game.isNamed ? game.dog.name : '');
   function setHint(txt) { if (txt !== hint) { hint = txt; hintT = 0; } }
@@ -285,6 +334,10 @@ export function createWalk(rig, opts = {}) {
   /* ================================================================== */
   function start() {
     if (away) { toast(COPY.awayBusy(Pn())); return false; }
+    /* HE IS ALREADY ON ONE, and she is watching it. `surfaceBlockedFor('walk')`
+       cannot catch this — the surface's owner IS the walk — so the layer says
+       no for itself rather than opening the lead beat over its own stroll. */
+    if (stroll.on) { toast(COPY.awayBusy(Pn())); return false; }
     if (busyElsewhere()) return false;
     beat = 'prep';
     /* START THE SHEET DECODING NOW. The departure is two beats away — the lead,
@@ -452,6 +505,11 @@ export function createWalk(rig, opts = {}) {
        line because meeting someone is the point of a photo. */
     if (carried.length) {
       lines.push(COPY.broughtHome(Pn(), nm(), COPY.findName(carried[0].id)));
+      /* SHE FOUND IT, NOT THE TIMER. `res.chosen` is state/walks.js saying the
+         finds came from her taps on the stroll rather than from the roll, and
+         this line is the only place that difference is ever said out loud —
+         which is the whole reason the stroll exists. */
+      if (res.chosen) lines.push(COPY.spotted(carried.length));
       const metOne = carried.find((f) => f.met);
       if (metOne) lines.push(COPY.metSomeone(Pn(), COPY.met[metOne.met] || 'another dog'));
       else if (carried.length > 1) lines.push('...and ' + COPY.findName(carried[1].id));
@@ -497,6 +555,12 @@ export function createWalk(rig, opts = {}) {
     if (beat === 'home') finishHome();
     /* a departure interrupted by leaving the scene simply completes: he IS out */
     if (off >= 0) { off = -1; away = true; }
+    /* ...AND SO DOES A STROLL. She closed the screen halfway down the road; the
+       walk carries on as a perfectly normal absence and every find she had
+       already tapped is on the walk record, not in the layer being torn down.
+       `stroll.end` runs the same hand-off the beat's own ending does. */
+    if (stroll.on) { stroll.end('torn'); }
+    stroll.stop();
     beat = '';
     map.close();
     sp.walkW.to(0);
@@ -525,8 +589,13 @@ export function createWalk(rig, opts = {}) {
        seconds of it. */
     if (off >= 0) {
       off += dt;
-      if (offU() >= 1) { off = -1; away = true; }
+      /* AND THEN THE ROAD, IF THERE IS TIME FOR IT. `stroll.begin()` may decline
+         — a walk with seconds left on it gets none — and declining means the old
+         behaviour exactly: he is out, and the room is empty. That is why this is
+         `||` and not an `if/else` with two ways of starting the absence. */
+      if (offU() >= 1) { off = -1; if (!stroll.begin()) away = true; }
     }
+    stroll.update(dt);
     if (bloom > 0) bloom = Math.max(0, bloom - dt * 3.4);
     for (let i = dropped.length - 1; i >= 0; i--) dropped[i].life += dt;
     if (card) {
@@ -860,9 +929,23 @@ export function createWalk(rig, opts = {}) {
   /* ================================================================== */
   /*  draw                                                              */
   /* ================================================================== */
-  /** BEHIND the dog: the melancholy of an empty room, and today's treasures */
-  function drawBack(g) {
+  /**
+   * BEHIND the dog: the road he is on, the melancholy of an empty room, and
+   * today's treasures.
+   *
+   * `roomFloor` is `scenes/room.js` saying whether the room's own floor is what
+   * is under him this frame. IT IS NOT A STYLE FLAG. A place is a backdrop PLUS
+   * everything that must not be in it (§32.3), and what he brought home "still
+   * lying on the rug" is the one thing that got missed when that rule was
+   * written — the finds followed him into the park and the show ring. So the
+   * room's leftovers are drawn on the room's floor and nowhere else, and the
+   * stroll's own road is drawn above the call rather than inside the condition,
+   * because the road is the thing that made the floor not the room's.
+   */
+  function drawBack(g, roomFloor = true) {
     const c = g.ctx;
+    stroll.drawBack(g);
+    if (!roomFloor) return;
     if (away) {
       const a = clamp(0.55 + prog * 0.45, 0, 1);
       /* THE LIGHT GOES OUT OF THE ROOM. A cool veil plus a little darkness —
@@ -987,6 +1070,10 @@ export function createWalk(rig, opts = {}) {
   function drawFront(g) {
     const c = g.ctx;
     drawOff(g);
+    /* the things he is passing, and then him, in front of them. The room's dog
+       is hidden for the whole of this (`hidesDog`), so there is never two of
+       him — the same rule the departure needed. */
+    stroll.drawFront(g);
     if (beat === 'prep' || beat === 'map') {
       /* the collar goes on before the lead is drawn over it */
       if (leash.on) {
@@ -1055,6 +1142,20 @@ export function createWalk(rig, opts = {}) {
 
     if (away) drawAwayPanel(g);
     if (card && card.lines.length) drawCard(g);
+
+    /* THE STROLL'S CHROME: the way out, drawn by the layer, and the one line of
+       copy, drawn here — every player-facing string in stage 4 lives in `COPY`
+       and dog/stroll.js deliberately has none of them. Through ui/text.js, so
+       the plate's alpha is SOLVED against a background that is literally
+       sliding past underneath it, which is precisely the case a hand-tuned
+       shadow cannot cover. */
+    stroll.drawOver(g);
+    const sf = stroll.hintFade();
+    if (sf > 0.01) {
+      drawText(g, COPY.strollHint(Pn()), {
+        anchor: 'top', y: P4.hintTop, size: 13, weight: 600, fade: sf,
+      });
+    }
 
     /* THE ANTICIPATION LINE. Through ui/text.js, which means: a backing plate
        whose alpha is SOLVED so this clears 4.5:1 against anything behind it
@@ -1209,6 +1310,12 @@ export function createWalk(rig, opts = {}) {
   function pointer(ev, local) {
     if (map.isOpen) return map.pointer(ev);
 
+    /* THE STROLL CONSUMES EVERYTHING while it is up, including a touch that hits
+       nothing — the whole screen is a park he is walking through, and letting a
+       miss fall through to the petting field would stroke a dog who is a hundred
+       yards up the road. Same rule the disc field needed. */
+    if (stroll.on) return stroll.pointer(ev);
+
     if (away) {
       const B = bringHomeBox();
       if (ev.type === 'down') {
@@ -1276,23 +1383,34 @@ export function createWalk(rig, opts = {}) {
 
   /* ================================================================== */
   return {
-    get beat() { return away ? 'away' : beat; },
-    get active() { return away || beat !== '' || sp.walkW.x > 0.01; },
+    get beat() { return away ? 'away' : (stroll.on ? 'stroll' : beat); },
+    get active() { return away || stroll.visible || beat !== '' || sp.walkW.x > 0.01; },
     /** true while the walk owns the whole surface (chrome hides) */
-    get modal() { return beat === 'prep' || beat === 'map' || beat === 'home'; },
+    /* AND THE STROLL IS ONE OF THEM, which is the whole of its line in the
+       arbiter (§14.1): `scenes/room.js surfaceOwner()` already answers 'walk'
+       for anything modal, so being here is what stops care, training, the trial,
+       the disc and the naming beat opening over a scene that has taken the
+       screen — without a line being added to any of them. It also hides the nav
+       and the HUD, which is what makes it a place rather than a widget. */
+    get modal() { return stroll.on || beat === 'prep' || beat === 'map' || beat === 'home'; },
+    /** true while the road has all but replaced the room (§32.3) */
+    get outdoors() { return stroll.outdoors; },
     /** true while she must not be petted / fed / trained */
     /* THE DEPARTURE COUNTS AS BUSY. `hidesDog` is true while he walks out, so
        without this the room would happily hand a tap to the petting field and
        stroke a dog who is not being drawn. */
     get busy() {
-      return away || off >= 0 || beat === 'home' || beat === 'prep' || beat === 'map';
+      return away || off >= 0 || stroll.visible
+        || beat === 'home' || beat === 'prep' || beat === 'map';
     },
     /** true while the room must not draw the dog at all */
     /* THE FRONTAL DOG IS HIDDEN WHILE HE IS LEAVING TOO, or there are two of him
-       on screen: one standing on the rug and one walking out of the door. */
-    get hidesDog() { return away || off >= 0; },
+       on screen: one standing on the rug and one walking out of the door. The
+       stroll is the same claim for the same reason, and it is `visible` rather
+       than `on` so he does not blink back onto the rug during the dissolve out. */
+    get hidesDog() { return away || off >= 0 || stroll.visible; },
     /** true while the walk gets the pointer ahead of everything but the sheet */
-    get owns() { return beat === 'prep' || beat === 'map' || beat === 'home'; },
+    get owns() { return stroll.on || beat === 'prep' || beat === 'map' || beat === 'home'; },
     get away() { return away; },
     get weight() { return sp.walkW.x; },
     get fizz() { return sp.fizz.x; },
@@ -1302,6 +1420,8 @@ export function createWalk(rig, opts = {}) {
     get map() { return map; },
     get carried() { return carried.slice(); },
     get dropped() { return dropped.slice(); },
+    /** BEAT 2.75, for the room's arbiter, the harness and the gate */
+    get stroll() { return stroll; },
     /** the collection, for the room's shelf */
     collection() { return game.findCollection(); },
     COPY,
@@ -1332,6 +1452,8 @@ export function createWalk(rig, opts = {}) {
         id: 'bringHome', state: away ? 'away' : 'off',
         x: B.x, y: B.y, rx: B.w / 2, ry: B.h / 2, live: !!away,
       }];
+      /* and the finds drifting past on the stroll, which she really does tap */
+      for (const p of stroll.reachProbe()) out.push(p);
       for (let i = 0; i < dropped.length; i++) {
         out.push({
           id: 'find', state: dropped[i].id,
@@ -1343,7 +1465,7 @@ export function createWalk(rig, opts = {}) {
 
     get debug() {
       return {
-        beat: away ? 'away' : (beat || 'off'),
+        beat: away ? 'away' : (stroll.on ? 'stroll' : (beat || 'off')),
         w: +sp.walkW.x.toFixed(3),
         fizz: +sp.fizz.x.toFixed(3), fizzRaw: +fizz.toFixed(3), cap: +fizzCap().toFixed(2),
         leash: [Math.round(leash.x), Math.round(leash.y)], held: leash.held, on: leash.on,
@@ -1352,6 +1474,11 @@ export function createWalk(rig, opts = {}) {
         /* THE DEPARTURE. Note `beat` already says the string 'off' for "no beat
            is running", which is a different thing entirely — hence `leaving`. */
         leaving: off >= 0, leaveU: off < 0 ? 0 : +offU().toFixed(3), sideKind,
+        /* THE STROLL, and `picked` twice on purpose: the layer's copy and the
+           WALK RECORD'S copy. They must agree, and the whole point of schema 11
+           is that the second one is the one that survives a reload. */
+        stroll: stroll.debug,
+        picked: game.walkPicked,
         t: +t.toFixed(2), homeIn: +sp.homeIn.x.toFixed(3), carry: +sp.carry.x.toFixed(3),
         carried: carried.map((f) => f.id), dropped: dropped.map((d) => d.id),
         /* WHERE they are, for tools/placegate.py: the ids alone cannot say whether

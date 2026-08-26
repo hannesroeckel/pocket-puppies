@@ -937,6 +937,11 @@ export function createRoomScene() {
        the naming beat all refuse to open over it without a line being added to
        any of them. */
     if (disc && disc.modal) return 'disc';
+    /* THE WALK, and `modal` now covers BEAT 2.75 — the stroll — as well as the
+       lead, the map and the return. It is one word there rather than a fourth
+       line here for the reason §14.1 gives: the arbiter asks each layer whether
+       it owns the surface, and a layer that has taken the whole screen is the
+       layer's own fact to state. */
     if (walk && walk.modal) return 'walk';
     if (walk && walk.away) return 'away';
     /* STAGE 7: the install card. LAST in this list on purpose — it is the least
@@ -1200,7 +1205,14 @@ export function createRoomScene() {
     return Math.max(ring > 0.004 ? ring : 0, field > 0.004 ? field : 0);
   }
   /** true once the place has all but replaced the room */
-  function outdoors() { return placeWeight() > 0.5; }
+  /* THE STROLL IS A PLACE TOO, and it is here rather than in `placeWeight()` on
+     purpose: this is the predicate that sends the sill, both bowls, the ball,
+     the dust motes and the finds on the rug home (§32.3), and that is exactly
+     what a road going past him needs. `placeWeight()` is a different question —
+     it is which of the two BAKED outdoor canvases to blit — and the stroll bakes
+     its own scrolling tile, so answering yes there would put a static park
+     underneath a moving one. */
+  function outdoors() { return placeWeight() > 0.5 || (walk ? walk.outdoors : false); }
 
   /**
    * WHICH MODE SHE IS IN, for the explainer layer — and '' for "just the room".
@@ -2206,8 +2218,13 @@ export function createRoomScene() {
          what he brought home "still lying on the rug", and the rug is not in the
          park. A place is a backdrop PLUS everything that must not be in it, and
          this was the piece that got missed. */
+      /* ...AND THE ROAD HE IS ON, if he is on one. `walk.drawBack` is called
+         unconditionally now and told whether the room's floor is what is under
+         him: the stroll's own scrolling tile has to be drawn precisely when the
+         room's leftovers must NOT be, so one call answering both is one fewer
+         way for the two halves of §32.3 to disagree. */
       drewRoomFloor = !outdoors();
-      if (drewRoomFloor) walk.drawBack(g);
+      walk.drawBack(g, drewRoomFloor);
       /* THE RING WASH GOES UNDER HIM. That is what makes the spotlight a
          spotlight: the room dims, and the dog drawn after it does not. */
       contest.drawBack(g);

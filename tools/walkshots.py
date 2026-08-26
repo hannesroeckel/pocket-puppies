@@ -64,6 +64,12 @@ def main():
         for i in range(5):
             pg.screenshot(path=str(SHOTS / ("walk-off-%d.png" % i)))
             pg.evaluate("() => __pp.step(1/60, 14)")
+        # THE ROAD IS BETWEEN THEM NOW. Beat 2.75 (8.22.0) runs from the moment
+        # he is out of the door until he is properly away, so stepping 60 frames
+        # here photographed a sunlit park and called it "the room after he has
+        # gone". `tools/strollgate.py --shots` is the camera on the road itself;
+        # this one is still about the doorway and the quiet room on either side.
+        pg.evaluate("() => __pp.strollThrough()")
         pg.evaluate("() => __pp.step(1/60, 60)")
         pg.screenshot(path=str(SHOTS / "walk-off-away.png"))
         print("final:", pg.evaluate("() => { const d = __pp.dbg().walk || {}; "

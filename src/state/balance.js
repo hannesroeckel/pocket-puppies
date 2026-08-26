@@ -959,6 +959,86 @@ export const BALANCE = {
        four frames cover about one body length, and he is ~150 units tall. */
     off: { dur: 2.1, exit: 150, stride: 92, scale: 1, fade: 0.28, ramp: 0.24 },
 
+    /* ---- BEAT 2.75: THE STROLL --------------------------------------
+       "cant we now not use the side profile to have an actual walk instead of
+       just sending the dogs away?" — the first half-minute of the walk, watched,
+       with the things he passes tappable. What she taps is what he keeps, so a
+       find is DISCOVERED rather than awarded by a timer (docs/STROLL-PLAN.md).
+
+       IT IS INSIDE THE WALK, NEVER ADDED TO IT. The clock started at Set off
+       (state/walks.js) and nothing here touches it, so watching can only ever
+       cost her the seconds she chose to spend watching. `maxFrac` is what stops
+       a half-minute stroll eating a third of a short walk, and the beat ends
+       early rather than overrunning if the walk itself finishes first. */
+    stroll: {
+      dur: 30, minDur: 12,
+      /* never more than this much of the walk it is the beginning of */
+      maxFrac: 0.34,
+      fade: 0.45,               // the dissolve into the road and back out of it
+      /* WHERE THE DISSOLVE IS FINISHED. `Spring.x` approaches its target
+         asymptotically and never arrives, so using the weight directly as an
+         alpha left the ROOM SHOWING THROUGH THE ROAD for ever — the portrait,
+         the window frame and the rug's rings, ghosting in the sky. Measured a
+         second in it was still 15%, which is not a ghost, it is the living room.
+         The alpha is the weight divided by this and clamped, so the road is
+         genuinely opaque from here on and the dissolve is the part that reads. */
+      opaqueAt: 0.74,
+      /* HE TROTS AT A FIXED X AND THE WORLD GOES PAST HIM. `at` is well left of
+         centre, so most of the screen is the ground he has not reached yet —
+         which is where the things she can tap come from. */
+      at: 150,
+      /* HE IS SMALLER OUT HERE THAN HE IS IN THE ROOM, and that is a decision
+         rather than a slip. `rig.place.scale` is 1.34 and the sheets are 250
+         units tall, so at the room's scale he is 335 units of a 844-unit screen
+         — which is right for a close-up pet sim and wrong for a travelling shot:
+         the first render was a dog filling the frame with no road left to walk
+         along and every find he passed hidden behind him. 0.62 leaves the road
+         visible, which is the thing this beat is actually about. The departure
+         keeps scale 1 because it is the SAME SHOT as the room; the stroll is a
+         cut to somewhere else, and the dissolve carries the change.
+         `groundY` stands him a little further up the grass for the same reason —
+         it puts the whole find band in front of the horizon and behind him. */
+      scale: 0.62, groundY: -24,
+      speed: 92,                // virtual units per second, the ground at his feet
+      /* the same stride the departure uses: the gait runs on DISTANCE, so a
+         stride is a stride whatever the frame rate did */
+      stride: 92,
+      /* the sky, the hills and the treeline, as a fraction of the near speed.
+         Under `prefers-reduced-motion` this becomes 0 and the sky simply holds
+         still — two thirds of the screen stops moving, which is what
+         `reducedMotion.parallaxScale: 0` asks for. */
+      farK: 0.34,
+      /* WHAT HE PASSES. `depth` 0..1 is how near the camera a find is, and it
+         sets all three of the things that have to agree for depth to read: how
+         far up the grass it sits, how big it is, and how fast it goes by. */
+      depth: [0.30, 1.0],
+      /* WHERE THE BAND SITS, relative to `rig.floorV` — i.e. up the grass,
+         between the middle distance and his own feet.
+         MEASURED AGAINST THE REACH LINE, not chosen. Every find is a tap target
+         and goes through `reach.clampY()` with `hitRy` as its half-height, and
+         on the target phone (inset 40) that bound is 722 - 46 = 676. An earlier
+         -26 put the near end at 694, so EVERY find from depth 0.72 up was
+         clamped to the same y and the whole depth spread collapsed onto one
+         line — three parallax planes drawn as one, and nothing in a single
+         frame to show it. -52 keeps the near end at ~668 and the clamp is a
+         guard again rather than the thing deciding the composition. */
+      bandY: [-104, -52],
+      findScale: [0.88, 1.24],
+      driftK: [0.74, 1.0],
+      /* WHEN each find is level with him, as a fraction of the stroll. Kept off
+         both ends so the first one is not already going past as the road fades
+         in and the last one is gone before it fades out. */
+      passAt: [0.18, 0.82],
+      /* THE TAP, AND IT IS DELIBERATELY LOOSE. A find drifting past at ~90
+         units/s with a 20-unit radius is a dexterity test on a phone, so the
+         box is a WINDOW either side rather than a pixel test — the same shape
+         as the disc's ±0.16s catch window. `hitR` is ~0.7s of drift. */
+      hitR: 62, hitRy: 46,
+      /* and the ring under an untaken find, which is the whole affordance */
+      ringR: 22, ringRate: 2.4,
+      hintFor: 4.2,
+    },
+
     away: {
       /* the cool wash over the empty room */
       chill: 0.34, dim: 0.22, moteSlow: 0.45,
@@ -2115,6 +2195,10 @@ export const BALANCE = {
     leash:    [120, 14],    // the dangled leash settling
     homeIn:   [44, 11],     // how far up the road he still is, 1 -> 0
     carry:    [130, 13],    // the found thing, in his mouth and then dropped
+    /* the stroll dissolving in and out. Slow and dead-flat: this one crossfades
+       the WHOLE SCREEN between the room and the road, and a full-surface
+       dissolve that overshoots reads as a flicker rather than as a place. */
+    strollW:  [30, 14],
     /* ---- stage 5: the ring ----
        Chrome, not anatomy, so these are stiffer and better damped than
        anything on the dog: a judge's board that overshoots reads as a UI

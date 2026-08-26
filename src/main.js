@@ -951,6 +951,68 @@ async function boot() {
       return a;
     },
     /**
+     * RUN THE STROLL FORWARD until a find is within reach of a tap, then TAP IT
+     * FOR REAL — a synthetic pointer through `scene.pointer`, at the position
+     * the find is actually being drawn at.
+     *
+     * IT IS NOT `stroll.take(i)`, AND THAT IS THE WHOLE POINT. 8.16.1: a gate
+     * that drives a layer's own handler proves the handler works and proves
+     * nothing at all about whether the touch ever reaches it. The room dispatches
+     * the nav, the HUD and the sill before most layers; this path is the one the
+     * child's thumb takes.
+     *
+     * @param i     which offered find (0-based)
+     * @param dt    step size
+     * @param max   frames to wait for it to come past before giving up
+     * @returns { tapped, at, took, picked } — `took` false means the tap missed
+     */
+    strollTap(i = 0, { dt = 1 / 60, max = 3600 } = {}) {
+      const scene = loop.scene;
+      const w = scene.walk;
+      if (!w || !w.stroll) return null;
+      const st = w.stroll;
+      const S = BALANCE.walk.stroll;
+      let waited = 0;
+      /* wait for it to be ON SCREEN and inside its own hit window of x, which is
+         the same test the layer will apply to the tap when it arrives */
+      for (; waited < max; waited++) {
+        const it = st.debug.items[i];
+        if (!st.on || !it) break;
+        if (!it.taken && Math.abs(it.x - S.at) <= S.hitR * 0.6) break;
+        loop.stepFixed(dt, 1);
+      }
+      const it = st.debug.items[i];
+      if (!st.on || !it || it.taken) {
+        return { tapped: false, at: null, took: false, picked: st.debug.picked };
+      }
+      input.state.lastX = it.x; input.state.lastY = it.y;
+      scene.pointer(app, {
+        type: 'down', x: it.x, y: it.y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false,
+      });
+      scene.pointer(app, {
+        type: 'up', x: it.x, y: it.y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false,
+      });
+      loop.stepFixed(dt, 1);
+      const after = st.debug.items[i];
+      return {
+        tapped: true, at: [Math.round(it.x), Math.round(it.y)], waited,
+        took: !!(after && after.taken),
+        picked: st.debug.picked,
+        /* THE WALK RECORD'S OWN COPY, which is the one that survives a reload */
+        onRecord: app.game.walkPicked,
+      };
+    },
+    /** run the stroll to its end (or `max` frames), without touching anything */
+    strollThrough({ dt = 1 / 60, max = 5400 } = {}) {
+      const w = loop.scene.walk;
+      if (!w || !w.stroll) return null;
+      let n = 0;
+      while (n++ < max && w.stroll.on) loop.stepFixed(dt, 1);
+      /* and let the dissolve finish, so `hidesDog` and `outdoors` have settled */
+      loop.stepFixed(dt, 60);
+      return w.debug;
+    },
+    /**
      * PRETEND THE APP WAS CLOSED FOR `mins` MINUTES MID-WALK. Rewinds the
      * walk's `startedAt` (and `lastSeenAt`) rather than sleeping, which is the
      * only honest way to test a model whose whole point is that it does not

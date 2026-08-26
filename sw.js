@@ -109,6 +109,18 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.22.0: THE WALK IS SOMETHING SHE CAN WATCH (schema v11). ONE NEW MODULE,
+   `dog/stroll.js` — beat 2.75, the half-minute of road at the start of a walk
+   with the things he passes tappable. A phone holding 8.21.0 would fail to
+   resolve the import the moment `dog/walk.js` loaded and show a blank screen,
+   which is the exact failure 8.5.0's note describes and the reason this list is
+   checked rather than trusted. The schema bump is `walks.active.picked`: the
+   finds she tapped, persisted on the walk record because the app being closed
+   mid-stroll is the ordinary case. A save mid-walk from 8.21.0 gets an empty
+   list, which reads as "she tapped nothing" and pays out exactly what that walk
+   was always going to be worth. `py tools/check-precache.py` now expects 69
+   entries.
+
    8.21.0: ALL THREE DOGS WALK OUT AS HIS OWN ART. `side-shiba.webp` completes
    the set — prick ears, a curled tail and cream points, which is a genuinely
    different silhouette from the two doodles rather than a recolour. The drawn
@@ -249,7 +261,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.21.0';
+const VERSION = '8.22.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -295,6 +307,7 @@ const PRECACHE = [
   './src/dog/pet.js',
   './src/dog/reunion.js',
   './src/dog/rig.js',
+  './src/dog/stroll.js',
   './src/dog/toy.js',
   './src/dog/train.js',
   './src/dog/voice.js',
