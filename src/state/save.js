@@ -423,6 +423,30 @@ export const MIGRATIONS = {
     s.v = 10;
     return s;
   },
+
+  /* ---- v10 -> v11 : the stroll's picks --------------------------------
+     One key, and only on a walk that is actually running: `walks.active.picked`,
+     the finds she tapped while she was watching him go (dog/stroll.js).
+
+     AN EXISTING SAVE MID-WALK GETS AN EMPTY LIST, WHICH IS THE RIGHT ANSWER AND
+     NOT A COMPROMISE. She was never offered the stroll on that walk, so she
+     tapped nothing, and `rollFinds` reads an empty `picked` as "he found
+     something himself" and hands back the ordinary roll. The walk she set off on
+     under the old build therefore comes home worth exactly what it was worth
+     when she started it — no lost finds, no windfall.
+
+     `normActive` repairs and caps the list on every read anyway, so this is
+     belt-and-braces; it is written down as a migration because a schema version
+     that does not say what changed is a schema version nobody can audit. */
+  11: (s) => {
+    const w = s.walks;
+    if (w && typeof w === 'object' && w.active && typeof w.active === 'object'
+      && !Array.isArray(w.active.picked)) {
+      w.active.picked = [];
+    }
+    s.v = 11;
+    return s;
+  },
 };
 
 export function migrate(raw) {

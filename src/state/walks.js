@@ -20,6 +20,15 @@
    had watched the whole time. Resuming twice gives the identical result
    because the roll reads the persisted seed, never `Math.random`.
 
+   AND `picked`, WHICH IS THE ONE THING WATCHING CHANGES (schema 11). The stroll
+   (dog/stroll.js) lets her tap the things he passes, and what she taps is what
+   he keeps. That has to be a fourth persisted field for exactly the reason the
+   other three are persisted: the app can be closed in the middle of it, and a
+   tap that only lived in a layer is a tap that never happened. It does not make
+   the roll less pure — the picks are read off the record like the seed is — and
+   an EMPTY `picked` falls straight back to the ordinary roll, so a walk nobody
+   watched is worth precisely what it always was.
+
    THE CLOCK-TAMPER GUARD. A device clock that moves BACKWARDS (manual change,
    timezone travel, DST) would otherwise make `now - startedAt` negative and
    send the maths strange — or, worse, persist a corrupted `startedAt`. A
@@ -138,6 +147,18 @@ function normActive(a, now = Date.now()) {
     /* how many walks had already happened today when this one set off, so the
        over-cap thinning is decided by when he left, not by when she looks */
     dayCount: Math.max(0, Math.round(num(a.dayCount, 0))),
+    /* ---- WHAT SHE TAPPED ON THE STROLL (schema 11) -------------------
+       The finds she picked out of the grass while she was watching. It lives on
+       the WALK rather than in the layer because the layer does not survive the
+       app being closed and this must: losing what she chose would feel worse
+       than never having offered. Ids only — everything else about a find is in
+       `FIND_BY_ID`, and an id is the one part of it a save can be trusted with.
+       Capped, deduped and filtered to real finds here, so `rollFinds` below can
+       read it without defending itself. */
+    picked: (Array.isArray(a.picked) ? a.picked : [])
+      .filter((id) => typeof id === 'string' && FIND_BY_ID[id])
+      .filter((id, i, all) => all.indexOf(id) === i)
+      .slice(0, W.find.count.base + 3),
     /* set once the return beat has actually played, so a walk cannot be
        collected twice by two resumes racing each other */
     collected: !!a.collected,
@@ -167,9 +188,33 @@ export function startWalk(state, opts = {}) {
     seed,
     path: opts.path || [],
     dayCount: w.walksToday,
+    picked: [],
     collected: false,
   }, now);
   return w.active;
+}
+
+/**
+ * SHE SPOTTED SOMETHING AND HE PICKED IT UP. Called once per tap on the stroll
+ * (dog/stroll.js) and never anywhere else.
+ *
+ * It is a mutator on the active record rather than a field the layer keeps
+ * because the app can be closed mid-stroll — iOS suspends JS entirely — and a
+ * tap that is only in a layer is a tap that never happened.
+ *
+ * @returns true if this pick was new (i.e. worth persisting)
+ */
+export function pickFind(state, id, now = Date.now()) {
+  const w = walkState(state, now);
+  const a = w.active;
+  if (!a || !FIND_BY_ID[id]) return false;
+  if (!Array.isArray(a.picked)) a.picked = [];
+  if (a.picked.indexOf(id) >= 0) return false;
+  /* the same cap `normActive` enforces, applied here too so a caller cannot
+     grow the list past it between two repairs */
+  if (a.picked.length >= W.find.count.base + 3) return false;
+  a.picked.push(id);
+  return true;
 }
 
 /**
@@ -247,14 +292,29 @@ export function cancelWalk(state) {
  *
  * HE ALWAYS BRINGS SOMETHING. `count.base` is 1 and nothing may reduce it.
  *
+ * WHAT SHE TAPPED WINS. If the walk record carries `picked` — the finds she
+ * spotted while she was watching the stroll — then those ARE what comes home and
+ * the roll below is not consulted for the finds at all. Two things follow, and
+ * both are the point:
+ *
+ *   - it is still a pure function of the record, so resuming twice still gives
+ *     the identical result. The picks are persisted state like the seed is.
+ *   - AN EMPTY `picked` FALLS BACK TO THE FULL ROLL, silently. She tapped
+ *     nothing, or she closed the app before she tapped anything, and he found
+ *     something himself. Losing must never feel like rebuke, so there is no
+ *     branch anywhere that pays out less because she did not watch.
+ *
+ * The coins are rolled the same way in both cases: money is dropped in the
+ * gutter, not spotted in the grass, so it is not hers to choose.
+ *
  * @param active   the active-walk record
  * @param progress 0..1
- * @param opts     { owned: Set|Array of find ids already collected }
- * @returns {{finds:[{id,kind,tier,met,toy,fresh}], coins:number, route, mix}}
+ * @param opts     { owned: Set|Array of ids already collected, ignorePicked }
+ * @returns {{finds:[{id,kind,tier,met,toy,fresh}], coins:number, route, mix, chosen}}
  */
 export function rollFinds(active, progress, opts = {}) {
   const a = normActive(active);
-  if (!a) return { finds: [], coins: 0, route: '', mix: {} };
+  if (!a) return { finds: [], coins: 0, route: '', mix: {}, chosen: false };
   const p = clamp(num(progress, 0), 0, 1);
   const owned = opts.owned instanceof Set ? opts.owned : new Set(opts.owned || []);
   /* the seed makes this deterministic; the progress is folded in so that
@@ -275,6 +335,26 @@ export function rollFinds(active, progress, opts = {}) {
   if (over) {
     maxTier = Math.min(maxTier, F.overCapTier);
     count = Math.max(F.count.base, count - 1);
+  }
+
+  /* ---- WHAT SHE SPOTTED, IF SHE SPOTTED ANYTHING -------------------
+     Taken whole, before the roll runs, and NOT re-gated by `maxTier` or by
+     `count`: the offer she was tapping was itself rolled from this record
+     (dog/stroll.js asks for `progress` 1 with `ignorePicked`), so anything in
+     here is something this walk was always going to be able to hand over.
+     Re-checking it against the progress she actually got would mean taking back
+     the thing she chose, which is the one outcome the stroll exists to avoid. */
+  const chosen = opts.ignorePicked ? [] : a.picked;
+  if (chosen.length) {
+    const finds = chosen.map((id) => {
+      const f = FIND_BY_ID[id];
+      return {
+        id: f.id, kind: f.kind, tier: f.tier,
+        met: f.met || '', toy: f.toy || '',
+        fresh: !owned.has(f.id),
+      };
+    });
+    return { finds, coins: coinsFor(a, p, finds), route: a.route, mix: a.mix, chosen: true };
   }
 
   const picked = [];
@@ -308,15 +388,23 @@ export function rollFinds(active, progress, opts = {}) {
     });
   }
 
-  /* coins. The high street is where money is dropped. */
+  return { finds: picked, coins: coinsFor(a, p, picked), route: a.route, mix: a.mix, chosen: false };
+}
+
+/**
+ * COINS. The high street is where money is dropped, so this is the route blend
+ * against how far he got — and it is a function rather than a tail because BOTH
+ * ways of deciding the finds end in it, and money that depended on which of them
+ * ran would be the walk paying differently for being watched.
+ */
+function coinsFor(a, p, finds) {
   const per = num(F.coins.per[0], 0) + (num(F.coins.per[1], 0) - num(F.coins.per[0], 0)) * p;
   let coins = Math.round(per * blend(a.mix, F.coins.route, 1));
   /* ANY duplicate is a pleasant duplicate and pays a few coins instead. This
      tested `f.toy`, so a second daisy or a second photo of the same beagle was
      worth nothing at all — the "litter" half of queue item 6. */
-  for (const f of picked) if (!f.fresh) coins += F.dupCoins;
-
-  return { finds: picked, coins: Math.max(0, coins), route: a.route, mix: a.mix };
+  for (const f of finds) if (!f.fresh) coins += F.dupCoins;
+  return Math.max(0, coins);
 }
 
 /** words, not a countdown clock */
@@ -379,5 +467,6 @@ export function collected(state) {
 
 export default {
   ROUTES, FINDS, FIND_BY_ID, normMix, dominant, blend, walkState,
-  startWalk, walkProgress, endWalk, cancelWalk, rollFinds, describeRemaining, collected,
+  startWalk, walkProgress, endWalk, cancelWalk, pickFind, rollFinds,
+  describeRemaining, collected,
 };

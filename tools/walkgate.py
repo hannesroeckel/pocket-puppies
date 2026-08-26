@@ -29,9 +29,17 @@ WHAT IT ASSERTS, and every one of these is a bug that happened:
      departure, so a tap cannot reach the petting field and stroke a dog who is
      not being drawn.
 
-  F  THE ABSENCE STILL STARTS. `away` becomes true exactly once, when he is gone,
-     and the walk's own clock (state/walks.js) is untouched by any of it — the
-     departure is inside the walk, not added to it.
+  F  THE ABSENCE STILL STARTS, and the walk's own clock (state/walks.js) is
+     untouched by any of it — the departure is inside the walk, not added to it.
+
+     WHAT THE STROLL CHANGED HERE, AND WHY THIS FILE MOVED RATHER THAN THE ONE
+     BEING TESTED. This gate used to assert `away` the instant the departure
+     finished. Beat 2.75 (`dog/stroll.js`, 8.22.0) now sits between them: he
+     walks out of the room and onto a road she can watch, and the absence starts
+     when THAT ends. So the assertion is the same claim one beat later — he is
+     never left in limbo, and every path out of the departure reaches the
+     absence. `tools/strollgate.py` owns the road itself; this file's job is
+     still the doorway, and it now checks the handover as well as the exit.
 
   G  LEAVING THE SCENE MID-DEPARTURE IS SAFE. He is simply out.
 
@@ -101,11 +109,17 @@ def main():
             pp.step(1/60, 1);
           }
           const after = pp.dbg().walk;
+          /* AND THEN THE ROAD, AND THEN THE ABSENCE. `strollThrough` runs the
+             stroll out without tapping anything, which is also the "she watched
+             and touched nothing" case the fallback has to cover. */
+          const onRoad = after.stroll.on;
+          const done = pp.strollThrough();
           return {
             kinds: [...kinds], startKind: d0.sideKind, frames,
             hidden, busy, first: xs[0], last: xs[xs.length - 1],
             monotonic: xs.every((v, i) => i === 0 || v >= xs[i - 1]),
             awayAfter: after.away, leavingAfter: after.leaving,
+            onRoad, awayAfterRoad: done.away, roadOn: done.stroll.on,
           };
         }""")
         check(walked["frames"] > 40,
@@ -125,8 +139,12 @@ def main():
         check(walked["busy"] == walked["frames"],
               "and the room counts him busy, so a tap cannot pet a dog who is not drawn",
               "%s of %s" % (walked["busy"], walked["frames"]))
-        check(walked["awayAfter"] and not walked["leavingAfter"],
-              "when he is gone the absence begins", walked)
+        check(walked["onRoad"] and not walked["leavingAfter"] and not walked["awayAfter"],
+              "when he is out of the door he is on the road, not yet absent",
+              walked)
+        check(walked["awayAfterRoad"] and not walked["roadOn"],
+              "and when the road ends the absence begins — no limbo between them",
+              walked)
         ctx.close()
 
         # ---- F: the walk's own clock is untouched by the departure --------
@@ -189,10 +207,16 @@ def main():
               const kind = pp.dbg().walk.sideKind;
               let g = 0, frames = 0;
               while (g++ < 300 && pp.dbg().walk.leaving) { frames++; pp.step(1/60, 1); }
-              return { kind, frames, away: pp.dbg().walk.away };
+              /* out of the door, down the road, and then out — every breed makes
+                 the whole journey, not just the doorway */
+              const road = pp.dbg().walk.stroll.on;
+              const done = pp.strollThrough();
+              return { kind, frames, road, away: done.away };
             }""")
-            check(one["kind"] == "sprite" and one["frames"] > 40 and one["away"],
-                  "%s walks out as the sprite and the absence begins" % breed, one)
+            check(one["kind"] == "sprite" and one["frames"] > 40
+                  and one["road"] and one["away"],
+                  "%s walks out as the sprite, onto the road, and then is away" % breed,
+                  one)
             ctx2.close()
         ctx.close()
 

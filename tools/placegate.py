@@ -349,9 +349,17 @@ def main():
           }
           /* a real walk, brought home, so there are real finds on the real rug */
           sc.startWalk(); pp.step(1/60, 40);
-          pp.setOff(); 
+          pp.setOff();
           let g = 0;
           while (g++ < 400 && pp.dbg().walk.leaving) pp.step(1/60, 1);
+          /* ...AND THEN DOWN THE ROAD. Beat 2.75 (8.22.0) sits between walking
+             out of the room and being away, and `bringHome` only answers once he
+             IS away — so without this the walk never came home, there were no
+             finds on the rug, and four checks about the PARK failed for a reason
+             that had nothing to do with the park. `strollThrough` watches it out
+             without tapping anything, which is also the case that leaves the roll
+             exactly as it was. */
+          pp.strollThrough();
           pp.bringHome();
           pp.runHome();
           const d = pp.dbg().walk;

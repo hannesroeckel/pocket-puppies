@@ -4143,3 +4143,132 @@ back — because the second one now has nothing in the game to exercise it.
 - **`dog/side.js` is now a fallback rather than the plan.** Seven batches of extraction stand on their
   own — the frontal dog is better factored and provably unchanged — but the drawn profile itself is
   used by one breed on one beat.
+
+---
+
+## 34. The walk is something she can watch (`feature/stroll`) — as built
+
+> *"cant we now not use the side profile to have an actual walk instead of just sending the dogs
+> away?"* — 2026-08-25
+
+Given four shapes, the one chosen was the one with her hands in it: **a travelling scene where she
+taps the things he passes**, so a find is *discovered* rather than awarded by a timer.
+`docs/STROLL-PLAN.md` is the plan and the post-mortem; this is the architecture.
+
+### 34.1 What the beat was not allowed to cost
+
+Three things the walk's existing design buys, none of them negotiable, all three kept:
+
+- **the absence.** The room goes quiet and cool, there is a dent in the rug and a few tufts of fur.
+  It is the only sad moment in the game and it is what makes the reunion land. So the stroll is
+  ~30 seconds at the *start* of the walk, and then he carries on without her.
+- **the frontal return.** He comes home muddy, and mud is a per-region wash on a *drawn* dog — a
+  painted sheet cannot get dirty (§33.3). The one beat where his state is the payload is untouched.
+- **close-the-app progress.** A walk is a pure function of wall-clock time (`state/walks.js`) and iOS
+  suspends JS entirely. **Nothing in `dog/stroll.js` ticks a walk forward.**
+
+So the order is **lead → map → he walks out (2.5) → THE STROLL (2.75) → absence → return**, and the
+stroll sits *inside* the walk's own duration. It cannot lengthen a walk by construction: the clock
+started at Set off. It is capped at a third of the walk it begins, and if the walk finishes
+underneath it, the stroll gets out of the way rather than holding the return up.
+
+### 34.2 The picture: one bake, two planes, four blits
+
+`scenes/outdoors.js drawStrip` is periodic **by construction** — every wave is a whole number of
+cycles across the tile, so it closes on itself at `u = 1`. `dog/stroll.js` bakes it **at exactly the
+canvas's own width**, so "one tile" and "one screen" are the same number of device pixels and the
+wrap is `x` and `x - cw` with no arithmetic to get wrong. Baking it across the *bleed* — which is
+what the room and the two outdoor places do — would have made the period wider than the canvas
+holding it, and thrown the periodicity away at the edges.
+
+The two parallax planes come out of **one** canvas, not two. `drawStrip` lays the grass down as a
+full-width fill *after* the hills and the treeline, so nothing survives across the horizon and the
+top half and the bottom half can be blitted at two rates with no shape to cut in half. Two canvases
+was the obvious way and would have cost a second full-screen bitmap: on a 3x phone that is ~14MB,
+and iOS caps *total* canvas memory rather than per-canvas size — the failure that shows up as a
+blank white rectangle and never as an error (§32.2). The room already holds two. The tile is
+released the moment the beat has faded out.
+
+### 34.3 A place is a backdrop plus everything that must not be in it — again
+
+§32.3's rule, and the stroll is a place. `scenes/room.js outdoors()` gained the stroll's own weight,
+which sends the sill, both bowls, the ball, the dust motes and the finds on the rug home without a
+line being added to any of them. It is deliberately **not** in `placeWeight()`: that answers a
+different question — which of the two *baked* outdoor canvases to blit — and the stroll bakes its own
+scrolling tile, so answering yes there would have put a static park underneath a moving one.
+
+`walk.drawBack` is now called unconditionally and *told* whether the room's floor is what is under
+him. One call answering both halves is one fewer way for them to disagree, which is exactly how the
+finds-in-the-park defect got through the first time.
+
+### 34.4 The arbiter line that turned out to be one word
+
+The plan said "one line in `surfaceOwner()`". It is not: `surfaceOwner()` already answers `'walk'`
+for anything the walk calls modal, so the stroll is **one word in `walk.modal`** — the layer stating
+its own fact, which is what §14.1 asks for. That one word hides the nav and the HUD, stops care,
+training, the trial, the disc and the naming beat opening over it, and puts the pointer into
+`walk.pointer` ahead of the nav.
+
+`walk.start()` also refuses while the stroll is on, because `surfaceBlockedFor('walk')` cannot catch
+that case — the surface's owner *is* the walk.
+
+### 34.5 What she taps is state, not a layer (schema 11)
+
+`walks.active.picked` — ids only, capped, deduped, repaired by `normActive` on every read. Written
+**on the tap**, through `game.walkPick`, not at the end of the beat: the app being closed mid-stroll
+is the ordinary case, not the edge one, and losing what she chose would feel worse than never having
+offered.
+
+The override lives in `rollFinds` itself rather than in `dog/walk.js`, which buys two things:
+
+- it is still a **pure function of the walk record**, so resuming twice gives the identical result.
+  The picks are persisted state exactly like the seed is.
+- **the kindness fallback is the absence of a branch.** An empty `picked` runs the ordinary roll.
+  There is nowhere in the codebase that pays out *less* because she did not watch.
+
+Coins are rolled identically either way (`coinsFor`), because money is dropped in the gutter rather
+than spotted in the grass — and money that depended on which branch ran would be the walk paying
+differently for being watched.
+
+### 34.6 `tools/strollgate.py` — 37 checks, four of them controls
+
+The controls are the point (§27): a tap on thin air takes nothing *and* does not fall through to the
+petting field; asking for a find that was never offered comes back empty-handed; the seam metric is
+checked against a picture with real detail to be discontinuous in. Taps are driven as pointer events
+through `scene.pointer`, never `stroll.take()` — 8.16.1's lesson.
+
+The gate that earned its place is **the seam test**. §2 of the plan recorded the tile as "verified by
+putting the join on screen and sliding it", and it was — over grass. Three things in `drawStrip` were
+not periodic at all: clouds drawn once and clipped; a hill polyline stepping `x += 6`, which cut a
+notch out of the skyline at any tile width not divisible by 6; and tufts and daisies with a comment
+claiming they wrapped and no code that did. The gate draws the tile twice side by side and asserts
+that **the join is an ordinary pixel column**, measured against the busiest ordinary column in the
+same image. It found the notch *after* the clouds were fixed, which an eye would not have.
+
+`walkgate` moved rather than the code it tests: "when he is gone the absence begins" is the same
+claim one beat later, plus the handover. `placegate` had to learn the new order too — its walk never
+came home, and four checks about the *park* failed for a reason that had nothing to do with the park.
+
+### 34.7 Left imperfect
+
+- **An untaken find is hidden behind him for about a second** at its closest approach. It passes at
+  his own x, and `reach.clampY` will not let a tap target sit below 676 while his feet are at ~696 —
+  so nothing can pass in *front* of him. She has ~5 seconds of it on screen either side, and a dog
+  walking past something does occlude it.
+
+  What is **not** left imperfect is the confirmation. Because a find passes at his own x, the tap
+  lands where he is: the first render drew the pop, the arc and the sparks all *behind* the dog, so
+  she touched the one thing she was being asked to touch and the screen did nothing at all.
+  `drawFront` is three passes now — untaken finds, him, then what she has just taken — and the
+  taken pass carries its own expanding ring at her finger, because the room's particle system is
+  drawn before this layer and its sparks are behind the dog too.
+- **No explainer card.** `howtoContext()` gives the stroll nothing; the one hint line is the whole
+  teaching. Deliberate — a card over a scene she is meant to be watching is what `ui/howto.js` exists
+  to avoid — but it is one line and one `HOWTO` entry if the hint proves not to be enough.
+- **Her picks are not re-gated by how far he actually got.** Tap three things, bring him home after
+  twenty seconds, keep all three. Re-checking them against the progress she got would mean taking
+  back the thing she chose. If it ever reads as an exploit, the honest fix is to reveal the offer
+  more slowly, not to confiscate.
+- **He still cannot react to what he passes.** The sheets are four walk frames and a stand: no sniff,
+  no head dip, no pick-up. The find flies to his mouth and sparkles, and the dog does not change.
+  That is §33.3's trade showing up in a second beat.

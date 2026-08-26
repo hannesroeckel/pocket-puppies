@@ -3,7 +3,7 @@ tools/gates.py — RUN EVERY GATE, ONCE, AND PRINT ONE TABLE.
 
 §27.6 records the gap this closes: "Nothing runs the suite as one command. Six
 gates, six invocations, ~25 minutes. A runner is obvious and was not written."
-It is eleven now, and the argument is the same one — a suite nobody runs in one
+It is eighteen now, and the argument is the same one — a suite nobody runs in one
 go is a suite that gets run in part.
 
 EACH GATE IS A SUBPROCESS, NOT AN IMPORT. Three reasons, all learned rather than
@@ -81,6 +81,7 @@ GATES = [
     ("discgate",       "discgate.py",       [], False),
     ("placegate",      "placegate.py",      [], False),
     ("walkgate",       "walkgate.py",       [], False),
+    ("strollgate",     "strollgate.py",     [], False),
     ("howtogate",      "howtogate.py",      [], False),
     ("bowlperf",       "bowlperf.py",       [], False),
     ("bowlgate",       "bowlgate.py",       [], False),

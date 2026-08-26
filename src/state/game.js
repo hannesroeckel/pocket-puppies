@@ -38,10 +38,14 @@ import { contestState, classAt, isTop, champStanding } from './contest.js';
 import {
   walkState, startWalk as startWalkModel, walkProgress as walkProgressModel,
   endWalk as endWalkModel, cancelWalk as cancelWalkModel, rollFinds,
+  pickFind as pickFindModel,
   collected as collectedFinds, FIND_BY_ID, isShelvable, metDogs,
 } from './walks.js';
 
-export const SCHEMA_VERSION = 10;
+/* 11: `walks.active.picked` — the finds she tapped on the stroll. See
+   state/save.js's migration ladder, and docs/STROLL-PLAN.md for why losing
+   them would be worse than never having offered. */
+export const SCHEMA_VERSION = 11;
 
 /** how many dirt regions a coat has — dog/care.js renders and erases these */
 export const DIRT_REGIONS = BALANCE.care.wash.regions.length;
@@ -1005,11 +1009,35 @@ export function createGame(state, opts = {}) {
     /** where the walk has got to — the ONLY progress function */
     walkProgress(now) { return walkProgressModel(state, num(now, Date.now())); },
     /** roll (deterministically) what he is bringing home at this progress */
-    walkFinds(progress, now) {
+    walkFinds(progress, now, opts = {}) {
       const p = walkProgressModel(state, num(now, Date.now()));
-      if (!p.active) return { finds: [], coins: 0, route: '', mix: {} };
+      if (!p.active) return { finds: [], coins: 0, route: '', mix: {}, chosen: false };
       const at = progress === undefined ? p.progress : clampNum(progress, 0, 1, p.progress);
-      return rollFinds(p.active, at, { owned: collectedFinds(state) });
+      return rollFinds(p.active, at, {
+        owned: collectedFinds(state), ignorePicked: !!opts.ignorePicked,
+      });
+    },
+    /**
+     * WHAT THE STROLL OFFERS HER. The finds this walk would hand over if it ran
+     * its full course — rolled ONCE, at Set off, and ignoring anything already
+     * picked so that asking a second time cannot hand back her own taps as a
+     * fresh offer. Her taps then decide which of them he actually keeps.
+     */
+    walkOffer(now) { return api.walkFinds(1, now, { ignorePicked: true }); },
+    /**
+     * SHE SPOTTED SOMETHING. One tap on the stroll; persisted immediately,
+     * because the app being closed mid-stroll is the normal case and not the
+     * edge one. Returns true if it was new.
+     */
+    walkPick(id, now) {
+      if (!pickFindModel(state, id, num(now, Date.now()))) return false;
+      onChange();
+      return true;
+    },
+    /** the ids she has spotted on the walk he is on now */
+    get walkPicked() {
+      const a = walkState(state).active;
+      return a && Array.isArray(a.picked) ? a.picked.slice() : [];
     },
     /** bank the walk: clears `active`, bumps `walksToday` at local midnight */
     endWalk(now) {
