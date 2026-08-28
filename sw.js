@@ -109,6 +109,21 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.24.0: THE SHIBA IS FEMALE. One key on one ladder row — `sex: 'm'` to
+   `sex: 'f'` — on direct instruction. No new files, no schema change, and no
+   code path touched: every line the kennel speaks about her is already a
+   function of that key and `PRONOUNS`, so "Bring her home" and "She is ready to
+   come home" fall out of the data. The generation still has to move or a phone
+   holding 8.23.0 keeps serving the old `state/balance.js` and would offer a
+   Shiba the game then calls "he".
+   NOTE ON SAVES: a dog's sex is written onto the dog record at adopt time
+   (`adoptDog` -> `newDog`), NOT read from the ladder on every frame. So this
+   changes who arrives from now on and deliberately does not reach back into a
+   Shiba somebody has already brought home — silently changing the pronouns of a
+   dog a child has already named and bonded with is worse than the
+   inconsistency, and at a 1600-point gate reached minutes ago there is almost
+   certainly nobody to be inconsistent with.
+
    8.23.0: THE SHIBA IS A DOG SHE CAN OWN. NO NEW FILES AND NO SCHEMA BUMP — the
    whole change is data and a seam. He has been a complete breed in
    `dog/breeds.js` since stage 1 and has had a painted profile sheet since
@@ -281,7 +296,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.23.0';
+const VERSION = '8.24.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

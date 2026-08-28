@@ -36,7 +36,7 @@
 
    Copy is pronoun-parameterised per dog from `game.pron`, from each roster
    entry's own `pron`, and from the offered row's `pron`: the gift puppy is a
-   male Schnoodle, the Cockapoo is female and the Shiba is male, so this surface
+   male Schnoodle and the Cockapoo and the Shiba are both female, so this surface
    can have all three on screen at once and cannot use a single pronoun for
    "the dog". Not one string below contains "he", "she", "him" or "her".
 

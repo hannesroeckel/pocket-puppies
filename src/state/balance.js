@@ -1864,11 +1864,15 @@ export const BALANCE = {
         swatch: '#b4703f', note: 'The picture on the shelf becomes him' },
       { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats',
         note: 'The shop starts stocking the nice ones' },
-      /* THE THIRD DOG. Male, so the kennel reads he / she / he — chosen only
-         because two of one and one of the other is less of a pattern than the
-         alternative; see the `sex` note above for how cheap it is to change. */
+      /* THE THIRD DOG. FEMALE, on direct instruction — 8.24.0, "change the shiba
+         to female instead of male in the game".
+         She shipped male in 8.23.0 for a weak reason (an alternating pattern of
+         pronouns), which is exactly the kind of default that should give way to
+         somebody actually saying what they want. The kennel now reads he / she /
+         she. Nothing else moved: every line on that surface is a function of this
+         key and the pronoun table, which is what the note above promised. */
       { id: 'shiba', kind: 'breed', at: 1600, name: 'A Shiba Inu puppy',
-        breedId: 'shiba', sex: 'm',
+        breedId: 'shiba', sex: 'f',
         note: 'The last one, once the other two are settled' },
     ],
     /* the word-scale for how well she is looking after him. WORDS, NEVER A
