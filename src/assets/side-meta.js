@@ -21,6 +21,8 @@
    ========================================================================== */
 export const SIDE_SPRITES = {
   cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274 },
+  corgi: { file: 'side-corgi.webp', frames: 4, cellW: 458, cellH: 458, ground: 454, centre: 229 },
+  golden: { file: 'side-golden.webp', frames: 4, cellW: 549, cellH: 458, ground: 454, centre: 274.5 },
   schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257 },
   shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5 },
 };

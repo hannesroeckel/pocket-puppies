@@ -112,8 +112,27 @@ export const COPY = {
      only ever announce one dog. The fallback is for a row with no `name`, which
      the ladder should never contain but which must not render as `undefined`. */
   newTitle: (row) => (row && row.name) || 'A new puppy',
+  /* the TOAST version, which has a whole line to itself and can afford the units */
   newLocked: (short) => `${short} more care points`,
+  /* AND THE CHIP VERSION, WHICH CANNOT.
+     The chip is 128 wide with a 120-unit text slot, and this string has been
+     quietly shrinking in it since stage 6: the Cockapoo's worst case, '400 more
+     care points', renders at 10.5 rather than 12. It was survivable at three
+     digits. It is not at four — 8.24.0 put breed gates at 2400 and 3400, and
+     `tools/kennelgate.py` measured '2380 more care points' at exactly 9.5, which
+     is `BALANCE.ui.type.minSize`: the point where ui/text.js stops shrinking and
+     starts ELLIPSISING. One more digit and the chip on the card a new player
+     sees would have read '2380 more care poi…', which is this file's original
+     sin ("She goes to someone wh…") committed a second time in the same place.
 
+     `COPY.locked` — the idiom the earned rows immediately below this card have
+     always used — is the fix, and it is a better line than the one it replaces
+     rather than a compromise: the units are already stated on the row above it
+     ('1020 / 2400 care points'), so 'more care points' was the third mention of
+     them inside one card. One phrasing for "not yet, and by how much", used on
+     every locked thing on the surface. Renders at the full 12 at any gate this
+     ladder will ever carry. */
+  lockedChip: (short) => `${short} to go`,
   /* SHORT ON PURPOSE, for the same reason `newReadyNote` below is — and this
      one was MISSED when that decision was made, which is why it shipped broken.
      It shares its line with the `320 more care points` chip, so its slot is
@@ -296,24 +315,76 @@ export function createKennel(opts = {}) {
   }
 
   /* ---- layout ------------------------------------------------------ */
+  /**
+   * HOW TALL A DOG CARD IS, WHICH IS NOT A CONSTANT ANY MORE.
+   *
+   * It was `K.cardH` — a flat 92 — and that was correct for as long as the
+   * kennel held two dogs. At five it is not: 62 of header, five cards at 100
+   * apiece, the earned heading, five earned rows at 46, and a Done button 52 up
+   * from the bottom comes to 902 units on a screen that is 844 minus a 40-unit
+   * safe-area inset. The Done button's own `Math.min` clamp would have hidden
+   * that by sliding it up UNDER the last two earned rows, which is the worst
+   * possible failure: the panel would look fine and one control would be
+   * unreachable behind another.
+   *
+   * NOTHING IN THIS GAME SCROLLS, and that is a design property rather than an
+   * omission — no surface in the tree has a scroll offset, because a child
+   * hunting for a row below the fold is a child who does not find it. So the
+   * cards give way instead, and they give way ONLY when they have to: the
+   * clamp's ceiling is the same 92 the panel has always used, so at one, two,
+   * three or four cards every pixel of this surface is where it was. The
+   * shrink is reachable at five and nowhere else.
+   *
+   * Derived from the LIVE inset and the LIVE earned-list length, not from the
+   * 844x390 the numbers above were worked out on, so a taller notch or a
+   * sixth earned row tightens the cards rather than hiding the button.
+   *
+   * `K.headH` rather than `listTop()`: the panel slides in from the bottom, and
+   * a layout that read the animated top would resize every card on every frame
+   * of the open.
+   */
+  function cardH() {
+    const n = Math.max(1, roster.length + (showNewCard() ? 1 : 0));
+    /* what the Done button and the earned list need below the cards */
+    const below = 16 + 22 + earned.length * K.rowH + 10 + 52;
+    const avail = H - bottomInset - K.headH - below;
+    const step = Math.floor(avail / n);
+    return clamp(step - K.cardGap, K.cardMinH, K.cardH);
+  }
+  function cardStep() { return cardH() + K.cardGap; }
   function cardRect(i) {
-    return { x: pad, y: listTop() + i * (K.cardH + K.cardGap), w: W - pad * 2, h: K.cardH };
+    return { x: pad, y: listTop() + i * cardStep(), w: W - pad * 2, h: cardH() };
   }
   function newCardRect() {
     const i = roster.length;
-    return { x: pad, y: listTop() + i * (K.cardH + K.cardGap), w: W - pad * 2, h: K.cardH };
+    return { x: pad, y: listTop() + i * cardStep(), w: W - pad * 2, h: cardH() };
   }
   function adoptChipRect() {
     const r = newCardRect();
-    return { x: r.x + r.w - 128 - 12, y: r.y + r.h - 40, w: 128, h: 30 };
+    /* 40 up from the bottom of a 92 card; the same PROPORTION of a short one, so
+       the chip does not walk off the card as it shrinks */
+    return { x: r.x + r.w - 128 - 12, y: r.y + r.h - Math.round(r.h * 0.435), w: 128, h: 30 };
   }
   function cardChipRect(i) {
     const r = cardRect(i);
     return { x: r.x + r.w - 84 - 12, y: r.y + (r.h - 30) / 2, w: 84, h: 30 };
   }
+  /**
+   * THE THREE TEXT BASELINES ON A CARD, as fractions of its height.
+   *
+   * 30 / 50 / 68 of 92 is what the surface shipped with, and they are kept as
+   * exact fractions of it so a 92-unit card is bit-identical and a 74-unit one
+   * compresses evenly instead of having its last line hang off the bottom.
+   */
+  function cardLines(h) {
+    return [h * (30 / 92), h * (50 / 92), h * (68 / 92)];
+  }
+  function newCardLines(h) {
+    return [h * (26 / 92), h * (46 / 92), h * (64 / 92)];
+  }
   function earnedTop() {
     const n = roster.length + (showNewCard() ? 1 : 0);
-    return listTop() + n * (K.cardH + K.cardGap) + 16;
+    return listTop() + n * cardStep() + 16;
   }
   function earnedRect(i) {
     return { x: pad, y: earnedTop() + 22 + i * K.rowH, w: W - pad * 2, h: K.rowH - 6 };
@@ -730,7 +801,7 @@ export function createKennel(opts = {}) {
           maxWidth: lw - 130,
         });
         const q = adoptChipRect();
-        drawText(g, ready ? COPY.adopt(NP) : COPY.newLocked(adopt.short), {
+        drawText(g, ready ? COPY.adopt(NP) : COPY.lockedChip(adopt.short), {
           ...type('labelSm', { weight: 800 }),
           x: q.x + q.w / 2, y: q.y + dy + q.h / 2, anchor: 'free', align: 'center',
           ink: ready ? INK.onStrong : INK.body, over: ready ? CHIP : CHIP_OFF,
@@ -849,7 +920,7 @@ export function createKennel(opts = {}) {
         { ...tSmL, x: lx, y: 0, align: 'left', maxWidth: lw - 130 }, tSmL.size);
       take('chip', COPY.adopt(P),
         { ...tChip, x: 0, y: 0, align: 'center', maxWidth: q.w - 8 }, tChip.size);
-      take('chipLocked', COPY.newLocked(row ? Math.max(0, row.at - game.carePoints) : 0),
+      take('chipLocked', COPY.lockedChip(row ? Math.max(0, row.at - game.carePoints) : 0),
         { ...tChip, x: 0, y: 0, align: 'center', maxWidth: q.w - 8 }, tChip.size);
       /* the two beat lines, in the beat's own band */
       take('knock', COPY.knock,
@@ -886,6 +957,12 @@ export function createKennel(opts = {}) {
         offering: adopt.row ? adopt.row.breedId : '',
         beatBreed: beatRow ? beatRow.breedId : '',
         max: kennelMax(),
+        /* THE CARD GEOMETRY, because it is no longer a constant a caller can read
+           off BALANCE. `K.cardH` is a ceiling now (see `cardH()`), so anything
+           that computes where to tap has to ask the surface rather than the
+           table — tools/kennelgate.py tapped `K.cardH * i` and would have started
+           missing the moment a fifth dog shrank the rows. */
+        cardH: cardH(), cardStep: cardStep(), listTop: K.headH,
         roster: roster.map((d) => ({ id: d.id, name: d.name, breedId: d.breedId, sex: d.sex, active: d.active, worn: d.worn })),
         earned: earned.map((e) => ({ id: e.id, at: e.at, got: e.got, short: e.short, worn: !!e.worn })),
         showNew: showNewCard(),

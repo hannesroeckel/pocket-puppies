@@ -1869,7 +1869,34 @@ export const BALANCE = {
          alternative; see the `sex` note above for how cheap it is to change. */
       { id: 'shiba', kind: 'breed', at: 1600, name: 'A Shiba Inu puppy',
         breedId: 'shiba', sex: 'm',
-        note: 'The last one, once the other two are settled' },
+        note: 'Once the other two are settled' },
+      /* ---- FOUR AND FIVE (8.24.0) --------------------------------------
+         Two more breeds, from the human's own art — the same source the profile
+         sheets came from ("i built the side view ... with chatgpt as yours looked
+         bad"), and the same arrangement: his front view is the REFERENCE that
+         `dog/breeds.js`'s data was authored against, and his side sheet is the
+         asset the walk composites.
+
+         2400 and 3400 KEEP THE LADDER'S OWN RHYTHM, and that was a decision
+         rather than an extrapolation. The spacing has been about x1.6 since stage
+         6 (90, 150, 220, 400, 650, 1100, 1600) and the alternative on the table
+         was to pull all four dogs inside a fortnight — 400/800/1300/1900 — so
+         that a child meets everybody sooner. The human chose the existing
+         rhythm knowing what it costs: at the ~150-205 care points an attentive
+         day earns, the Corgi is around day 12-16 and the Golden around day
+         17-23. Recorded because the temptation to "fix" a number that looks far
+         away is exactly how a deliberately slow ladder gets quietly sped up.
+
+         `careWords` tops out at 1600/devoted, so both of these sit ABOVE the last
+         word the game has for her. That is fine and is worth saying: the words
+         describe how she is looking after them, and there is nothing warmer than
+         devoted to say. They are not a rank. */
+      { id: 'corgi', kind: 'breed', at: 2400, name: 'A Corgi puppy',
+        breedId: 'corgi', sex: 'f',
+        note: 'For looking after all three' },
+      { id: 'golden', kind: 'breed', at: 3400, name: 'A Golden Retriever puppy',
+        breedId: 'golden', sex: 'm',
+        note: 'The last of them' },
     ],
     /* the word-scale for how well she is looking after him. WORDS, NEVER A
        BAR — care points are a number she can see (they are a currency), but
@@ -1994,17 +2021,20 @@ export const BALANCE = {
        the last one.
        ================================================================ */
     kennel: {
-      /* THE SCHNOODLE, THE COCKAPOO AND THE SHIBA — every breed dog/breeds.js
-         draws, and no more. Was 2, which capped the kennel one dog below the
-         art that existed.
+      /* EVERY BREED dog/breeds.js DRAWS, and no more: the Schnoodle, the
+         Cockapoo, the Shiba, the Corgi and the Golden. Was 2 (which capped the
+         kennel below the art that already existed), then 3.
          It is a SEPARATE number from the count of breed rows on the ladder on
          purpose: the rows say what she can earn, this says how many dogs the
          room and the kennel layout can hold. Raising it without adding a row
          unlocks nothing; adding a row without raising it is refused with
-         `reason: 'full'` rather than silently ignored. Three cards plus the
-         earned list is also exactly what fits above the Done button at 844
-         units — a fourth would need the panel to scroll, which it cannot. */
-      max: 3,
+         `reason: 'full'` rather than silently ignored.
+         FIVE IS THE LAYOUT'S CEILING, not a round number. `ui/kennel.js` sizes
+         its cards to the space left over after the earned list and the Done
+         button, and at five it has come down to its 64-unit floor with about
+         ten units to spare on a 40-unit-inset phone. A sixth would need the
+         panel to scroll, and nothing in this game scrolls. */
+      max: 5,
       /* `adoptId` / `adoptBreed` / `adoptSex` USED TO BE HERE. They are now
          per-row on `economy.unlocks` (see the breed rows there): with one
          adoptable breed a single triple was the same thing said more simply,
@@ -2962,7 +2992,15 @@ export const BALANCE = {
        is the right family of sound for meeting somebody. */
     kennel: {
       pad: 14, headH: 62,
-      cardH: 92, cardGap: 8,
+      /* `cardH` IS NOW A CEILING, NOT A HEIGHT. ui/kennel.js sizes a dog card to
+         the space the earned list and the Done button leave, clamped between
+         these two: 92 is what the surface has always drawn and is what one to
+         four cards still get exactly, and 64 is the floor below which the three
+         lines of a card (name, breed, collar) stop fitting. Five dogs land at
+         about 74. See `cardH()` in that file for why the alternative — letting
+         the Done button's clamp slide it under the last earned rows — was the
+         worst of the options. */
+      cardH: 92, cardMinH: 64, cardGap: 8,
       rowH: 46,                 // the earned-list rows
       portraitR: 30,
       flash: 0.28,

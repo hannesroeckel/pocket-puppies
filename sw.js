@@ -109,6 +109,22 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.24.0: TWO MORE DOGS — A CORGI AND A GOLDEN RETRIEVER. TWO NEW ASSETS,
+   `side-corgi.webp` (104KB) and `side-golden.webp` (122KB), both from the
+   human's own art and both in the list below; `py tools/check-precache.py` now
+   expects 71 entries. A phone that took this generation without them would show
+   the drawn profile instead of the painted one — degraded rather than broken,
+   because `dog/sidesprite.js` reports a missing sheet rather than guessing — but
+   the FRONT dog is data in `dog/breeds.js` and that file changed, so the
+   generation has to move regardless.
+   The ladder gains two rows (2400 and 3400) and `kennel.max` is 5. Still no
+   schema bump: `unlocks.breeds` is an array of whatever breeds a save owns, and
+   unlocks are derived from `carePoints` on every read.
+   THE SHEETS ARE FOUR WALK FRAMES, NOT stand/walk/stand/bound like the first
+   three. His new art draws a real alternating-leg cycle, and it is used as
+   drawn: both callers of `sidesprite.draw` pass `run: 1`, so the profile dog is
+   never on screen standing still and frame 0 does not have to be a stand.
+
    8.23.0: THE SHIBA IS A DOG SHE CAN OWN. NO NEW FILES AND NO SCHEMA BUMP — the
    whole change is data and a seam. He has been a complete breed in
    `dog/breeds.js` since stage 1 and has had a painted profile sheet since
@@ -154,8 +170,9 @@
    springs since stage 1, and `src/assets/side-*.webp` are painted sheets. They
    went in because the drawn profile was rejected twice and he made better ones
    ("i built the side view of the schnoodle with chatgpt as yours looked bad").
-   Two breeds have sheets; the Shiba has none and falls back to the drawn profile,
-   which is why `dog/side.js` was kept. `py tools/check-precache.py` now expects 67
+   Two breeds have sheets at this generation; the Shiba has none yet and falls back
+   to the drawn profile, which is why `dog/side.js` was kept (8.21.0 gave him one).
+   `py tools/check-precache.py` now expects 67
    entries and now also checks `.webp`, because a sheet on disk and absent from
    this list is a dog who vanishes the moment the phone goes offline.
 
@@ -281,7 +298,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.23.0';
+const VERSION = '8.24.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -311,6 +328,8 @@ const PRECACHE = [
      Safari has decoded WebP since iOS 14. */
   './src/assets/side-meta.js',
   './src/assets/side-cockapoo.webp',
+  './src/assets/side-corgi.webp',
+  './src/assets/side-golden.webp',
   './src/assets/side-schnoodle.webp',
   './src/assets/side-shiba.webp',
   './src/dog/sidesprite.js',

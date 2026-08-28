@@ -128,13 +128,17 @@ LADDER = r"""() => {
     return d;
   };
 
-  /* the card, tapped where her thumb would land */
+  /* the card, tapped where her thumb would land.
+     THE GEOMETRY COMES FROM THE SURFACE, NOT FROM BALANCE. `ui.kennel.cardH` is
+     a CEILING — the panel sizes its cards to whatever the earned list and the
+     Done button leave, and at five dogs that is about 74 rather than 92. Reading
+     the table here worked while every card was 92 and would have silently
+     started tapping the wrong row the moment the fifth dog compressed them. */
   const tapCard = () => {
     const sc = pp.loop.scene;
-    const K = pp.BALANCE.ui.kennel;
     const d = kdbg();
     const n = d.roster.length;
-    const y = K.headH + n * (K.cardH + K.cardGap) + K.cardH / 2;
+    const y = d.listTop + n * d.cardStep + d.cardH / 2;
     const at = { x: pp.BALANCE.view.W / 2, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false };
     sc.pointer(app, { type: 'down', ...at });
     pp.step(1/60, 2);
@@ -387,21 +391,28 @@ def main():
 
         # ---- and the Shiba's own card, once the Cockapoo is home ----------
         ctx, pg = fresh()
+        # THE CARD ADVANCES BY ONE, not to the end of the ladder. This check used
+        # to compare against `rows[rows.length - 1]` and passed only because there
+        # were exactly two breed rows, so "the next one" and "the last one" were
+        # the same dog. 8.24.0 added two more and it failed immediately — which is
+        # the gate catching its own hardcoding, and the reason it is written
+        # against `pp.adoptable()` rather than against a list of breed names.
         second = pg.evaluate("""() => {
           const pp = window.__pp;
           const rows = pp.adoptable();
           pp.setCarePoints(rows[0].at);
           pp.adopt(Date.now());
-          pp.setCarePoints(rows[rows.length - 1].at);
+          pp.setCarePoints(rows[1].at);
           pp.openKennel();
           pp.step(1/60, 20);
           const d = pp.loop.scene.debug.kennel;
           return { offering: d.offering, showNew: d.showNew, ok: d.adopt.ok,
                    at: d.adopt.at, dogs: d.roster.map((x) => x.breedId),
-                   last: rows[rows.length - 1].breedId };
+                   next: rows[1].breedId };
         }""")
-        check(second["showNew"] and second["offering"] == second["last"] and second["ok"],
-              "A: with the Cockapoo home, the card becomes the Shiba's", second)
+        check(second["showNew"] and second["offering"] == second["next"] and second["ok"],
+              "A: with the first puppy home, the card becomes the SECOND row's — "
+              "not the last one's", second)
         if shots:
             pg.screenshot(path=str(SHOTS / "kennel-card-shiba.png"))
         ctx.close()
@@ -433,7 +444,20 @@ def main():
         # They will want to meet them." is the widest expansion of the widest line
         # on the surface, and shortening the sentence to fit it at 16 would change
         # the Cockapoo's shipped copy to buy something no player can see.
-        SHRINK_OK = {"chipLocked": 10.0}
+        #
+        # AND THE REVEAL LINE, for the longest breed name on the ladder. "A Golden
+        # Retriever puppy, looking for a home." is 44 characters of `bodyMd` 16 in
+        # a 334-unit band and comes out at 15 — one point, never cut, and on the
+        # Cockapoo and the Corgi it is the full 16.
+        #
+        # The alternative was to speak the BREED's own name in the beat ("A Golden
+        # Retriever, looking for a home.") and keep the row's longer name on the
+        # card. That fits at 16 and it changes the Cockapoo's line, which has
+        # shipped, from "A Cockapoo puppy, looking..." to "A Cockapoo, looking...".
+        # Trading approved copy on the dog she meets first for one imperceptible
+        # point on the dog she meets last is the wrong way round, so the shrink is
+        # accepted and bounded instead.
+        SHRINK_OK = {"chipLocked": 10.0, "reveal": 14.5}
         bad, soft = [], []
         for grp in F.get("out", []):
             for r in grp["rows"]:
