@@ -109,6 +109,26 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.23.0: THE SHIBA IS A DOG SHE CAN OWN. NO NEW FILES AND NO SCHEMA BUMP — the
+   whole change is data and a seam. He has been a complete breed in
+   `dog/breeds.js` since stage 1 and has had a painted profile sheet since
+   8.21.0, precached by this very list, and he was reachable by no code path at
+   all: not the gift breed, not on `economy.unlocks`, and `economy.kennel` named
+   exactly one adoptable breed in a hardcoded triple. He is now the ladder's last
+   row at 1600 care points, `kennel.max` is 3, and `adoptId`/`adoptBreed`/
+   `adoptSex` are gone — a breed is a row on `economy.unlocks` carrying its own
+   `breedId` and `sex`, and `ui/kennel.js` names no dog at all.
+   Nothing persisted changes shape: `unlocks.breeds` has always been an array of
+   whatever breeds a save owns, and unlocks are DERIVED from `carePoints` on
+   every read rather than stored (see the v6 migration's note). So a phone
+   holding 8.22.0 with 1600 points earned gets the Shiba's card on the frame it
+   takes this generation, and a save made after adopting him loads on 8.22.0 as
+   a dog whose breed the kennel will not offer — degraded, never broken.
+   The cache bump is still required: `state/balance.js`, `state/game.js`,
+   `ui/kennel.js`, `scenes/room.js` and `main.js` all changed, and a phone
+   serving a cached `ui/kennel.js` against a fresh `state/game.js` would call
+   `COPY.newTitle` as a string. Entry COUNT is unchanged at 69.
+
    8.22.0: THE WALK IS SOMETHING SHE CAN WATCH (schema v11). ONE NEW MODULE,
    `dog/stroll.js` — beat 2.75, the half-minute of road at the start of a walk
    with the things he passes tappable. A phone holding 8.21.0 would fail to
@@ -261,7 +281,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.22.0';
+const VERSION = '8.23.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

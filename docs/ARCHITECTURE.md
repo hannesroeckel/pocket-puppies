@@ -378,7 +378,14 @@ Rig-local is `(v - rig.x) / rig.s`. Zones, presses and silhouettes are all rig-l
 
 ### 11.3 Breed seam
 
-`BREEDS.shiba` is the one complete entry. Adding a breed is a data entry:
+`BREEDS.shiba` is the one complete entry **at the time this section was written**; all three
+(Shiba, Cockapoo, Schnoodle) are complete as of the stage-6 breed branch, and all three are
+ownable as of 8.23.0 — see §35, which is also where the second half of the seam is written
+down. This section covers what it takes to *draw* a breed. `BALANCE.economy.unlocks` is what
+it takes to let a player *have* one, and for eight stages that half did not exist: the Shiba
+was drawable, tested and precached, and reachable by no code path in the game.
+
+Adding a breed is a data entry:
 - `palette` supplies the **eight** canonical keys; the full render ramp (`coatHi`, `coatMid`,
   `coatDeep`, `creamMid`, `creamSh`, `line`, `inner`, `mouth`, ...) is **derived** by
   `derivePalette()` in `engine/draw.js`. `palette.extra` overrides any derived key.
@@ -4272,3 +4279,141 @@ came home, and four checks about the *park* failed for a reason that had nothing
 - **He still cannot react to what he passes.** The sheets are four walk frames and a stand: no sniff,
   no head dip, no pick-up. The find flies to his mouth and sparkles, and the dog does not change.
   That is §33.3's trade showing up in a second beat.
+
+## 35. The Shiba is a dog she can own (8.23.0) — as built
+
+The question that started it was three words long: *why is the shiba dog not available in the
+game?* The answer is worth writing down because nothing was broken, no gate failed, and the
+defect had survived eight stages of increasingly thorough verification.
+
+He was **finished**. `BREEDS.shiba` is the oldest complete entry in `dog/breeds.js` and is the
+breed §6's rig, §18's bowl geometry, §29's wear and §33's profile were all built against.
+`side-shiba.webp` landed in 8.21.0 and `sw.js` precaches it. `tools/breedproof.py`,
+`bowlpixels.py`, `reachgate.py` and `walkgate.py` all measure him on every run.
+
+He was also **unreachable**, by every path at once:
+
+| the way a dog enters the roster | why not the Shiba |
+| --- | --- |
+| `BALANCE.gift.breedId` | `'schnoodle'` — confirmed by the human, correctly |
+| `economy.unlocks`, `kind: 'breed'` | one row, `cockapoo` |
+| `economy.kennel.adoptBreed` | the literal `'cockapoo'`, with `max: 2` beside it |
+
+That is the same defect as 17.5's *"a reward she has EARNED that does nothing"*, entered from
+the other end: a thing that is fully built, fully tested, shipped in the cache, and that no
+player can ever see. The suite could not catch it because every gate asked *does the Shiba
+render correctly*, and the answer was always yes.
+
+### 35.1 Why it could not be a one-line change
+
+Adding a row to `economy.unlocks` would have done nothing, because **nothing read that table's
+breed rows.** The adoptable breed was named in five places and none of them was the ladder:
+
+- `economy.kennel.adoptId` / `adoptBreed` / `adoptSex`;
+- `state/game.js adoptCheck()`, which looked up `adoptId` and compared one breed;
+- `adoptDog()`, which built the dog from `adoptBreed`/`adoptSex`;
+- `ui/kennel.js showNewCard()`, which tested `roster.some(d => d.breedId === EK.adoptBreed)`;
+- `ui/kennel.js COPY`, in six literals — *A Cockapoo puppy*, *She is ready to come home*,
+  *Bring her home*, *A Cockapoo puppy, looking for a home.*, and a settle line with two typed
+  pronouns in it.
+
+So the seam moved. A **breed is now a row**, carrying its own `breedId` and `sex`:
+
+```js
+{ id: 'shiba', kind: 'breed', at: 1600, name: 'A Shiba Inu puppy',
+  breedId: 'shiba', sex: 'm', note: 'The last one, once the other two are settled' }
+```
+
+`game.adoptable()` reads those rows in ladder order and resolves each one's pronouns from
+`PRONOUNS` exactly as `roster()` does per dog. `game.nextAdoptable()` is the first row whose
+breed is not already in the kennel. `adoptCheck()` returns that row as `row`, and **every line
+`ui/kennel.js` draws or speaks comes from it.** There is no breed name left in that file.
+`kennel.max` is 3. The old triple is deleted, not deprecated.
+
+**1600, and why.** The ladder's spacing is roughly x1.6 (90, 150, 220, 400, 650, 1100), which
+puts the next step near 1750. 1600 is inside that band *and* is `careWords`' threshold for
+**devoted** — so the last thing her care unlocks arrives on the frame the game starts using
+its warmest word for her. The two numbers should move together or not at all.
+
+### 35.2 Three bugs the second breed exposed
+
+None of these was reachable with one adoptable breed. That is the interesting part: they were
+all latent in code that had shipped and been verified.
+
+1. **The reveal would have announced the wrong dog.** `adoptDog()` runs at the *reveal*, not at
+   the tap — deliberately, so an interrupted beat cannot leave a half-written save — and
+   `refresh()` runs immediately after it. From that frame on, `adopt.row` is the **next** puppy
+   on the ladder. With one breed the row simply went `null` and the line was a literal, so
+   nothing showed. With two, the Cockapoo would have walked out of the glow under the words
+   *"A Shiba Inu puppy, looking for a home."* Fixed by capturing `beatRow` and `beatHostPron`
+   at the knock; `kennelgate` samples the beat frame by frame and asserts that the card has
+   moved on while the beat has not.
+2. **"They is yours too."** Parameterising a pronoun and leaving its verb behind. `PRONOUNS`
+   carries `is`, `has` and `s` for precisely this, and the first draft of both `newReady` and
+   `settle` typed `is`. Caught by measuring every ladder row against they/them — not by
+   reading it.
+3. **Two literals that were already wrong.** `COPY.earned` and `COPY.earnedNone` said *"looking
+   after him"*, so the kennel could say it with the female Cockapoo in the room. That predates
+   this change by two stages; the pronoun sweep `BALANCE.gift`'s note defers had never reached
+   this file. Fixed here because `kennelgate` now asserts that **no literal on this surface
+   contains a typed pronoun**, and an assertion with two grandfathered exceptions is not one.
+
+### 35.3 `ui/kennel.js audit()` — the check this file should have had in stage 6
+
+The same shape `ui/howto.js audit()` returns, and here for the reason that file's own note
+gives: a card note measured at 334 units was drawn into a 116-unit slot and shipped as
+**"She goes to someone wh…"**. Nothing was clipped, no contrast check failed, and no gate
+existed that could have failed.
+
+It exists **now** because the copy stopped being literals. "It fits" was a property of six
+strings somebody had looked at; it is now a property of every ladder row crossed with
+he/she/they, and the widest of those combinations is not obvious by eye. `row` and `pron` are
+arguments rather than live state, so a probe can measure the Shiba's card without the save
+having to reach 1600 first.
+
+216 lines measured. Everything fits at full size except two slots, both exempted **to a
+numbered floor** rather than waved through, because at `T.minSize` 9.5 text.js stops shrinking
+and starts ellipsising:
+
+| slot | worst case | size | note |
+| --- | --- | --- | --- |
+| `chipLocked` | `1600 more care points` | 10.0 | pre-existing; the Cockapoo's `400 more...` is already 10.5 in the shipped game. Held at >= 10.0, so a five-digit gate would break the gate loudly. |
+| `settle` at they/them | `They are yours too. They will want to meet them.` | 14.5 | unreachable — no ladder row is neutral. Held at >= 14.0. Shortening the sentence to fit at 16 would change the Cockapoo's shipped copy to buy something no player can see. |
+
+### 35.4 `tools/kennelgate.py` — 40 checks
+
+Written against the **ladder**, not against the Shiba: a check that hardcoded "cockapoo then
+shiba" would pass while re-introducing the bug it exists to prevent. It walks
+`pp.adoptable()`, and for each row asserts the card offers it, one point short is refused with
+the gap named, ten million coins adopt nobody, the threshold adopts by a **real tap through
+`scene.pointer`** (the 8.16.1 lesson), the beat names the arriving dog, the new dog carries the
+ladder's sex, and `carePoints` is unchanged afterwards. Then: exactly one card even at 999,999
+points, the cap refusing a fourth dog, the fit sweep above with fault injection, and the Shiba
+rendered in the room with his own proportions (`eyeSize` 1.14, not the Schnoodle's 1.44) and
+his own coat counted on the canvas.
+
+One thing it had to learn about the game rather than about the change: **submitting a name is
+not the same as the beat being over.** `ui.naming` holds the new name on screen for
+`revealHold` 2.4s and owns the screen for all of it, so a gate that names the puppy and steps
+twenty frames finds `surfaceOwner() === 'naming'` and gets its next `openKennel()` refused —
+which is the arbiter working correctly and looked exactly like the second adoption silently
+failing.
+
+### 35.5 Left imperfect
+
+- **"He is yours too. He will want to meet him."** The Shiba arriving to the Schnoodle repeats a
+  pronoun. Using the resident's *name* was tried and rejected on measurement: the line is
+  `bodyMd` 16 in a 334-unit band and already sits near 350, and `ui.naming.maxLen` is 14, so a
+  long name takes the type down to roughly 12 — a four-point shrink on the most important line
+  in the beat, and only on the least predictable inputs.
+- **`chipLocked` is 10.0 at the Shiba's gate**, down from 10.5 at the Cockapoo's, because 1600
+  is one digit longer than 400. Legible and never cut. The honest fix is the earned list's own
+  idiom — `COPY.locked` is already `${short} to go`, which would render at full 12 — but that
+  changes copy that shipped, on a surface this change was not asked to redesign.
+- **The offered card's portrait is still an anonymous silhouette** for the Shiba as it is for
+  the Cockapoo. That is deliberate (*"the art is not hers yet, and a portrait that guessed
+  would be a promise this file cannot keep"*) and it is now the same anonymous shape twice in
+  one playthrough, which is a little more visible than it was once.
+- **`COPY.earnedNone` is dead.** The earned list always has five rows, so the empty-state line
+  cannot render. It was already dead before this pass; it is now a dead *function*. Left rather
+  than deleted, because deleting copy is a decision about the game and not about this seam.

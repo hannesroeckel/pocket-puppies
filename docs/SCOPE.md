@@ -240,6 +240,17 @@ Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but m
 - **Breeds**: quality over roster size. The reference breed is the Shiba Inu. **Her dream
   breed is the priority addition** and should be the best-looking dog in the game.
   Target a handful of excellent breeds, not twenty mediocre ones.
+  - **Resolved, 8.23.0: three breeds, and all three are ownable.** "The reference breed"
+    was read for eight stages as "the breed the renderer is *tested* against", which is
+    how a finished, drawn, precached Shiba came to have no path into the game — not the
+    gift, not on the care ladder, and one hardcoded adoptable breed in `economy.kennel`.
+    He is the ladder's last row at **1600 care points** (`careWords`' threshold for
+    *devoted*), the kennel holds **three**, and a breed is now a data row carrying its own
+    `breedId` and `sex` so a fourth needs no UI change. That is the handful.
+- **Kennel copy names no dog.** Every line on the adoption card and in its beat is a
+  function of a ladder row and a pronoun table. This is not tidiness: the Cockapoo being
+  spelled out in `ui/kennel.js`'s COPY was half of why there was nowhere to put a second
+  adoptable breed.
 - **The first-launch gift** — decided: the puppy arrives **unnamed**, and she names it.
   That naming moment is the emotional centre of first launch; give it room, don't rush it
   with UI chrome. Breed and sex still to be confirmed by the human.

@@ -1784,6 +1784,7 @@ export const BALANCE = {
          collarRed   -> ui/kennel.js puts it on him; dog/draw.js draws it
          rugBlue     -> scenes/room.js repaints the rug
          cockapoo    -> ui/kennel.js adopts her
+         shiba       -> ui/kennel.js adopts him, by the same code path
          treatsGood  -> ui/shop.js stocks a row that coins alone can never reach
 
        `bedBasket` and `roomSeaside` are gone rather than deferred. They can
@@ -1804,6 +1805,24 @@ export const BALANCE = {
            400  a Cockapoo puppy      the big one, and nothing crowds it
            650  a portrait of him     the room gains HIM
            1100 the good treats
+           1600 a Shiba Inu puppy     the last one, and the top of the ladder
+
+         THE SHIBA IS THE THIRD DOG, AND HE WAS ALREADY DRAWN.
+         `dog/breeds.js` has carried a complete Shiba entry since stage 1 — he is
+         the reference breed the whole renderer was built against — and stage 8
+         gave him a painted profile sheet (`src/assets/side-shiba.webp`) alongside
+         the other two. He was nonetheless UNREACHABLE: not the gift breed, not on
+         this ladder, and `economy.kennel` named exactly one adoptable breed. A
+         finished dog that no player can ever meet is the same defect as an earned
+         reward that does nothing (17.5), from the other end.
+
+         1600 rather than something sooner, for two reasons. It is the next step
+         in the spacing the rest of the ladder already keeps (~1.6x each time:
+         90, 150, 220, 400, 650, 1100 → 1750, and 1600 is inside that band), and
+         it is exactly `careWords`' threshold for **devoted** — so the last thing
+         her care unlocks lands on the frame the game starts using its warmest
+         word for her. That coincidence is deliberate; the two numbers should be
+         changed together or not at all.
 
          `bedBasket` and `roomSeaside` were cut in stage 6 "rather than
          deferred... they can come back when there is something to draw"
@@ -1826,12 +1845,31 @@ export const BALANCE = {
         swatch: '#cf6e58', note: 'Little flags across the wall' },
       { id: 'rugBlue', kind: 'decor', at: 220, name: 'A soft blue rug',
         swatch: '#6f93a8', note: 'The room warms up a little' },
+      /* ---- A BREED ROW CARRIES THE PUPPY IT UNLOCKS ---------------------
+         `breedId` and `sex` used to live in `economy.kennel` as `adoptBreed` and
+         `adoptSex` — one adoptable breed, spelled once, in a different object
+         from the row that gated it. That was fine while there was exactly one,
+         and it is precisely what made the second one impossible: adding a row
+         meant nothing, because the kennel never looked at the rows.
+         They are here now, so a breed is a DATA ENTRY on this ladder in the same
+         way a breed is a data entry in dog/breeds.js (ARCHITECTURE 11.3), and
+         `state/game.js adoptCheck()` walks these in order.
+         `sex` drives pronouns only — nothing mechanical reads it, and no copy in
+         ui/kennel.js hardcodes a pronoun, so flipping one of these is a one-key
+         change with no other consequence. */
       { id: 'cockapoo', kind: 'breed', at: 400, name: 'A Cockapoo puppy',
+        breedId: 'cockapoo', sex: 'f',
         note: 'Someone new, once he is properly settled' },
       { id: 'portrait', kind: 'decor', at: 650, name: 'A portrait of him',
         swatch: '#b4703f', note: 'The picture on the shelf becomes him' },
       { id: 'treatsGood', kind: 'stock', at: 1100, name: 'The good treats',
         note: 'The shop starts stocking the nice ones' },
+      /* THE THIRD DOG. Male, so the kennel reads he / she / he — chosen only
+         because two of one and one of the other is less of a pattern than the
+         alternative; see the `sex` note above for how cheap it is to change. */
+      { id: 'shiba', kind: 'breed', at: 1600, name: 'A Shiba Inu puppy',
+        breedId: 'shiba', sex: 'm',
+        note: 'The last one, once the other two are settled' },
     ],
     /* the word-scale for how well she is looking after him. WORDS, NEVER A
        BAR — care points are a number she can see (they are a currency), but
@@ -1946,20 +1984,35 @@ export const BALANCE = {
     /* ================================================================
        THE KENNEL (stage 6) — CARE POINTS ONLY, AND NO PRICES ON IT.
 
-       Where the second dog is adopted and where she swaps between them.
-       Adopting is deliberately NOT a row tap: `ui/kennel.js` runs a short
+       Where a second and a third dog are adopted and where she swaps between
+       them. Adopting is deliberately NOT a row tap: `ui/kennel.js` runs a short
        beat for it, because "adopting a second dog is a real milestone, not a
        menu" (SCOPE stage 6) and a milestone that resolves in one frame is a
-       menu with better copy.
+       menu with better copy. The beat runs UNCHANGED for the third — the same
+       knock, the same glow, the same lines with a different name and different
+       pronouns in them, because the second dog is not more of an occasion than
+       the last one.
        ================================================================ */
     kennel: {
-      max: 2,                   // the Schnoodle and the Cockapoo. Nothing else.
-      adoptId: 'cockapoo',      // which unlocks row the adoption consumes
-      adoptBreed: 'cockapoo',   // which breed the new puppy is
-      adoptSex: 'f',            // she may be female — pronouns resolve per dog
+      /* THE SCHNOODLE, THE COCKAPOO AND THE SHIBA — every breed dog/breeds.js
+         draws, and no more. Was 2, which capped the kennel one dog below the
+         art that existed.
+         It is a SEPARATE number from the count of breed rows on the ladder on
+         purpose: the rows say what she can earn, this says how many dogs the
+         room and the kennel layout can hold. Raising it without adding a row
+         unlocks nothing; adding a row without raising it is refused with
+         `reason: 'full'` rather than silently ignored. Three cards plus the
+         earned list is also exactly what fits above the Done button at 844
+         units — a fourth would need the panel to scroll, which it cannot. */
+      max: 3,
+      /* `adoptId` / `adoptBreed` / `adoptSex` USED TO BE HERE. They are now
+         per-row on `economy.unlocks` (see the breed rows there): with one
+         adoptable breed a single triple was the same thing said more simply,
+         and with two it was the reason a finished, drawn, precached Shiba could
+         not be reached by any code path in the game. */
       beat: {
         hold: 0.55,             // the pause before the door opens
-        reveal: 1.9,            // she comes out
+        reveal: 1.9,            // the puppy comes out
         settle: 2.6,            // ...and the name prompt follows
       },
       /* switching dogs remounts the room, so the other dog gets a real arrival

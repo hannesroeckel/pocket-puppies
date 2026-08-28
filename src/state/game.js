@@ -1588,42 +1588,91 @@ export function createGame(state, opts = {}) {
       }));
     },
     /**
+     * EVERY PUPPY THE LADDER CAN EVER OFFER, in ladder order, as data.
+     *
+     * The single source is `economy.unlocks`' `kind: 'breed'` rows — there is no
+     * second list of adoptable breeds anywhere, which is the whole reason this
+     * function exists. `economy.kennel` used to name one breed in one triple
+     * (`adoptId`/`adoptBreed`/`adoptSex`), and a complete, drawn, precached Shiba
+     * sat in dog/breeds.js for eight stages unreachable by any code path because
+     * of it: adding him to the ladder would have changed nothing, since nothing
+     * read the ladder's breed rows.
+     */
+    adoptable() {
+      return BALANCE.economy.unlocks
+        .filter((u) => u.kind === 'breed')
+        .map((u) => {
+          const sex = (u.sex === 'm' || u.sex === 'f') ? u.sex : 'n';
+          return {
+            id: u.id,
+            breedId: typeof u.breedId === 'string' && u.breedId ? u.breedId : u.id,
+            sex,
+            /* RESOLVED HERE, exactly as `roster()` resolves it per dog: ui/kennel.js
+               has to speak about a puppy that does not exist yet — "he is ready to
+               come home", "bring her home" — and it may not hardcode either. */
+            pron: PRONOUNS[sex] || PRONOUNS.n,
+            name: u.name || '', note: u.note || '', at: num(u.at, 0),
+          };
+        });
+    },
+    /** the next puppy she has not got yet, earned or not, or null when done */
+    nextAdoptable() {
+      return api.adoptable().find((r) => !state.dogs.some((d) => d.breedId === r.breedId)) || null;
+    },
+    /**
      * May she adopt right now, and if not, exactly what is missing? `reason`
      * is never 'poor' — there is no price. The only thing that can be short
      * here is care points.
+     *
+     * `row` is WHICH puppy is on offer, and it is what ui/kennel.js draws its
+     * card and speaks its lines from. It is null only when every breed on the
+     * ladder is already in the kennel; `reason: 'already'` therefore cannot
+     * happen any more (the row is chosen by skipping breeds she owns), and it is
+     * kept in the union below only because `main.js`'s harness publishes this
+     * shape and a reason nobody can produce is cheaper than a reason nobody
+     * expected.
      */
     adoptCheck() {
       const K = BALANCE.economy.kennel;
-      const u = BALANCE.economy.unlocks.find((x) => x.id === K.adoptId) || { at: 0, name: '' };
       const pts = api.carePoints;
+      const row = api.nextAdoptable();
+      const shape = (o) => ({ ok: false, reason: '', short: 0, at: row ? row.at : 0, points: pts, row, ...o });
+      /* FULL IS CHECKED FIRST, and against the roster rather than the ladder: it
+         is the room's limit, not her care's. A ladder that offered a fourth dog
+         to a kennel that holds three must refuse rather than half-adopt. */
       if (state.dogs.length >= Math.max(1, Math.floor(num(K.max, 2)))) {
-        return { ok: false, reason: 'full', short: 0, at: u.at, points: pts };
+        return shape({ reason: 'full' });
       }
-      if (state.dogs.some((d) => d.breedId === K.adoptBreed)) {
-        return { ok: false, reason: 'already', short: 0, at: u.at, points: pts };
-      }
-      if (!api.isUnlocked(K.adoptId)) {
-        return { ok: false, reason: 'locked', short: Math.max(0, u.at - pts), at: u.at, points: pts };
-      }
-      return { ok: true, reason: '', short: 0, at: u.at, points: pts };
+      if (!row) return shape({ reason: 'already' });
+      /* `pts` IS `api.carePoints` AND NOTHING ELSE — the same property the old
+         `isUnlocked(K.adoptId)` call carried, stated directly rather than through
+         a second table lookup. There is no `coins` in this function and a stage-6
+         kennel must not work around that. */
+      if (pts < row.at) return shape({ reason: 'locked', short: Math.max(0, row.at - pts) });
+      return shape({ ok: true });
     },
     /**
-     * Adopt her. SPENDS NOTHING — not coins, and not care points either.
-     * Care points are a lifetime total that gates content; they are not a
-     * balance and there is deliberately no `spendCarePoints` anywhere in this
+     * Adopt whoever is next. SPENDS NOTHING — not coins, and not care points
+     * either. Care points are a lifetime total that gates content; they are not
+     * a balance and there is deliberately no `spendCarePoints` anywhere in this
      * file. Passing the gate does not consume it, so she keeps the standing
-     * she earned and the unlock is permanent (ARCHITECTURE §15.6).
+     * she earned and the unlock is permanent (ARCHITECTURE §15.6). That matters
+     * more with two gates than with one: reaching 1600 for the Shiba must not
+     * cost her the 400 that brought the Cockapoo home.
      *
      * @returns the new dog's public shape, or null if refused
      */
     adoptDog(now = Date.now(), opts = {}) {
       const chk = api.adoptCheck();
-      if (!chk.ok) return null;
-      const K = BALANCE.economy.kennel;
+      if (!chk.ok || !chk.row) return null;
+      /* WHICHEVER PUPPY THE CHECK SAID WAS ON OFFER. Taken from the check rather
+         than looked up again, so the dog that is created cannot possibly be a
+         different dog from the one the card showed and the beat introduced. */
+      const row = chk.row;
       /* ids are derived from the clock and the first dog took `dog-<t36>`, so a
          same-millisecond adopt would collide. Suffix until it does not. */
       const d = newDog(num(now, Date.now()), {
-        breedId: K.adoptBreed, sex: K.adoptSex, name: '', rng: opts.rng,
+        breedId: row.breedId, sex: row.sex, name: '', rng: opts.rng,
       });
       let n = 1;
       while (state.dogs.some((x) => x.id === d.id)) { d.id = 'dog-' + num(now, 0).toString(36) + '-' + (++n); }

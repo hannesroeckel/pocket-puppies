@@ -1373,6 +1373,11 @@ async function boot() {
       return b && b.proportions ? b.proportions : null;
     },
     adoptCheck: () => game.adoptCheck(),
+    /* EVERY PUPPY THE LADDER CAN OFFER, so a gate can walk them rather than
+       hardcode the two it happens to know about — which is how the Shiba came to
+       be gate-tested for eight stages as art and never once as a dog she owns */
+    adoptable: () => game.adoptable(),
+    nextAdoptable: () => game.nextAdoptable(),
     adopt: (now) => game.adoptDog(now === undefined ? Date.now() : now),
     switchDog: (id) => game.switchDog(id),
     /* tap a surface for real, as a pointer, so the hit tests are exercised */

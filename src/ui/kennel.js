@@ -3,11 +3,23 @@
 
    Two jobs:
      1. show her dogs and let her swap which one is in the room;
-     2. be the place the Cockapoo is adopted — for 400 CARE POINTS and for
-        nothing else. There is no coin figure anywhere on this surface, no
-        "or pay", and no code path that reads `game.coins`. The shop is the
-        surface with a purse on it; this is the surface with her standing on
-        it. One currency each is how the rule gets taught without a lecture.
+     2. be the place a puppy is adopted — for CARE POINTS and for nothing else.
+        There is no coin figure anywhere on this surface, no "or pay", and no
+        code path that reads `game.coins`. The shop is the surface with a purse
+        on it; this is the surface with her standing on it. One currency each is
+        how the rule gets taught without a lecture.
+
+   IT DOES NOT KNOW WHICH PUPPY IS ON OFFER, AND MUST NOT.
+   It asks `game.adoptCheck()`, which answers with a `row` — the next breed on
+   `BALANCE.economy.unlocks` she does not already own, with its name, its cost
+   and its pronouns. Everything below is drawn and spoken from that row.
+
+   This is not abstraction for its own sake: it is what was broken. The Cockapoo
+   was named in this file's COPY three times, in `showNewCard`, and in
+   `economy.kennel.adoptBreed`, so the Shiba — a complete breed in dog/breeds.js
+   with a painted profile sheet, precached and gate-tested for eight stages — had
+   no path into the game at all. There was nowhere to put him. Now there is a
+   ladder row, and a second one after it would need no change here either.
 
    ADOPTING IS A BEAT, NOT A ROW TAP. "Adopting a second dog is a real
    milestone, not a menu" (SCOPE stage 6), and a milestone that resolves on
@@ -22,10 +34,11 @@
    balance, and there is no `spendCarePoints` in `state/game.js` and must
    never be one (ARCHITECTURE §15.6). She keeps the standing she earned.
 
-   Copy is pronoun-parameterised per dog from `game.pron` and from each
-   roster entry's own `pron`: the gift puppy is a male Schnoodle and the
-   Cockapoo is female, so this surface has both on screen at once and cannot
-   use a single pronoun for "the dog".
+   Copy is pronoun-parameterised per dog from `game.pron`, from each roster
+   entry's own `pron`, and from the offered row's `pron`: the gift puppy is a
+   male Schnoodle, the Cockapoo is female and the Shiba is male, so this surface
+   can have all three on screen at once and cannot use a single pronoun for
+   "the dog". Not one string below contains "he", "she", "him" or "her".
 
    Text goes through ui/text.js. There is not one `fillText` in this file.
    ========================================================================== */
@@ -76,6 +89,10 @@ const PILL = SURF.chip;
 const FLASH = SURF.chrome;
 
 const cap = (w) => (w ? w[0].toUpperCase() + w.slice(1) : w);
+/* 'Three is plenty'. Sparse on purpose: the kennel holds three dogs and the
+   words run out one past any cap this game will ever have. Past the end the
+   toast falls back to the digit, which is ugly but never wrong. */
+const NUM_WORD = ['No', 'One', 'Two', 'Three', 'Four'];
 
 export const COPY = {
   title: 'Your dogs',
@@ -90,8 +107,13 @@ export const COPY = {
   wearing: (name) => `Wearing ${name.toLowerCase()}`,
   wearNothing: 'No collar',
 
-  newTitle: 'A Cockapoo puppy',
+  /* THE ROW'S OWN NAME — 'A Cockapoo puppy', then 'A Shiba Inu puppy'. It was
+     this literal, which is half of why the Shiba was unreachable: the card could
+     only ever announce one dog. The fallback is for a row with no `name`, which
+     the ladder should never contain but which must not render as `undefined`. */
+  newTitle: (row) => (row && row.name) || 'A new puppy',
   newLocked: (short) => `${short} more care points`,
+
   /* SHORT ON PURPOSE, for the same reason `newReadyNote` below is — and this
      one was MISSED when that decision was made, which is why it shipped broken.
      It shares its line with the `320 more care points` chip, so its slot is
@@ -121,26 +143,68 @@ export const COPY = {
      stop directly above 'Nothing to pay.' with one, in the same card, two
      lines apart. Sentences that stand alone (`knock`, `reveal`, `earnedNone`)
      keep their stops; notes that label a row do not. */
-  newLockedNote: 'By caring for him',
-  newReady: 'She is ready to come home',
+  /* `P` is the pronoun of the dog SHE ALREADY HAS — care points come from
+     looking after the one in the room. Was the literal 'By caring for him',
+     which was true only while the resident could only be the Schnoodle.
+     Still inside the 116-unit slot documented above: 'By caring for them' is
+     the longest of the three at 18 characters. */
+  newLockedNote: (P) => `By caring for ${P.them}`,
+  /* `P` here is the OFFERED puppy's pronoun, not the resident's.
+     `P.is` RATHER THAN A TYPED "is" — that is what the field is in the table
+     for. "They is ready to come home" is what a typed one produces, and the
+     first draft of this line had it: parameterising the pronoun and leaving its
+     verb behind is the specific mistake `PRONOUNS` carries `is`, `has` and `s`
+     to prevent (state/game.js). Caught by tools/kennelgate.py measuring every
+     row against they/them, not by reading it. */
+  newReady: (P) => `${cap(P.they)} ${P.is} ready to come home`,
   /* SHORT ON PURPOSE: it shares the line with the 'Bring her home' chip, and
      the long version truncated to "You earn...". The four words that matter
      are the ones that say this is not a purchase. */
   newReadyNote: 'Nothing to pay',
-  adopt: 'Bring her home',
+  adopt: (P) => `Bring ${P.them} home`,
   atGate: (at) => `${at} care points`,
 
   knock: 'Someone is at the door.',
-  reveal: 'A Cockapoo puppy, looking for a home.',
-  settle: (P) => `She is yours too. ${cap(P.they)} will want to meet her.`,
+  reveal: (row) => `${(row && row.name) || 'A puppy'}, looking for a home.`,
+  /* `Pnew` is the arriving puppy, `Pres` the dog already in the room. Two
+     pronouns, because with three breeds the pair can be he/she, she/he or he/he
+     and no single string covers them. For the Cockapoo arriving to the Schnoodle
+     this resolves to exactly the sentence that shipped before, character for
+     character, which is the check that the parameterisation changed nothing.
 
-  earned: 'What looking after him has earned',
-  earnedNone: 'Look after him and things start turning up here.',
+     THE SHIBA ARRIVING TO THE SCHNOODLE SAYS "He is yours too. He will want to
+     meet him." — grammatical, and mildly ambiguous about which `he` is which.
+     Substituting the RESIDENT'S NAME was tried and rejected on measurement, not
+     taste: this line is `bodyMd` 16 in a 334-unit band and the pronoun version
+     is already at about 350, so it shrinks a little as shipped. `ui.naming.maxLen`
+     is 14, and "She is yours too. Wolfgangamade will want to meet her." measures
+     near 440 — ui/text.js would take the type down to roughly 12 to fit it. A
+     four-point shrink on the most important line in the adoption beat is a worse
+     trade than one repeated pronoun, and it would only bite on the longest names,
+     which is the least predictable kind of layout bug. */
+  settle: (Pnew, Pres) => `${cap(Pnew.they)} ${Pnew.is} yours too. ${cap(Pres.they)} will want to meet ${Pnew.them}.`,
+
+  /* THESE TWO WERE ALREADY WRONG, and not because of anything on this pass.
+     They were literals with "him" in them, and the moment the Cockapoo was
+     adoptable the kennel could show "What looking after him has earned" while a
+     female dog was the one in the room. The pronoun sweep balance.js's `gift`
+     note defers ("feminine copy is still hardcoded in several strings ... tracked
+     separately") never reached this file.
+     Fixed here rather than left for that sweep because tools/kennelgate.py now
+     asserts that no literal on this surface contains a typed pronoun, and an
+     assertion with two grandfathered exceptions in it is not an assertion. Both
+     stay inside their slots at they/them — the widest expansion is one character
+     longer than "him". */
+  earned: (P) => `What looking after ${P.them} has earned`,
+  earnedNone: (P) => `Look after ${P.them} and things start turning up here.`,
   locked: (short) => `${short} to go`,
   wear: 'Wear',
   worn: 'On',
   take: 'Off',
-  full: 'Two is plenty',
+  /* the kennel's own cap, in words, because 'Two is plenty' was a literal that
+     had to be edited the day the cap moved — and a toast that says the wrong
+     number is worse than one that says none */
+  full: (n) => `${NUM_WORD[n] || n} is plenty`,
   close: 'Done',
   switched: (name) => `${name || 'Your dog'} is in the room`,
 };
@@ -182,6 +246,18 @@ export function createKennel(opts = {}) {
   let beat = '';          // '' | 'knock' | 'reveal' | 'settle'
   let beatT = 0;
   let newDogId = '';
+  /* WHO THE BEAT IS ABOUT, captured at the knock and held until it ends.
+     It cannot read `adopt.row` while it runs: `adoptDog()` is called at the
+     REVEAL and `refresh()` immediately after it, so from that frame on
+     `adopt.row` is the NEXT puppy on the ladder — and the reveal line would
+     announce the Shiba over a Cockapoo walking out of the glow. With one
+     adoptable breed that bug was unreachable (the row simply went null), which
+     is exactly the kind of thing a second one exposes. */
+  let beatRow = null;
+  /* the resident dog's pronoun, also captured at the knock: the settle line
+     speaks about both dogs, and by the time it draws, the roster has a second
+     one in it. */
+  let beatHostPron = null;
   /* the switch beat: a short hold so swapping dogs is a decision landing, not
      a screen blinking */
   let switchTo = '';
@@ -189,19 +265,25 @@ export function createKennel(opts = {}) {
 
   let roster = [];
   let earned = [];
-  let adopt = { ok: false, reason: '', short: 0, at: 0, points: 0 };
+  let adopt = { ok: false, reason: '', short: 0, at: 0, points: 0, row: null };
 
   const pad = K.pad;
 
   function topY() { return H * (1 - clamp(slide.x, 0, 1)); }
   function listTop() { return topY() + K.headH; }
+  /* the cap, guarded the same way state/game.js guards it, so the toast and the
+     refusal can never disagree about how many dogs are plenty */
+  function kennelMax() { return Math.max(1, Math.floor(+EK.max || 2)); }
 
   function refresh() {
     roster = game.roster();
     adopt = game.adoptCheck();
     const pts = game.carePoints;
-    /* the breed rows are NOT in this list: the Cockapoo has a card of her own
-       directly above it, and a milestone listed twice reads as two rewards */
+    /* the breed rows are NOT in this list: whichever puppy is next has a card of
+       their own directly above it, and a milestone listed twice reads as two
+       rewards. This filter is also what keeps the Shiba's 1600 row from
+       appearing in the earned list as a third bullet the moment he is added —
+       one card, one dog, and the ladder's other five rows below it. */
     earned = BALANCE.economy.unlocks.filter((u) => u.kind !== 'breed').map((u) => ({
       ...u,
       got: pts >= u.at,
@@ -244,10 +326,25 @@ export function createKennel(opts = {}) {
     const y = earnedTop() + 22 + earned.length * K.rowH + 10;
     return { x: pad, y: Math.min(y, H - 52 - bottomInset), w: W - pad * 2, h: 38 };
   }
-  /** the Cockapoo gets a card until she is actually in the roster */
+  /**
+   * THE NEXT PUPPY GETS A CARD UNTIL SHE IS ACTUALLY IN THE ROSTER — and then
+   * the one after that takes its place.
+   *
+   * Both halves of the old test now live in `game.adoptCheck()`: `row` is null
+   * once every breed on the ladder is in the kennel, and `reason` is 'full' once
+   * the roster is at `economy.kennel.max`. Asking the model rather than
+   * re-deriving it here is what stops the card and the tap disagreeing — the two
+   * used to answer the question from different data (`EK.adoptBreed` here,
+   * `adoptCheck` there), which was survivable only because there was exactly one
+   * right answer.
+   *
+   * EXACTLY ONE CARD, even when she can afford two. Reaching 1600 in one stretch
+   * unlocks the Cockapoo AND the Shiba, and stacking both would put four cards
+   * on a panel that fits three and turn "the big one, and nothing crowds it"
+   * into a shopping list. She takes them in ladder order, one milestone each.
+   */
   function showNewCard() {
-    return roster.length < Math.max(1, Math.floor(EK.max))
-      && !roster.some((d) => d.breedId === EK.adoptBreed);
+    return !!adopt.row && adopt.reason !== 'full';
   }
   function hit(r, ev) {
     return ev.x >= r.x && ev.x <= r.x + r.w && ev.y >= r.y && ev.y <= r.y + r.h;
@@ -326,7 +423,10 @@ export function createKennel(opts = {}) {
         const made = game.adoptDog(Date.now());
         newDogId = made ? made.id : '';
         refresh();
-        if (!made) { beat = ''; beatT = 0; glow.to(0); toast(COPY.full); }
+        if (!made) {
+          beat = ''; beatT = 0; beatRow = null; beatHostPron = null;
+          glow.to(0); toast(COPY.full(kennelMax()));
+        }
         return;
       }
       if (beat === 'reveal' && beatT >= B.reveal) {
@@ -336,6 +436,7 @@ export function createKennel(opts = {}) {
       }
       if (beat === 'settle' && beatT >= B.settle) {
         beat = ''; beatT = 0;
+        beatRow = null; beatHostPron = null;
         glow.to(0);
         const id = newDogId;
         newDogId = '';
@@ -371,11 +472,15 @@ export function createKennel(opts = {}) {
           flashId = 'new'; flashT = K.flash;
           if (adopt.ok) {
             beat = 'knock'; beatT = 0;
+            /* WHO IS AT THE DOOR, PINNED NOW. See the note on `beatRow`: from
+               the reveal onward `adopt.row` has moved on to the next puppy. */
+            beatRow = adopt.row;
+            beatHostPron = game.pron;
             sound(K.sfx.knock);
           } else {
             sound(K.sfx.deny);
             /* the refusal is stated in CARE POINTS. There is no second way. */
-            toast(adopt.reason === 'locked' ? COPY.newLocked(adopt.short) : COPY.full);
+            toast(adopt.reason === 'locked' ? COPY.newLocked(adopt.short) : COPY.full(kennelMax()));
           }
           return true;
         }
@@ -471,7 +576,7 @@ export function createKennel(opts = {}) {
         }
       }
 
-      /* ---- the Cockapoo card ---- */
+      /* ---- the next puppy's card ---- */
       if (showNewCard()) {
         const r = newCardRect();
         const ready = adopt.ok;
@@ -600,7 +705,12 @@ export function createKennel(opts = {}) {
         const lx = r.x + 20 + K.portraitR * 2 + 16;
         const lw = r.w - (lx - r.x) - 20;
         const dy = newDy;
-        drawText(g, COPY.newTitle, {
+        /* the OFFERED puppy's pronoun. `adopt.row.pron` is resolved in
+           state/game.js from the ladder row's `sex`, the same way a roster
+           entry's is resolved from the dog's — a puppy who does not exist yet
+           still has to be spoken about correctly. */
+        const NP = (adopt.row && adopt.row.pron) || game.pron;
+        drawText(g, COPY.newTitle(adopt.row), {
           ...type('labelMd', { weight: 800 }),
           x: lx, y: r.y + dy + 26, anchor: 'free', align: 'left',
           ink: INK.body, over: bg, fade: a, maxWidth: lw,
@@ -608,19 +718,19 @@ export function createKennel(opts = {}) {
         /* the GOAL, stated as a number she is saving toward — care points are a
            currency she can see; what they say about her is the word above.
            `#8a4b22` for the ready state was `primary` typed from memory. */
-        drawText(g, ready ? COPY.newReady : `${game.carePoints} / ${adopt.at} care points`, {
+        drawText(g, ready ? COPY.newReady(NP) : `${game.carePoints} / ${adopt.at} care points`, {
           ...type('labelSm', { weight: 700, track: 0 }),
           x: lx, y: r.y + dy + 46, anchor: 'free', align: 'left',
           ink: ready ? INK.heading : INK.body, over: bg, fade: a, maxWidth: lw,
         });
-        drawText(g, ready ? COPY.newReadyNote : COPY.newLockedNote, {
+        drawText(g, ready ? COPY.newReadyNote : COPY.newLockedNote(game.pron), {
           ...type('labelSm', { weight: 500, track: 0 }),
           x: lx, y: r.y + dy + 64, anchor: 'free', align: 'left',
           ink: INK.soft(0.72), over: bg, fade: a,
           maxWidth: lw - 130,
         });
         const q = adoptChipRect();
-        drawText(g, ready ? COPY.adopt : COPY.newLocked(adopt.short), {
+        drawText(g, ready ? COPY.adopt(NP) : COPY.newLocked(adopt.short), {
           ...type('labelSm', { weight: 800 }),
           x: q.x + q.w / 2, y: q.y + dy + q.h / 2, anchor: 'free', align: 'center',
           ink: ready ? INK.onStrong : INK.body, over: ready ? CHIP : CHIP_OFF,
@@ -628,7 +738,9 @@ export function createKennel(opts = {}) {
         });
       }
 
-      drawText(g, COPY.earned, {
+      /* the dog IN THE ROOM, whoever that is — care points come from looking
+         after him, or her, or them */
+      drawText(g, COPY.earned(game.pron), {
         ...type('labelSm', { weight: 800, track: 0 }),
         x: pad + 4, y: earnedTop() + 4, anchor: 'free', align: 'left',
         ink: INK.soft(0.80), over: PANEL, fade: a,
@@ -683,6 +795,80 @@ export function createKennel(opts = {}) {
       });
     },
 
+    /**
+     * MEASURE EVERY LINE THE ADOPTION CARD AND THE BEAT WILL DRAW, in the slot it
+     * will draw it in, and report whether ui/text.js had to shrink or cut it.
+     *
+     * The same shape `ui/howto.js audit()` returns, and here for the same reason
+     * — except that this file is where the lesson was learned. A note measured at
+     * 334 units was drawn into a 116-unit slot and shipped as **"She goes to
+     * someone wh…"**: nothing was clipped, no contrast check failed, and no gate
+     * existed that could have failed. Only cropping in on a render caught it.
+     *
+     * It exists NOW because the copy stopped being literals. Every line on the
+     * card is a function of a ladder row and a pronoun table, so "it fits" is no
+     * longer a property of six strings somebody once looked at — it has to hold
+     * for every row on the ladder crossed with he/she/they, and the widest of
+     * those combinations is not obvious by eye. `tools/kennelgate.py` walks them.
+     *
+     * `row` and `pron` are ARGUMENTS rather than live state, so a probe can ask
+     * about the Shiba's card without the save having to reach 1600 first.
+     */
+    audit(g, row = adopt.row, pron = null, host = null) {
+      if (!g) return null;
+      const P = pron || (row && row.pron) || game.pron;
+      const HP = host || game.pron;
+      const r = newCardRect();
+      const lx = r.x + 20 + K.portraitR * 2 + 16;
+      const lw = r.w - (lx - r.x) - 20;
+      const q = adoptChipRect();
+      const rows = [];
+      const take = (slot, text, o, want) => {
+        const m = measure(g, text, o);
+        rows.push({
+          slot, text, got: m.str, size: +m.size.toFixed(2), want,
+          cut: m.str !== text, shrunk: m.size < want - 0.01,
+        });
+      };
+      const tMd = type('labelMd', { weight: 800 });
+      const tSm = type('labelSm', { weight: 700, track: 0 });
+      const tSmL = type('labelSm', { weight: 500, track: 0 });
+      const tChip = type('labelSm', { weight: 800 });
+      const tBody = type('bodyMd', { weight: 700 });
+      take('title', COPY.newTitle(row),
+        { ...tMd, x: lx, y: 0, align: 'left', maxWidth: lw }, tMd.size);
+      take('ready', COPY.newReady(P),
+        { ...tSm, x: lx, y: 0, align: 'left', maxWidth: lw }, tSm.size);
+      take('goal', `${game.carePoints} / ${row ? row.at : 0} care points`,
+        { ...tSm, x: lx, y: 0, align: 'left', maxWidth: lw }, tSm.size);
+      /* THE 116-UNIT SLOT. `lw - 130` is the line the note shares with the
+         '320 more care points' chip, and it is the one that shipped cut. */
+      take('lockedNote', COPY.newLockedNote(HP),
+        { ...tSmL, x: lx, y: 0, align: 'left', maxWidth: lw - 130 }, tSmL.size);
+      take('readyNote', COPY.newReadyNote,
+        { ...tSmL, x: lx, y: 0, align: 'left', maxWidth: lw - 130 }, tSmL.size);
+      take('chip', COPY.adopt(P),
+        { ...tChip, x: 0, y: 0, align: 'center', maxWidth: q.w - 8 }, tChip.size);
+      take('chipLocked', COPY.newLocked(row ? Math.max(0, row.at - game.carePoints) : 0),
+        { ...tChip, x: 0, y: 0, align: 'center', maxWidth: q.w - 8 }, tChip.size);
+      /* the two beat lines, in the beat's own band */
+      take('knock', COPY.knock,
+        { ...tBody, x: W / 2, y: 0, align: 'center', maxWidth: W - 56 }, tBody.size);
+      take('reveal', COPY.reveal(row),
+        { ...tBody, x: W / 2, y: 0, align: 'center', maxWidth: W - 56 }, tBody.size);
+      take('settle', COPY.settle(P, HP),
+        { ...tBody, x: W / 2, y: 0, align: 'center', maxWidth: W - 56 }, tBody.size);
+      /* the earned-list heading, which is about the RESIDENT and was a literal
+         with "him" in it until this pass */
+      take('earnedHead', COPY.earned(HP),
+        { ...type('labelSm', { weight: 800, track: 0 }), x: pad + 4, y: 0,
+          align: 'left', maxWidth: W - pad * 2 - 8 }, tSm.size);
+      take('earnedNone', COPY.earnedNone(HP),
+        { ...type('labelSm', { weight: 500, track: 0 }), x: pad + 4, y: 0,
+          align: 'left', maxWidth: W - pad * 2 - 8 }, tSm.size);
+      return { row: row ? row.breedId : '', card: r, chip: q, rows };
+    },
+
     get debug() {
       return {
         open, weight: +slide.x.toFixed(3), beat, beatT: +beatT.toFixed(2),
@@ -693,6 +879,13 @@ export function createKennel(opts = {}) {
            currency. */
         coinsSeen: game.coins,
         adopt: { ...adopt },
+        /* WHO THE CARD IS OFFERING, and who the running beat is about. Two
+           separate answers on purpose: they differ for the whole reveal and
+           settle, and a gate that could only see one of them could not catch the
+           reveal announcing the wrong puppy. */
+        offering: adopt.row ? adopt.row.breedId : '',
+        beatBreed: beatRow ? beatRow.breedId : '',
+        max: kennelMax(),
         roster: roster.map((d) => ({ id: d.id, name: d.name, breedId: d.breedId, sex: d.sex, active: d.active, worn: d.worn })),
         earned: earned.map((e) => ({ id: e.id, at: e.at, got: e.got, short: e.short, worn: !!e.worn })),
         showNew: showNewCard(),
@@ -727,14 +920,18 @@ export function createKennel(opts = {}) {
   function breedName(id) {
     const b = BREEDS[id];
     if (b && b.name) return b.name;
-    /* THE BREED ART IS BEING BUILT IN PARALLEL. `getBreed` falls back to the
-       Shiba for an id it does not have yet, which is the breed seam working as
+    /* A BREED ROW CAN LAND BEFORE ITS ART. `getBreed` falls back to the Shiba
+       for an id it does not have yet, which is the breed seam working as
        ARCHITECTURE §11.3 intends — a new breed is a DATA entry, and this
        surface needs no change when it lands. Until then the name comes from
-       the unlocks table so the card never claims to be a Shiba. */
-    const u = BALANCE.economy.unlocks.find((x) => x.kind === 'breed' && x.id === id);
+       the unlocks table so the card never claims to be a Shiba.
+       All three breeds on the ladder now have art, so neither fallback is
+       reachable in the shipping game; they stay because the ladder is data and
+       the next row added to it may again arrive first. */
+    const u = BALANCE.economy.unlocks.find((x) => x.kind === 'breed'
+      && (x.breedId || x.id) === id);
     if (u) return u.name;
-    return id === EK.adoptBreed ? COPY.newTitle : cap(String(id || ''));
+    return cap(String(id || ''));
   }
   function wornName(id) {
     const u = BALANCE.economy.unlocks.find((x) => x.id === id);
@@ -836,9 +1033,14 @@ export function createKennel(opts = {}) {
     const c = g.ctx;
     const B = EK.beat;
     let u = 0, line = '';
+    /* BOTH LINES COME FROM THE CAPTURED ROW, never from `adopt` — which by now
+       describes whoever is next after this one. `game.pron` is the fallback for
+       the host only if the knock somehow ran without capturing it. */
+    const NP = (beatRow && beatRow.pron) || game.pron;
+    const HP = beatHostPron || game.pron;
     if (beat === 'knock') { u = clamp(beatT / Math.max(0.001, B.hold), 0, 1); line = COPY.knock; }
-    else if (beat === 'reveal') { u = clamp(beatT / Math.max(0.001, B.reveal), 0, 1); line = COPY.reveal; }
-    else { u = clamp(beatT / Math.max(0.001, B.settle), 0, 1); line = COPY.settle(game.pron); }
+    else if (beat === 'reveal') { u = clamp(beatT / Math.max(0.001, B.reveal), 0, 1); line = COPY.reveal(beatRow); }
+    else { u = clamp(beatT / Math.max(0.001, B.settle), 0, 1); line = COPY.settle(NP, HP); }
     /* fade in fast, hold, fade out at the very end of the last beat */
     const fade = beat === 'settle'
       ? clamp(Math.min(u / 0.12, (1 - u) / 0.18), 0, 1)

@@ -2730,6 +2730,9 @@ export function createRoomScene() {
        live `g` to measure with, which only a draw has — same trick `probeToast`
        uses, and for the same reason. */
     probeHowto: () => (lastG && howto ? howto.audit(lastG) : null),
+    /* the same probe for the adoption card. `row` and `pron` are optional, so a
+       gate can measure the Shiba's card without first earning 1600 points. */
+    probeKennel: (row, pron, host) => (lastG && kennel ? kennel.audit(lastG, row, pron, host) : null),
     /* drivers the verification harness needs; see window.__pp in main.js */
     openShop() { openShop(); return shop.isOpen; },
     openKennel() { openKennel(); return kennel.isOpen; },
