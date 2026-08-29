@@ -3,7 +3,7 @@ tools/gates.py — RUN EVERY GATE, ONCE, AND PRINT ONE TABLE.
 
 §27.6 records the gap this closes: "Nothing runs the suite as one command. Six
 gates, six invocations, ~25 minutes. A runner is obvious and was not written."
-It is nineteen now, and the argument is the same one — a suite nobody runs in one
+It is twenty now, and the argument is the same one — a suite nobody runs in one
 go is a suite that gets run in part.
 
 EACH GATE IS A SUBPROCESS, NOT AN IMPORT. Three reasons, all learned rather than
@@ -34,6 +34,7 @@ agree:
 
     "N passed, M failed"        traingate timegate findsgate shopgate toastgate
                                 reachgate bowlgate breedproof kennelgate
+                                audiogate
     "ALL PASS" / "FAILED"       bowlpixels bowlperf
     "OK: N entries, ..."        check-precache
 
@@ -71,6 +72,7 @@ TOOLS = ROOT / "tools"
 GATES = [
     ("check-precache", "check-precache.py", [], False),
     ("toastgate",      "toastgate.py",      [], False),
+    ("audiogate",      "audiogate.py",      [], False),
     ("timegate",       "timegate.py",       [], False),
     ("findsgate",      "findsgate.py",      [], False),
     ("shopgate",       "shopgate.py",       [], False),

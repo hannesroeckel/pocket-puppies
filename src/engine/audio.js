@@ -42,12 +42,29 @@ const AU = BALANCE.audio;
 /* ==========================================================================
    PLAYING THROUGH THE iPHONE SILENT SWITCH.
 
-   NOT A BUG FIX — A DELIBERATE OVERRIDE. Sound was reported missing on iPhone
-   and audible on the laptop; the cause was the physical ringer switch, exactly
-   as ARCHITECTURE §16.8 documents. Nothing in this file was broken. The
-   decision to override it is a product one: the recipient normally keeps her
-   phone on silent, and a pet game that is permanently mute reads as broken
-   rather than as respectful.
+   NOT A BUG FIX — A DELIBERATE OVERRIDE, AND NOW AN OPT-IN ONE. Sound was
+   reported missing on iPhone and audible on the laptop; the cause was the
+   physical ringer switch, exactly as ARCHITECTURE §16.8 documents. Nothing in
+   this file was broken. The decision to override it is a product one: the
+   recipient normally keeps her phone on silent, and a pet game that is
+   permanently mute reads as broken rather than as respectful.
+
+   IT IS OFF BY DEFAULT AS OF 8.25.0, on this report: "when playing the game all
+   other audio such as music on the phone stops."
+
+   That is not a regression, it is the PRICE of the override, and it had never
+   been written down next to the benefit. Claiming *playback* is claiming the
+   phone's audio, because *playback* is non-mixing by definition — so the game
+   was silencing whatever was playing for as long as it was open, in exchange
+   for being audible with the ringer off. Both halves are real and only one of
+   them had been chosen deliberately.
+
+   THERE IS NO OPTION THAT DOES BOTH. Native iOS can request *playback* with
+   `mixWithOthers`; Safari exposes no such flag, and *ambient* — the only mixing
+   category the web can ask for — is precisely the one the ringer switch mutes.
+   So this is a genuine either/or, `state.settings.playOnSilent` is where it is
+   decided, and the default is the one that does not reach into the rest of the
+   phone. Settings says so in words and turns it back on in one tap.
 
    HOW IT WORKS. iOS gives a page's audio one of two session categories.
    WebAudio alone lands in *ambient*, which the ringer switch mutes. An
@@ -122,9 +139,57 @@ export function createAudio(settings = { sound: true }, opts = {}) {
   let sessionOn = false;
   let sessionFail = '';
 
-  /** the override is on AND she has sound on. Both, or we hold no session. */
+  /**
+   * THREE THINGS HAVE TO AGREE, and the middle one is new.
+   *
+   *   AU.overrideSilentSwitch   the capability exists at all (build-level)
+   *   settings.playOnSilent     SHE HAS ASKED FOR IT (per save, default false)
+   *   settings.sound            sound is on at all
+   *
+   * `playOnSilent` was added because claiming the session is not free: iOS's
+   * *playback* category is non-mixing by definition, so for as long as the game
+   * held it, whatever the phone was playing — music, a podcast — stopped. That
+   * was reported from real use, and it is not a bug in this file: it is the
+   * documented cost of the override, which nobody had weighed against the
+   * benefit until somebody actually lost their music to a puppy.
+   *
+   * The web cannot have both. Native iOS can ask for *playback* WITH
+   * `mixWithOthers`; Safari exposes no such option, and *ambient* — the only
+   * mixing category available — is exactly the one the ringer switch mutes.
+   * So it is a real either/or and it is now hers to make, defaulting to the
+   * polite side.
+   */
   function sessionWanted() {
-    return !!AU.overrideSilentSwitch && !!(settings && settings.sound);
+    return !!AU.overrideSilentSwitch
+      && !!(settings && settings.sound && settings.playOnSilent);
+  }
+
+  /**
+   * SAY WHICH SESSION WE WANT, on the browsers that let us ask.
+   *
+   * `navigator.audioSession.type` is Safari 16.4+ and is the FIRST-CLASS way to
+   * do what the silent `<audio>` element below does by side effect. Two reasons
+   * to set it as well as keeping the element:
+   *
+   *   1. It makes the ambient case EXPLICIT. Without it, "we mix with your
+   *      music" is merely the absence of the hack — and an absence is not
+   *      something a reader or a gate can check. `type = 'ambient'` is a
+   *      positive statement that this app does not want to interrupt anything.
+   *   2. It is the only lever that works if a future WebKit stops letting a
+   *      silent element move the category, which is a behaviour this file has
+   *      always depended on and never been promised.
+   *
+   * Wrapped and swallowed: this is an enhancement, and every device without it
+   * must keep the exact behaviour it had.
+   */
+  function declareSession() {
+    try {
+      const as = typeof navigator !== 'undefined' && navigator.audioSession;
+      if (!as) return '';
+      const want = sessionWanted() ? 'playback' : 'ambient';
+      as.type = want;
+      return want;
+    } catch (e) { return ''; }
   }
 
   /**
@@ -137,6 +202,10 @@ export function createAudio(settings = { sound: true }, opts = {}) {
    * exactly as it always did.
    */
   function ensureSession() {
+    /* DECLARED EITHER WAY. When the override is off this is the call that says
+       "ambient" out loud, so mixing is asserted rather than merely left to
+       happen — see declareSession(). */
+    declareSession();
     if (!sessionWanted()) return false;
     try {
       if (!sessionEl) {
@@ -189,6 +258,10 @@ export function createAudio(settings = { sound: true }, opts = {}) {
    */
   function stopSession() {
     sessionOn = false;
+    /* hand the category back as we let the element go, so a phone whose music
+       we interrupted gets it back on the same tap rather than at some later
+       garbage-collection */
+    declareSession();
     if (!sessionEl) return;
     try {
       sessionEl.pause();
@@ -307,8 +380,19 @@ export function createAudio(settings = { sound: true }, opts = {}) {
 
        Ordered so that the OFF path stops the session before anything else can
        fail, and so `settings.sound` — the persisted field (state/save.js) — is
-       already written; that is what makes the choice survive a reload. */
-    if (want) ensureSession(); else stopSession();
+       already written; that is what makes the choice survive a reload.
+
+       IT BRANCHES ON `sessionWanted()`, NOT ON `want`. It used to read
+       `if (want) ensureSession(); else stopSession()`, which was equivalent
+       while sound was the only input to the decision and became wrong the moment
+       `playOnSilent` was added: turning THAT off leaves `want` true, so the code
+       took the ensure path, `ensureSession` returned early because the session
+       was no longer wanted, and nothing ever called `stopSession`. The element
+       stayed in the document holding *playback* — i.e. the one setting whose
+       entire purpose is to give the phone's audio back would not have given it
+       back until the next reload. Caught by asserting on `sessionEl` after the
+       toggle rather than by trusting the flag next to it. */
+    if (sessionWanted()) ensureSession(); else stopSession();
     if (!master) return want;
     try {
       master.gain.value = want ? AU.master : 0;
@@ -429,6 +513,15 @@ export function createAudio(settings = { sound: true }, opts = {}) {
         masterGain: master ? +master.gain.value.toFixed(3) : null,
         /* the silent-switch override, as numbers a harness can assert on */
         overrideSilentSwitch: !!AU.overrideSilentSwitch,
+        /* HER CHOICE, and what we asked the OS for as a result. `sessionType` is
+           null where `navigator.audioSession` does not exist, which is most
+           desktop browsers and every iOS below 16.4 — so a gate must assert on
+           `sessionWanted` for behaviour and treat this as informational. */
+        playOnSilent: !!(settings && settings.playOnSilent),
+        sessionType: (() => {
+          try { return (navigator.audioSession && navigator.audioSession.type) || null; }
+          catch (e) { return null; }
+        })(),
         sessionWanted: sessionWanted(),
         sessionHeld: sessionOn,
         sessionEl: !!sessionEl,

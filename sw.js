@@ -109,7 +109,7 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
-   8.24.0: TWO MORE DOGS — A CORGI AND A GOLDEN RETRIEVER. TWO NEW ASSETS,
+   8.26.0: TWO MORE DOGS — A CORGI AND A GOLDEN RETRIEVER. TWO NEW ASSETS,
    `side-corgi.webp` (104KB) and `side-golden.webp` (122KB), both from the
    human's own art and both in the list below; `py tools/check-precache.py` now
    expects 71 entries. A phone that took this generation without them would show
@@ -124,6 +124,37 @@
    three. His new art draws a real alternating-leg cycle, and it is used as
    drawn: both callers of `sidesprite.draw` pass `run: 1`, so the profile dog is
    never on screen standing still and frame 0 does not have to be a stand.
+
+   8.25.0: THE GAME STOPS TAKING THE PHONE'S AUDIO. No new files. Reported from
+   real use: "when playing the game all other audio such as music on the phone
+   stops." That was the documented PRICE of the silent-switch override and had
+   never been offered as a choice — iOS's *playback* session is non-mixing by
+   definition, so being audible with the ringer off and letting a podcast keep
+   playing are mutually exclusive on the web (Safari exposes no `mixWithOthers`).
+   `state.settings.playOnSilent` now decides it and DEFAULTS TO FALSE, with a
+   Settings row that names the cost in both directions. `navigator.audioSession`
+   is set where it exists (iOS 16.4+), so "we mix with your music" is asserted
+   rather than merely being the absence of the old trick.
+   NO SCHEMA BUMP: `save.js load()` spreads `base.settings` under the stored
+   ones, so an existing save gains the key with its default on first load and
+   an older build ignores it. A phone that keeps 8.24.0 keeps the old behaviour,
+   which is the thing being fixed — hence the cache move.
+   `tools/audiogate.py` is new, 19 checks, and the suite is twenty gates.
+
+   8.24.0: THE SHIBA IS FEMALE. One key on one ladder row — `sex: 'm'` to
+   `sex: 'f'` — on direct instruction. No new files, no schema change, and no
+   code path touched: every line the kennel speaks about her is already a
+   function of that key and `PRONOUNS`, so "Bring her home" and "She is ready to
+   come home" fall out of the data. The generation still has to move or a phone
+   holding 8.23.0 keeps serving the old `state/balance.js` and would offer a
+   Shiba the game then calls "he".
+   NOTE ON SAVES: a dog's sex is written onto the dog record at adopt time
+   (`adoptDog` -> `newDog`), NOT read from the ladder on every frame. So this
+   changes who arrives from now on and deliberately does not reach back into a
+   Shiba somebody has already brought home — silently changing the pronouns of a
+   dog a child has already named and bonded with is worse than the
+   inconsistency, and at a 1600-point gate reached minutes ago there is almost
+   certainly nobody to be inconsistent with.
 
    8.23.0: THE SHIBA IS A DOG SHE CAN OWN. NO NEW FILES AND NO SCHEMA BUMP — the
    whole change is data and a seam. He has been a complete breed in
@@ -298,7 +329,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.24.0';
+const VERSION = '8.26.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

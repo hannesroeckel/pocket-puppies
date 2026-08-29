@@ -1327,14 +1327,45 @@ export function createRoomScene() {
    */
   function soundRow() {
     const on = !!app.game.state.settings.sound;
-    const over = !!BALANCE.audio.overrideSilentSwitch;
     return {
       id: 'sound',
       label: on ? 'Sound: on' : 'Sound: off',
+      /* THE NOTE NO LONGER CLAIMS ANYTHING ABOUT THE RINGER SWITCH, because that
+         is now a second row's business (`silentRow`) and two rows describing one
+         behaviour is how they come to disagree. The old note branched on
+         `BALANCE.audio.overrideSilentSwitch` and said "plays even on silent",
+         which stopped being true the moment the override became opt-in. */
+      note: on ? 'Yips, paws and water' : 'Everything is silent',
+    };
+  }
+
+  /**
+   * PLAY ON SILENT — the row that decides whether the game takes the phone's
+   * audio, and the honest reason for it either way.
+   *
+   * It exists because of a report from real use: "when playing the game all
+   * other audio such as music on the phone stops." That was the documented cost
+   * of overriding the ringer switch and had never been offered as a choice.
+   * iOS's *playback* session is non-mixing by definition, so being audible on
+   * silent and letting a podcast keep going are mutually exclusive on the web —
+   * see the header of engine/audio.js. This row is where that is settled.
+   *
+   * BOTH NOTES NAME THE COST, not just the benefit. A toggle whose off-state
+   * says only "off" makes her guess what she is giving up, and the whole reason
+   * this row exists is that somebody was surprised by a trade nobody had told
+   * them about. Hidden entirely when sound is off, because then it decides
+   * nothing.
+   */
+  function silentRow() {
+    if (!app.game.state.settings.sound) return null;
+    if (!BALANCE.audio.overrideSilentSwitch) return null;
+    const on = !!app.game.state.settings.playOnSilent;
+    return {
+      id: 'playOnSilent',
+      label: on ? 'Play on silent: on' : 'Play on silent: off',
       note: on
-        ? (over ? 'Yips, paws and water — plays even on silent. Turn off here'
-          : 'Yips, paws and water. Your phone’s silent switch mutes it too')
-        : 'Everything is silent',
+        ? 'Heard with the ringer off — but your music stops'
+        : 'Your music keeps playing. Turn on to hear him on silent',
     };
   }
 
@@ -1373,12 +1404,25 @@ export function createRoomScene() {
             : `${capitalise(g.pron.they)} ${g.pron.is} still waiting for a name`,
         },
         soundRow(),
+        silentRow(),
         voiceRow(),
         installRow(),
         { id: 'export', label: 'Copy save code', note: 'Keep a backup of your bond' },
         { id: 'import', label: 'Load save code', note: 'Paste a code from another device' },
         { id: 'close', label: 'Done' },
-      ],
+      /* A ROW MAY BE ABSENT, and until now none ever was. `ui/sheet.js` walks
+         `cfg.rows` directly — `rowAt()` indexes it and `draw()` reads
+         `.label` off each entry — so a null in this array is a crash or a blank
+         band, not a hidden row. Every existing builder returns a row
+         unconditionally (`installRow` has two branches and no null), which is
+         why the gap was never visible.
+         `silentRow()` is the first that genuinely has nothing to say sometimes:
+         with sound off it decides nothing and showing it would be a control that
+         does not control anything. Filtering here rather than teaching sheet.js
+         to skip falsy rows keeps the invariant sheet.js relies on — every entry
+         it is handed is a row — and makes absence expressible in the one place
+         that knows about it. */
+      ].filter(Boolean),
     });
   }
 
@@ -1410,6 +1454,20 @@ export function createRoomScene() {
          and renaming from there used to open the naming overlay on top of the
          absence panel */
       openNaming('rename');
+      return;
+    }
+    /* PLAY ON SILENT. `setEnabled` is re-applied rather than a new method
+       added: it is already the one place that starts and stops the session
+       element, so routing this through it means there is exactly one code path
+       that can claim or release the phone's audio. Toggling this while sound is
+       ON therefore takes effect on the same tap, in the gesture — which matters,
+       because starting the session element outside a gesture is refused. */
+    if (id === 'playOnSilent') {
+      const on = !app.game.state.settings.playOnSilent;
+      app.game.setSetting('playOnSilent', on);
+      app.audio.setEnabled(!!app.game.state.settings.sound);
+      if (on) app.audio.play('yip');
+      openSettings();
       return;
     }
     if (id === 'sound') {

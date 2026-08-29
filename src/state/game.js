@@ -217,7 +217,17 @@ export function newState(now = Date.now(), opts = {}) {
        whoever is in the room, and being told twice because she adopted a second
        dog would be the game not paying attention. */
     flags: { seenIntro: false, namedFirstDog: false, howto: {} },
-    settings: { sound: true, reducedMotion: 'auto', mic: false },
+    /* `playOnSilent` DEFAULTS TO FALSE, and that is the whole point of it.
+       Overriding the ringer switch means claiming iOS's *playback* audio
+       session, and *playback* is non-mixing BY DEFINITION — so the game was
+       stopping whatever music or podcast the phone was playing, for as long as
+       it was open. A children's toy that silences the room it is in is worse
+       behaved than one that is quiet when the phone is set to quiet.
+       So the polite behaviour is the default and the override is one tap away
+       in Settings, which is the opposite way round from 8.18's decision and
+       is a direct answer to "when playing the game all other audio such as
+       music on the phone stops". */
+    settings: { sound: true, reducedMotion: 'auto', mic: false, playOnSilent: false },
   };
 }
 
@@ -1863,6 +1873,12 @@ export function createGame(state, opts = {}) {
     setSetting(key, v) {
       if (typeof key !== 'string' || !key) return;
       if (!state.settings || typeof state.settings !== 'object') state.settings = {};
+      /* NO PER-KEY DEFAULTING HERE. An earlier cut of `playOnSilent` filled its
+         default in this function, which was both the wrong place and unnecessary:
+         `state/save.js load()` spreads `base.settings` under the stored ones
+         (`{ ...base.settings, ...s.settings }`), so every key `newState` defines
+         is present after a load whether the save had it or not. Defaulting a
+         second time here would only hide it if that ever stopped being true. */
       state.settings[key] = v; onChange();
     },
 
