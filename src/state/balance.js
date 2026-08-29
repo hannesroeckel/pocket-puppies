@@ -301,8 +301,31 @@ export const BALANCE = {
          food surface and the floor, and the vessel has to span it, so the
          honest solve now lands at 1.75 (Shiba) to 2.05 (Schnoodle). The band
          is a bug detector, not a design limit; leaving it at 1.95 would have
-         clamped the gift puppy's own bowl and lifted its base off the floor. */
-      scaleRange: [1.10, 2.20],
+         clamped the gift puppy's own bowl and lifted its base off the floor.
+
+         AND IT MOVED AGAIN, 2.20 -> 2.45, FOR THE GOLDEN RETRIEVER (8.26.0) —
+         the same situation and the same reasoning, so the precedent above is
+         doing its job. `tools/bowlgate.py` failed four checks on him and only
+         on him: his honest solve is 2.3013 against a 2.20 ceiling, so the clamp
+         was firing on all 337 frames of feeding and all 304 of drinking, and
+         `muzIntoBowl` came out 13.37 against the 16 `dipInto` asks for. Not a
+         floating bowl — the base is written as `sole - BOWL_BASE * scale` and
+         stays on the floor at any scale — but a nose 2.6 units short of the
+         food, which is the "sniffing at a bowl he never touches" end of the
+         failure care.js names.
+
+         WHY HE IS THE ONE. He carries the biggest head in the file
+         (`headScale` 1.20 against 1.12-1.14) on the highest muzzle
+         (`muzzleY` 0.38). A big head held high does not get as far down when he
+         stoops, so the vessel has to span more floor-to-food, so the solve wants
+         a taller bowl. That is the geometry being right, not a bad number.
+
+         THE BAND, HONESTLY: the five shipping breeds now solve to 1.5840
+         (Corgi, short-legged, his muzzle nearly on the rug) through 2.3013
+         (Golden). The ceiling keeps the SAME 0.15 of slack over the honest
+         maximum that 2.20 gave over the old 2.05 — a bug detector wants to sit
+         just past the truth, not comfortably clear of it. */
+      scaleRange: [1.10, 2.45],
       targetR: 34, snap: 44,
       bowlScale: 0.86,
       /* THE GRAB ELLIPSES, AND THE DRAG RANGES. Six magic numbers inside
@@ -2424,10 +2447,34 @@ export const BALANCE = {
        obvious next variant, but the art contract is the reference.
 
        `lagFar` is why he reads as four legs rather than two: the far leg of a
-       pair is a fraction of a cycle behind the near one. */
+       pair is a fraction of a cycle behind the near one.
+
+       AND THE SECOND TWO SHEETS ARE A TROT AFTER ALL (8.26.0). The Corgi's and
+       the Golden's art draws four different poses of an alternating cycle — no
+       stand, no suspension — where the first three draw stand/step/stand/bound.
+       `tools/side-meta.py` measures which is which off the sheet and writes it
+       into `assets/side-meta.js` as `cycle`, so the sprite renderer picks the
+       matching bob rather than one of them being animated wrong. Everything
+       below still describes the BOUND, which is what `dog/side.js` draws and
+       what three of the five sheets are. */
     gait: {
       hz: 2.1,            // cycles per second at a normal trot
       bob: 9,             // how far the whole dog lifts, once per cycle
+      /* THE WALK SHEETS' LIFT, twice per cycle instead of once (`dog/sidesprite.js`).
+         Less than half the bound's, and that is the physics rather than taste: a
+         bound is a leap with all four feet off the ground and a trot never leaves
+         it, so the body only rises by the difference between a straight leg and a
+         bent one. He is 250 units tall, so this is a 1.6% oscillation against the
+         bound's 3.6%.
+
+         MEASURED, by sweeping the cycle and reading the top of his drawn ink
+         INSIDE each frame index — where the sprite image cannot change, so the
+         movement is the bob and nothing else:
+           shiba / schnoodle ('bound')  6, 3, 2, 6 px  — one hump, 9 up and 9 down
+           corgi / golden    ('walk')   4, 4, 4, 4 px  — two humps, 4 each way
+         An even swing in every quarter is the signature of two humps per cycle,
+         which is the thing that had to be proved rather than asserted. */
+      bobWalk: 4,
       stretch: 0.5,       // body lengthening on the extension
       /* how far a paw travels fore and aft. 13 was tuned against legs a third
          shorter; on a real limb the four frames came back nearly identical, and

@@ -178,13 +178,26 @@ def main():
         # had not drawn. He drew it, so the Shiba is no longer the no-sheet case
         # and nothing in the game is. The invariant worth holding is the one he
         # stated — "all dogs matter" — so it is asserted directly.
+        # THE BREED LIST CAME FROM A TYPED-OUT LITERAL, AND SAID "EVERY" (8.26.0).
+        # It read `pp.app.breeds`, which is assigned NOWHERE — `BREED_IDS` is
+        # published as `__pp.breeds` (main.js ~405), the way bowlgate, breedproof
+        # and dogalone all read it. So the `||` fell through on every run since
+        # this check was written and "EVERY breed in the game has a sheet" was
+        # really "these three breeds I typed have a sheet". The Corgi and the
+        # Golden were never in it.
+        #
+        # That is §35's defect exactly — a hardcoded breed list hiding a breed —
+        # living inside the gate that exists to catch it. So the list is read from
+        # the game AND the fallback is now a FAILURE rather than a silent default:
+        # a gate may not quietly test less than it claims.
         ctx, pg = fresh()
         every = pg.evaluate("""async () => {
           const pp = window.__pp;
           const mod = await import('/src/dog/sidesprite.js');
-          const ids = (pp.app && pp.app.breeds) || ['shiba', 'schnoodle', 'cockapoo'];
+          const ids = pp.breeds || [];
           return {
             ids,
+            fromTheGame: Array.isArray(pp.breeds) && pp.breeds.length > 0,
             missing: ids.filter((id) => !mod.hasSideSprite(id)),
             /* AND THE FALLBACK IS STILL REACHABLE. With every breed covered, the
                drawn path has no breed to exercise it — so the question becomes
@@ -192,11 +205,78 @@ def main():
             unknownFallsBack: mod.hasSideSprite('nosuchbreed') === false,
           };
         }""")
+        check(every["fromTheGame"] and len(every["ids"]) >= 3,
+              "the breed list came from the GAME, not from a literal in this file",
+              every["ids"])
         check(not every["missing"],
               "EVERY breed in the game has a sheet of his own art", every)
         check(every["unknownFallsBack"],
               "and a breed with no sheet would still fall back to the drawn profile",
               every["unknownFallsBack"])
+
+        # ---- AND EACH SHEET IS ANIMATED AS THE KIND OF THING IT IS -------
+        #
+        # The first three sheets are stand/step/stand/bound and the last two are a
+        # four-frame alternating walk. `dog/sidesprite.js` adds the vertical bob
+        # itself (every frame is drawn flat on one ground line), so a bound's
+        # single lift applied to a walk sheet floats him for two frames and sinks
+        # him for two, unrelated to his legs.
+        #
+        # ASSERTED ON THE DRAWN PIXELS, not on the config. Within one frame index
+        # the sprite image cannot change, so any movement of the top of his ink IS
+        # the bob — which makes "two lifts per cycle" measurable rather than
+        # merely configured. A walk sheet spends exactly half a hump in each
+        # quarter-cycle, so all four quarters swing by the same amount; a bound
+        # sheet spends one whole hump across four, so they cannot.
+        gaits = pg.evaluate("""async () => {
+          const mod = await import('/src/dog/sidesprite.js');
+          const W = 900, H = 700;
+          const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+          const ctx = cv.getContext('2d', { willReadFrequently: true });
+          const out = [];
+          for (const id of (window.__pp.breeds || [])) {
+            const sp = mod.createSideSprite({ breed: { id }, s: 1 });
+            if (!sp) continue;
+            await new Promise((r) => { const t = setInterval(() => {
+              if (sp.ready || sp.failed) { clearInterval(t); r(); } }, 25); });
+            if (!sp.ready) { out.push({ id, err: 'never decoded' }); continue; }
+            const per = {};
+            for (let i = 0; i < 64; i++) {
+              const ph = i / 64;
+              ctx.clearRect(0, 0, W, H);
+              sp.draw({ ctx }, { x: W / 2, y: H - 60, s: 1.2, face: -1,
+                                 phase: ph, run: 1, alpha: 1 });
+              const d = ctx.getImageData(0, 0, W, H).data;
+              let top = -1;
+              for (let y = 0; y < H && top < 0; y++)
+                for (let x = 0; x < W; x++)
+                  if (d[(y * W + x) * 4 + 3] > 24) { top = y; break; }
+              const f = sp.frameAt(ph, 1);
+              (per[f] = per[f] || []).push(top);
+            }
+            const swing = Object.keys(per).sort().map(
+              (f) => Math.max(...per[f]) - Math.min(...per[f]));
+            out.push({ id, cycle: sp.cycle, hasStand: sp.hasStand,
+                       bob: sp.debug.bob, swing,
+                       even: Math.max(...swing) - Math.min(...swing) <= 1 });
+          }
+          return out;
+        }""")
+        for gt in gaits:
+            if gt.get("err"):
+                check(False, "%s: the sheet decoded" % gt["id"], gt["err"])
+                continue
+            walkish = gt["cycle"] == "walk"
+            check(gt["even"] == walkish,
+                  "%s: a '%s' sheet lifts %s per cycle, measured off his own pixels"
+                  % (gt["id"], gt["cycle"], "twice" if walkish else "once"),
+                  {"swing": gt["swing"], "bob": gt["bob"]})
+            check(gt["hasStand"] == (gt["cycle"] == "bound"),
+                  "%s: and it says whether frame 0 is a real stand" % gt["id"],
+                  gt["hasStand"])
+        check(len({g.get("cycle") for g in gaits}) == 2,
+              "BOTH kinds of sheet are actually present, so neither branch is dead",
+              sorted({g.get("cycle") for g in gaits}))
 
         # each of them actually completes a departure
         for breed in every["ids"]:

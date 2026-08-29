@@ -11,9 +11,36 @@ second PRECACHE entry and a new failure mode, for values that can simply be code
 Separate from the slicer on purpose: the slicer does one breed, this collects all
 of them, and neither can delete the other's work by running.
 
+IT ALSO CLASSIFIES THE GAIT, BY LOOKING AT THE SHEET (8.26.0)
+-------------------------------------------------------------
+The first three sheets and the second two are not the same kind of animation and
+nothing recorded which was which:
+
+    shiba / cockapoo / schnoodle    STAND, step, STAND, step-or-bound
+    corgi / golden                  four different poses, no stand at all
+
+That matters because `dog/sidesprite.js` adds the vertical bob itself — the
+frames are all drawn flat on one ground line (every sheet's lowest paw is at
+`ground` in every frame, measured) — and a bound lifts ONCE per cycle where a
+walk lifts TWICE, once under each diagonal pair. Applied to the wrong sheet the
+dog floats up for two frames and sinks for two, unrelated to what his legs are
+doing.
+
+DERIVED, NOT TYPED. A hand-written table is the habit §35 exists to warn about:
+a fact about the art, kept somewhere the art cannot correct. The signature is
+that a stand/step/stand/step sheet CONTAINS THE SAME FRAME TWICE — frame 0 and
+frame 2 are the same standing pose — so frames 0 and 2 are compared against the
+spread of the other pairs. Measured on the five shipping sheets:
+
+    cockapoo 0.15   shiba 0.27   schnoodle 0.46  |  corgi 0.85   golden 0.99
+
+which is a gap wide enough to put the threshold in the middle of and not think
+about it again. A sixth sheet classifies itself.
+
 Usage:  py tools/side-meta.py
 """
 import json, pathlib
+from PIL import Image, ImageChops
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "src" / "assets"
@@ -39,12 +66,46 @@ HEADER = '''/* =================================================================
    A BREED WITH NO ENTRY HAS NO SHEET. `dog/sidesprite.js` reports that rather
    than guessing, and the drawn profile (`dog/side.js`) is the fallback — which is
    why that file was kept after the sprites arrived.
+
+   `cycle` IS WHAT KIND OF ANIMATION THE FOUR FRAMES ARE, and it is MEASURED off
+   the sheet rather than typed (see the generator's header):
+
+     'bound'  stand, step, stand, bound — frames 0 and 2 are the same standing
+              pose. The body lifts ONCE per cycle, and frame 0 is a real stand
+              that can be held while he is stationary.
+     'walk'   four different poses of an alternating cycle, no stand anywhere.
+              The body lifts TWICE per cycle, once under each diagonal pair —
+              and there is NO frame that can be held still, which is why
+              `hasStand` is published beside it.
    ========================================================================== */
 '''
 
+# see the header: frames 0 and 2 being near-identical is what says "two stands"
+TWIN = 0.65
+
+
+def classify(path, frames, cellW, cellH):
+    """'bound' if the sheet repeats a standing frame, else 'walk'. Also returns
+    the ratio, so a sheet that lands near the threshold says so out loud instead
+    of being quietly rounded to one side."""
+    im = Image.open(path).convert("RGB")
+    cells = [im.crop((int(i * cellW), 0, int((i + 1) * cellW), int(cellH)))
+             for i in range(frames)]
+
+    def diff(i, j):
+        d = ImageChops.difference(cells[i], cells[j])
+        return sum(sum(px) for px in d.getdata()) / (cellW * cellH * 3 * 255)
+
+    if frames < 4:
+        return "walk", 1.0
+    twin = diff(0, 2)
+    others = sorted(diff(a, b) for a, b in ((0, 1), (0, 3), (1, 3)))
+    ratio = twin / max(1e-9, others[len(others) // 2])
+    return ("bound" if ratio < TWIN else "walk"), ratio
+
 
 def main():
-    rows = []
+    rows, notes = [], []
     for f in sorted(SHEETMETA.glob("side-*.json")):
         m = json.loads(f.read_text(encoding="utf-8"))
         # THE FILENAME COMES FROM THE DISK, not from the JSON. The slicer writes
@@ -56,16 +117,25 @@ def main():
         if not img:
             print("   skipping %s: metadata but no sheet on disk" % breed)
             continue
+        name = "side-%s.%s" % (breed, img)
+        cycle, ratio = classify(ASSETS / name, m["frames"], m["cellW"], m["cellH"])
+        notes.append("    %-10s cycle=%-5s (frame0~frame2 is %.2f of the rest%s)"
+                     % (breed, cycle, ratio,
+                        "  <-- NEAR THE THRESHOLD, LOOK AT IT"
+                        if abs(ratio - TWIN) < 0.12 else ""))
         rows.append("  %s: { file: '%s', frames: %d, cellW: %g, cellH: %g,"
-                    " ground: %g, centre: %g }," % (
-                        breed, "side-%s.%s" % (breed, img), m["frames"],
-                        m["cellW"], m["cellH"], m["ground"], m["centre"]))
+                    " ground: %g, centre: %g, cycle: '%s' }," % (
+                        breed, name, m["frames"],
+                        m["cellW"], m["cellH"], m["ground"], m["centre"], cycle))
     out = HEADER + "export const SIDE_SPRITES = {\n" + "\n".join(rows) + \
         "\n};\n\nexport default SIDE_SPRITES;\n"
     (ASSETS / "side-meta.js").write_text(out, encoding="utf-8")
     print("src/assets/side-meta.js — %d breed(s):" % len(rows))
     for r in rows:
         print("   ", r.strip().rstrip(","))
+    print("  the gait, measured off each sheet:")
+    for n in notes:
+        print(n)
     return 0
 
 

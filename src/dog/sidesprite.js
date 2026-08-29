@@ -68,14 +68,28 @@ export function createSideSprite(rig) {
   const e = sheet(meta);
   const SP = S.sprite || {};
 
+  /* WHAT KIND OF FOUR FRAMES THESE ARE. Measured off the sheet by
+     `tools/side-meta.py` rather than typed, because it is a fact about the art:
+     'bound' repeats a standing pose at frames 0 and 2, 'walk' is four different
+     poses of an alternating cycle with no stand in it at all. */
+  const isWalk = meta.cycle === 'walk';
+
   /**
-   * WHICH FRAME. The sheets are a four-frame WALK — the human's second reference
-   * corrected the first one's bound — and frame 0 is the standing pose in both.
+   * WHICH FRAME.
    *
    * `run` 0 holds frame 0 rather than freezing wherever the cycle happened to be,
    * because a dog who stops mid-stride with one leg in the air is a statue. The
    * drawn profile solves the same problem by holding its loop at the gathered
    * key; this holds the pose the artist drew for standing still.
+   *
+   * ON A 'walk' SHEET THERE IS NO SUCH POSE. The Corgi's and the Golden's four
+   * frames are all mid-stride, so frame 0 is a compromise and not a stand, and
+   * `hasStand` says so rather than letting a caller assume otherwise. Nothing
+   * reads it today — both callers pass `run: 1`, so the profile dog is never on
+   * screen standing still — and that is precisely why it is published: the
+   * assumption was load-bearing, undocumented, and true of three sheets out of
+   * five. A caller that wants a STANDING profile should use `dog/side.js`, which
+   * draws one at any breed.
    */
   function frameAt(phase, run) {
     if (run < 0.02) return 0;
@@ -105,11 +119,23 @@ export function createSideSprite(rig) {
     const w = h * (meta.cellW / meta.cellH);
     /* the ground line inside the cell, in the same units */
     const footY = h * (meta.ground / meta.cellH);
-    /* THE BOB IS OURS, NOT THE ARTIST'S. His four frames are drawn flat on one
-       ground line — which is what makes them alignable — so the lift a bound
-       needs is applied here, on the same `gait.bob` the drawn profile uses. Zero
-       while standing, or a stationary dog hovers. */
-    const lift = run < 0.02 ? 0 : hump(((o.phase || 0) % 1 + 1) % 1) * (S.gait.bob || 9) * run;
+    /* THE BOB IS OURS, NOT THE ARTIST'S. Every frame of every sheet is drawn
+       flat on one ground line — the lowest paw is at `ground` in all twenty of
+       them, measured, which is what makes them alignable — so the lift is
+       applied here, on the same `gait.bob` the drawn profile uses. Zero while
+       standing, or a stationary dog hovers.
+
+       AND IT FOLLOWS THE SHEET'S OWN GAIT. A bound leaves the ground ONCE per
+       cycle; an alternating walk rises TWICE, once under each diagonal pair, and
+       by much less — a trot is a smooth gait and a bound is not. One hump per
+       cycle on a walk sheet is not a smaller mistake than the wrong frame: he
+       floats up for two frames and sinks for two, unrelated to what his legs are
+       doing, which is the one thing a viewer reads instantly. */
+    const cyc = ((o.phase || 0) % 1 + 1) % 1;
+    const amp = isWalk ? (S.gait.bobWalk === undefined ? 4 : S.gait.bobWalk)
+      : (S.gait.bob || 9);
+    const lift = run < 0.02 ? 0
+      : hump(isWalk ? (cyc * 2) % 1 : cyc) * amp * run;
 
     c.save();
     c.globalAlpha = a;
@@ -118,7 +144,11 @@ export function createSideSprite(rig) {
     /* OUR OWN CONTACT SHADOW. The sheets' drawn ellipses were keyed out by the
        slicer on purpose: a painted shadow cannot shrink when he leaves the
        ground, and this one does. */
-    const sh = clamp(1 - lift / Math.max(1, S.gait.bob || 9), 0.4, 1);
+    /* against `amp`, NOT against `gait.bob`: the shadow shrinks by how far he
+       ACTUALLY left the ground, and on a walk sheet that is a different number.
+       Dividing by the bound's amplitude would give a walking dog a shadow that
+       barely moves, which reads as a dog sliding rather than stepping. */
+    const sh = clamp(1 - lift / Math.max(1, amp), 0.4, 1);
     c.save();
     c.globalAlpha = a * (S.shadow.alpha || 1) * sh;
     c.fillStyle = S.shadow.ink;
@@ -144,11 +174,18 @@ export function createSideSprite(rig) {
     get ready() { return e.ready; },
     get failed() { return e.failed; },
     get frames() { return meta.frames; },
+    /** 'bound' or 'walk' — what kind of cycle the artist drew (side-meta.py) */
+    get cycle() { return isWalk ? 'walk' : 'bound'; },
+    /** is frame 0 a real standing pose? false on a 'walk' sheet — see frameAt */
+    get hasStand() { return !isWalk; },
     frameAt,
     get debug() {
       return {
         breed: rig.breed.id, file: meta.file, ready: e.ready, failed: e.failed,
         cell: [meta.cellW, meta.cellH], ground: meta.ground, frames: meta.frames,
+        cycle: isWalk ? 'walk' : 'bound', hasStand: !isWalk,
+        bob: isWalk ? (S.gait.bobWalk === undefined ? 4 : S.gait.bobWalk)
+          : (S.gait.bob || 9),
       };
     },
   };

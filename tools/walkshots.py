@@ -8,6 +8,13 @@ side-profile effort was for.
   walk-off-0 .. walk-off-4   five frames across the departure
   walk-off-away              the room after he has gone
 
+--breed SUFFIXES THE FILENAMES (`walk-off-corgi-0.png`). It did not, and with
+one breed that was fine; with five it meant every run overwrote the last one's
+pictures, so two sheets could never be compared side by side — which is the
+only way to see that one of them is drawn at a different size or on a different
+ground line. The default breed keeps the original names, because they are
+quoted by ARCHITECTURE §33 and by `review/index.html`.
+
 Usage:  py tools/walkshots.py [--breed schnoodle]
 """
 import sys, pathlib
@@ -21,6 +28,7 @@ SHOTS = ROOT / "review"
 
 def main():
     breed = sys.argv[sys.argv.index("--breed") + 1] if "--breed" in sys.argv else "schnoodle"
+    tag = "" if breed == "schnoodle" else "-" + breed
     url = serve()
     SHOTS.mkdir(exist_ok=True)
     with sync_playwright() as p:
@@ -62,7 +70,7 @@ def main():
         print("after set off:", {k: st.get(k) for k in ("beat", "away", "leaving", "sideKind")})
 
         for i in range(5):
-            pg.screenshot(path=str(SHOTS / ("walk-off-%d.png" % i)))
+            pg.screenshot(path=str(SHOTS / ("walk-off%s-%d.png" % (tag, i))))
             pg.evaluate("() => __pp.step(1/60, 14)")
         # THE ROAD IS BETWEEN THEM NOW. Beat 2.75 (8.22.0) runs from the moment
         # he is out of the door until he is properly away, so stepping 60 frames
@@ -71,7 +79,7 @@ def main():
         # this one is still about the doorway and the quiet room on either side.
         pg.evaluate("() => __pp.strollThrough()")
         pg.evaluate("() => __pp.step(1/60, 60)")
-        pg.screenshot(path=str(SHOTS / "walk-off-away.png"))
+        pg.screenshot(path=str(SHOTS / ("walk-off%s-away.png" % tag)))
         print("final:", pg.evaluate("() => { const d = __pp.dbg().walk || {}; "
                                     "return { away: d.away, off: d.off }; }"))
         print("errors:", errs[:4] or "none")
