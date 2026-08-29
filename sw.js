@@ -109,6 +109,22 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.25.0: THE GAME STOPS TAKING THE PHONE'S AUDIO. No new files. Reported from
+   real use: "when playing the game all other audio such as music on the phone
+   stops." That was the documented PRICE of the silent-switch override and had
+   never been offered as a choice — iOS's *playback* session is non-mixing by
+   definition, so being audible with the ringer off and letting a podcast keep
+   playing are mutually exclusive on the web (Safari exposes no `mixWithOthers`).
+   `state.settings.playOnSilent` now decides it and DEFAULTS TO FALSE, with a
+   Settings row that names the cost in both directions. `navigator.audioSession`
+   is set where it exists (iOS 16.4+), so "we mix with your music" is asserted
+   rather than merely being the absence of the old trick.
+   NO SCHEMA BUMP: `save.js load()` spreads `base.settings` under the stored
+   ones, so an existing save gains the key with its default on first load and
+   an older build ignores it. A phone that keeps 8.24.0 keeps the old behaviour,
+   which is the thing being fixed — hence the cache move.
+   `tools/audiogate.py` is new, 19 checks, and the suite is twenty gates.
+
    8.24.0: THE SHIBA IS FEMALE. One key on one ladder row — `sex: 'm'` to
    `sex: 'f'` — on direct instruction. No new files, no schema change, and no
    code path touched: every line the kennel speaks about her is already a
@@ -296,7 +312,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.24.0';
+const VERSION = '8.25.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
