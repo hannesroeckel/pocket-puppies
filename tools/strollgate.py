@@ -467,6 +467,67 @@ def main():
             pg.screenshot(path=str(SHOTS / "stroll-taken.png"))
             ctx.close()
 
+        # ---- SHE CAN SEE THE FIND HE IS STANDING IN FRONT OF -------------
+        #
+        # docs/STROLL-PLAN.md §5: a find passes at his own x, the reach line will
+        # not let a tap target sit below 676 while his feet are at ~696, so
+        # nothing can pass in FRONT of him and he covers it for ~2.2s of the ~5s
+        # it is on screen — at its closest approach, which is exactly when she is
+        # deciding. `dog/stroll.js` now redraws it over him, faintly.
+        #
+        # ASSERTED ON PIXELS, AND AGAINST ITSELF. Config cannot show that
+        # anything reached the screen, so this walks a find to his x, reads the
+        # canvas around it, then sets `ghostAlpha` to 0 and reads the same box
+        # again. The difference IS the ghost — which makes the check its own
+        # fault injection: if the pass stops drawing, the two reads become equal
+        # and this fails.
+        ctx, pg = fresh()
+        pg.evaluate(ONTO_ROAD)
+        ghost = pg.evaluate("""() => {
+          const pp = window.__pp, S = pp.BALANCE.walk.stroll;
+          /* walk whichever find comes closest to him up to his x */
+          let g = 0, it = null;
+          while (g++ < 3600) {
+            const live = pp.dbg().walk.stroll.items.filter((i) => !i.taken);
+            it = live.map((i) => [Math.abs(i.x - S.at), i])
+                     .sort((a, b) => a[0] - b[0])[0];
+            if (it && it[0] < 4) { it = it[1]; break; }
+            it = null;
+            pp.step(1/60, 1);
+          }
+          if (!it) return { err: 'no find reached him' };
+          const cv = document.querySelector('canvas');
+          const c = cv.getContext('2d');
+          const dpr = cv.width / pp.BALANCE.view.W;
+          const box = () => {
+            const w = Math.round(70 * dpr), h = Math.round(70 * dpr);
+            const x = Math.round((it.x - 35) * dpr), y = Math.round((it.y - 35) * dpr);
+            return Array.from(c.getImageData(x, y, w, h).data);
+          };
+          const withGhost = box();
+          const keep = S.ghostAlpha;
+          S.ghostAlpha = 0;
+          pp.step(1/60, 1);
+          const without = box();
+          S.ghostAlpha = keep;
+          pp.step(1/60, 1);
+          let diff = 0;
+          for (let i = 0; i < withGhost.length; i += 4) {
+            if (Math.abs(withGhost[i] - without[i])
+              + Math.abs(withGhost[i+1] - without[i+1])
+              + Math.abs(withGhost[i+2] - without[i+2]) > 8) diff++;
+          }
+          return { x: it.x, y: it.y, id: it.id, diff, px: withGhost.length / 4 };
+        }""")
+        check(not ghost.get("err"), "a find really does reach his own x", ghost)
+        if not ghost.get("err"):
+            check(ghost["diff"] > 120,
+                  "the find he is standing in front of is still drawn over him "
+                  "— and turning the ghost off removes it, which is the control",
+                  "%s pixels changed of %s in the box, find '%s' at x %s"
+                  % (ghost["diff"], ghost["px"], ghost["id"], ghost["x"]))
+        ctx.close()
+
         check(not errors, "no page errors", errors[:4])
         b.close()
 

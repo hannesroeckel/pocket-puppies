@@ -78,6 +78,11 @@ const FLOOR = BALANCE.view.floorY;
    the same place dog/sidesprite.js reads it, so "the front of his head" below
    is derived from his real size rather than from a pair of offsets that happen
    to look right at one scale */
+/* THE FALLBACK ONLY. Per-breed heights arrived in 8.27.0, so this constant
+   stopped being every dog's height — the Golden is 263.5. `sideH()` below asks
+   the live profile dog first and only lands here for the drawn fallback, which
+   has no per-breed height of its own. Reading this directly is what made a
+   tapped find fly to where the AVERAGE dog's mouth would be. */
 const SIDE_H = (BALANCE.side.sprite && BALANCE.side.sprite.height) || 250;
 /* how long a tapped find takes to reach his mouth */
 const POP = 0.42;
@@ -110,6 +115,13 @@ export function createStroll(rig, opts = {}) {
   const sound = opts.sound || (() => {});
   const spawn = opts.spawn || (() => {});
   const onEnd = opts.onEnd || (() => {});
+  /* HOW TALL THE PROFILE DOG ACTUALLY IS, this breed. The sprite publishes its
+     own height (per breed since 8.27.0); `dog/side.js`, the drawn fallback, has
+     no such number and lands on the shared constant, which is what it was. */
+  const sideH = () => {
+    const s = opts.side ? opts.side() : null;
+    return (s && s.height) || SIDE_H;
+  };
   /* the same halving dog/walk.js uses, and `farK` goes to ZERO — under
      `prefers-reduced-motion` the sky, the hills and the treeline simply hold
      still, so two thirds of the screen stops moving and only the ground he is
@@ -462,6 +474,43 @@ export function createStroll(rig, opts = {}) {
       });
     }
 
+    /* ---- WHAT HE IS STANDING IN FRONT OF -----------------------------
+       THE ONE MOMENT SHE CANNOT SEE THE THING SHE IS BEING ASKED TO TAP.
+       docs/STROLL-PLAN.md §5 left this open: a find passes at his own x, and the
+       reach line will not let a tap target sit below 676 while his feet are at
+       ~696, so NOTHING can pass in front of him. He covers it for about 2.2s of
+       the ~5s it is on screen — and that is the closest approach, which is
+       exactly when `drawOffered`'s own note says "she has less than a second
+       left to decide".
+
+       WHY NOT JUST PUT IT IN FRONT. Because the depth would be a lie and the
+       fix would be worse than the fault: letting a find sit nearer than him
+       means letting a TAP TARGET below the reach line, and that line is what
+       closed queue item 1c ("sometimes when flicking the ball it is behind the
+       navigation buttons which doesn't allow the player to reach it again").
+       The nav is not drawn during the stroll, so it would be safe HERE — but
+       the guard is per-frame and global, and loosening it for one beat to buy
+       two seconds of visibility is the trade that bug was made of.
+
+       SO THE OBJECT STAYS BEHIND HIM AND THE AFFORDANCE COMES FORWARD: while he
+       covers it, it is drawn again over him, faintly, fading in as he takes it
+       and out as he passes — the ordinary convention for an interactable behind
+       an occluder. Nothing about the hit box changes; it was always tappable
+       through him. What changes is that she can now see that it is. */
+    if (side) {
+      const halfW = sideH() * rig.home.s * S.scale * S.ghostW;
+      c.save();
+      for (const it of items) {
+        if (it.taken || it.x < -60 || it.x > VW + 60) continue;
+        const over = 1 - clamp(Math.abs(it.x - S.at) / Math.max(1, halfW), 0, 1);
+        if (over <= 0) continue;
+        /* smooth at both ends, so it does not pop on at his nose */
+        c.globalAlpha = a * S.ghostAlpha * smooth(over);
+        drawOffered(c, it);
+      }
+      c.restore();
+    }
+
     c.save();
     c.globalAlpha = a;
     for (const it of items) {
@@ -496,7 +545,7 @@ export function createStroll(rig, opts = {}) {
     /* TO THE FRONT OF HIS HEAD. He is facing left, so that is left of him, and
        it is derived from where he is actually standing and how big he actually
        is rather than from two numbers that happen to look right at one scale. */
-    const h = SIDE_H * rig.home.s * S.scale;
+    const h = sideH() * rig.home.s * S.scale;
     const tx = S.at - h * 0.22, ty = rig.floorV + S.groundY - h * 0.62;
     const x = lerp(it.fromX, tx, u);
     const y = lerp(it.fromY, ty, u) - hump(u) * 34;

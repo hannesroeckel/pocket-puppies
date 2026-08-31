@@ -4488,7 +4488,32 @@ the failure `dog/care.js` names.
 
 He is the one because a big head held high does not get as far down when he stoops, so the
 vessel has to span more floor-to-food. **That is the geometry being right, not a bad
-number** — which is why the fix is the ceiling and not his proportions. `balance.js`'s own
+number** — which is why the fix is the ceiling and not his proportions.
+
+**THE OTHER FIX WAS TRIED FIRST, AND REJECTED — recorded because it was nearly taken.** An
+earlier session left a stash proposing the opposite: move his `anchors.muzzleY` from 0.38 to
+0.44 so the honest solve lands at 2.126 and the 2.20 ceiling never has to move. Swept over
+`__pp.solveFor`, its arithmetic is exact:
+
+| `rawScale` | my 0.38 | 0.40 | 0.42 | 0.44 | 0.46 |
+| --- | --- | --- | --- | --- | --- |
+| headScale 1.12 | **2.180** | 2.126 | 2.071 | 2.016 | 1.961 |
+| headScale 1.16 | 2.241 | 2.184 | 2.127 | 2.071 | 2.014 |
+| **headScale 1.20** (his) | **2.301** | 2.243 | 2.184 | **2.126** | 2.067 |
+| headScale 1.24 | 2.362 | 2.301 | 2.241 | 2.180 | 2.120 |
+
+Two reasons it is not the fix taken. First, **its diagnosis is wrong**: the stash argued that
+*"0.38 clamps at EVERY head scale, so this was the wrong number and not the head's fault"*, and
+the table says otherwise — at headScale 1.12 the same 0.38 solves to 2.180, comfortably inside
+the old ceiling. It is not the muzzle and it is not the head; it is the Golden being the only
+dog in the file carrying the **highest muzzle (0.38 against a 0.40–0.46 pack) and the largest
+head (1.20 against 1.12–1.14) at once**.
+
+Second, and the reason that decides it: 0.38 is *art*. The entry's own note says the high muzzle
+is *"most of why he does not read as a cockapoo with the lights up"*, and the stash concedes the
+cost — at 0.44 he sits 0.02 from her 0.46 instead of 0.08, so the muzzle stops carrying its share
+of keeping two pale floppy-eared puppies apart. **Changing the dog to protect a number, when the
+number's own note calls it "a bug detector, not a design limit", is the wrong way round.** `balance.js`'s own
 note already said so: *"the band is a bug detector, not a design limit"*, written when it
 moved 1.95 → 2.20 for the gift puppy. It moves 2.20 → **2.45** here, keeping the same 0.15
 of slack over the honest maximum that 2.20 gave over the old 2.05.
@@ -4663,3 +4688,108 @@ were never affected. A short-circuiting optional call is a very quiet way to not
 - **`sideheight.py` is not in the gate suite.** It is a solver whose output is committed data,
   like `side-meta.py`, and re-running it is how you check it. Nothing asserts that the numbers
   in `side-meta.js` are still what the tool would produce today.
+
+## 38. The stroll explains itself, and she can see what he is standing in front of (8.28.0) — as built
+
+Two of `docs/STROLL-PLAN.md` §5's three "left imperfect" items, closed. Neither was fixed the way
+that note proposed, and in both cases the note's own reasoning is what argued against its own
+suggestion.
+
+### 38.1 The card is on the walk, not on the road
+
+STROLL-PLAN said the missing explainer was *"one line in `howtoContext()` and one entry in
+`HOWTO`"* — a card of its own, shown when the road starts. The same paragraph also says why that is
+wrong: *"a card over a scene she is meant to be watching is the thing `ui/howto.js` exists to
+avoid."*
+
+The numbers decide it. The first find is level with him at `passAt` **0.18** — about 5.4s into a 30s
+beat — and is on screen from roughly **2.8s**. A dismiss-only card at the start of the road covers
+the road while it scrolls, and the things she is being taught to tap go past behind it.
+
+So the stroll is taught on the **walk card**, which `howtoContext()` already shows at the `map`
+beat: before he sets off, over nothing, at the one moment in this feature that is already a pause.
+
+**`rev` — why she will actually see it.** Seen-ness is a key in `state.flags.howto`, so a key never
+written is unseen for everybody. `HOWTO.walk` carries `rev: 2`, `howtoSeenKey()` turns that into
+`walk@2`, and the card fires once more for every existing player. Without it the fix would have
+taught nobody: the walk is the oldest mode in the game and everyone dismissed `walk` months ago.
+It is a deliberate cost — a card shown again to somebody who knows the mode — and the rule written
+beside it is that `rev` moves only when the copy now teaches something she could not have known.
+
+**And one step was simply false.** *"They go out alone"* predates the stroll and stopped being true
+in 8.22.0, when the first half-minute became something she watches and taps.
+
+### 38.2 Two shipped cards were not English
+
+Found while writing the new step, by trying to write `pass${P.s}`.
+
+`PRONOUNS.s` is a bare `'s'` for he/she and `''` for they. That is right for *walks*, *runs*,
+*comes* — and wrong for every verb taking **-es**. Two cards shipped with it:
+
+| card | rendered, for the pronouns anybody actually plays with |
+| --- | --- |
+| walk | **"He gos out alone"** |
+| ring | **"He dos the rest"** |
+
+Both since the day they were written. Every existing check passed them: the text fits, the contrast
+is fine, there is no typed-in pronoun, and **the they/them expansion is perfectly correct** — "they
+go", "they do". Only he and she were broken, which is to say: only the ones in the game.
+
+Both lines are rewritten to need no ending at all, which is the durable fix. `tools/howtogate.py`
+now fails the whole class, **derived rather than from a wordlist**: expand every line under `he` and
+under `they` and diff them word by word; where the only difference is a trailing `s`, that `s` came
+from `P.s`, and a stem ending in o/s/x/z/sh/ch needed `-es`. It catches go, do, pass, finish, watch
+and fix without anybody enumerating them, and it ships with a control that proves it still catches
+`gos`. 37 checks.
+
+### 38.3 The find he is standing in front of
+
+A find passes at his own x. `reach.clampY()` will not let a tap target sit below **676** while his
+feet are at **~696**, so nothing can pass in *front* of him: he covers it for about **2.2s of the
+~5s** it is on screen, and that is its closest approach — which is exactly when `drawOffered`'s own
+note says *"she has less than a second left to decide"*.
+
+**The depth was not the thing to change.** Letting a find sit nearer than him means letting a tap
+target below the reach line, and that line is what closed queue item 1c: *"sometimes when flicking
+the ball it is behind the navigation buttons which doesn't allow the player to reach it again."*
+The nav is not drawn during the stroll (`!walk.modal`), so it would have been safe *here* — but the
+guard is per-frame and global, and loosening it for one beat to buy two seconds of visibility is
+precisely the trade that produced the bug in the first place.
+
+So the object stays behind him, at its honest depth, and **the affordance comes forward**: while he
+covers it, it is drawn again over him at `ghostAlpha` 0.34, faded by `smooth()` so it arrives as he
+takes it and leaves as he passes rather than popping on at his nose. `ghostW` 0.55 is his
+silhouette's half-width as a fraction of his height — the sheets run 1.0–1.2 wide per 1 tall, so the
+widest of them is covered and the ghost is never narrower than the dog doing the covering.
+
+**Nothing about the hit box changed.** It was always tappable through him; what changed is that she
+can see that it is.
+
+`strollgate` asserts it on **pixels, and is its own control**: it walks a find to within 4 units of
+his x, reads the canvas in a 70×70 box around it, sets `ghostAlpha` to 0 and reads the same box
+again. 4,614 of 19,600 pixels differ; with the ghost off they do not. If the pass ever stops
+drawing, the two reads become equal and the check fails. 39 checks.
+
+### 38.4 A bug 8.27.0 introduced, caught here
+
+`dog/stroll.js` had `SIDE_H = BALANCE.side.sprite.height` and used it to fly a tapped find **to his
+mouth**. That constant stopped being every dog's height one release ago, when heights became
+per-breed — so the Golden, at 263.5, was having his finds delivered to where the average dog's mouth
+would be, about 11 units low. `sidesprite.js` publishes `height` now and the stroll asks the live
+profile dog, falling back to the shared constant only for `dog/side.js`, which has no per-breed
+height of its own.
+
+Worth naming the shape of it: a change was made in one file, and a *different* file kept reading the
+number that change had invalidated. Nothing failed, because the two were equal for four breeds out
+of five.
+
+### 38.5 Left imperfect
+
+- **STROLL-PLAN §5's third item stands**: what she taps is still not re-gated by how far he actually
+  got. That is deliberate and the reasoning is unchanged — re-checking her picks against her progress
+  means taking back the thing she chose, which is the one outcome this beat exists to avoid.
+- **The ghost is a convention, not a physical fact.** It is the ordinary treatment for an
+  interactable behind an occluder, and it is the one place in the stroll where the drawing is not
+  simply what the world looks like.
+- **`rev` has no upgrade story beyond "show it again".** A card that changed for a player mid-walk
+  will appear at her next map beat with no acknowledgement that she has seen most of it before.

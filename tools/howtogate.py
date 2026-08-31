@@ -309,6 +309,65 @@ def main():
         }""")
         check(not typed, "no card has a typed-in pronoun in it", typed[:3])
 
+        # ---- AND NO CARD BUILDS A VERB THAT IS NOT ENGLISH ----------------
+        #
+        # `PRONOUNS.s` is a bare 's' for he/she and '' for they, which is right
+        # for walks / runs / comes and WRONG for every verb taking -es. Two cards
+        # shipped with it: the walk said "he gos out alone" and the ring said "he
+        # dos the rest", both since the day they were written, and both invisible
+        # to every check here — the text fits, the contrast passes, and the
+        # they/them expansion ("they go", "they do") is perfectly correct. Only
+        # the pronouns anybody actually plays with are broken.
+        #
+        # DERIVED, NOT A WORDLIST. Expand each line under `he` and under `they`
+        # and diff them word by word: where the only difference is a trailing
+        # 's', that 's' came from `P.s`, and English says a stem ending in
+        # o/s/x/z/sh/ch needed -es instead. That catches go, do, pass, finish,
+        # watch, fix and every future one without anybody enumerating them.
+        verbs = pg.evaluate("""() => {
+          const pp = window.__pp;
+          const M = { they:'he', them:'him', their:'his', theirs:'his',
+                      self:'himself', is:'is', has:'has', s:'s' };
+          const N = { they:'they', them:'them', their:'their', theirs:'theirs',
+                      self:'themselves', is:'are', has:'have', s:'' };
+          const bad = [];
+          const words = (s) => s.split(/\\s+/).map((w) => w.replace(/[^A-Za-z]/g, ''));
+          for (const id of pp.HOWTO_IDS) {
+            const e = pp.HOWTO[id];
+            const lm = [e.title(M), ...e.steps.map((f) => f(M))];
+            const ln = [e.title(N), ...e.steps.map((f) => f(N))];
+            if (e.note) { lm.push(e.note(M)); ln.push(e.note(N)); }
+            for (let i = 0; i < lm.length; i++) {
+              const a = words(lm[i]), b = words(ln[i]);
+              if (a.length !== b.length) continue;   // whole clause differs; not this bug
+              for (let j = 0; j < a.length; j++) {
+                if (a[j] === b[j]) continue;
+                if (a[j].toLowerCase() !== b[j].toLowerCase() + 's') continue;
+                if (/(?:o|s|x|z|sh|ch)$/i.test(b[j])) bad.push([id, lm[i], a[j]]);
+              }
+            }
+          }
+          return bad;
+        }""")
+        check(not verbs,
+              "no card builds a third-person verb that is not English "
+              "(go->gos, do->dos, pass->passs)", verbs[:3])
+
+        # and the check can fail: a card that deliberately does it is caught
+        canfail = pg.evaluate("""() => {
+          const M = { they:'he', s:'s' }, N = { they:'they', s:'' };
+          const step = (P) => `${P.they} go${P.s} out`;
+          const a = step(M).split(/\\s+/), b = step(N).split(/\\s+/);
+          for (let j = 0; j < a.length; j++) {
+            if (a[j] === b[j]) continue;
+            if (a[j].toLowerCase() === b[j].toLowerCase() + 's'
+                && /(?:o|s|x|z|sh|ch)$/i.test(b[j])) return a[j];
+          }
+          return '';
+        }""")
+        check(canfail == "gos",
+              "control: the malformed-verb rule really does catch 'gos'", canfail)
+
         if shots:
             SHOTS.mkdir(exist_ok=True)
             for id in ("disc", "train", "brush"):

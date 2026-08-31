@@ -1059,6 +1059,16 @@ export const BALANCE = {
       hitR: 62, hitRy: 46,
       /* and the ring under an untaken find, which is the whole affordance */
       ringR: 22, ringRate: 2.4,
+      /* WHILE HE IS STANDING IN FRONT OF IT (dog/stroll.js `drawFront`). A find
+         passes at his own x and cannot be drawn nearer than him without putting
+         a tap target below the reach line, so it is drawn AGAIN over him,
+         faintly, for the ~2.2s he covers it.
+         `ghostW` is his silhouette's half-width as a fraction of his height —
+         the sheets run about 1.0 to 1.2 wide for every 1 tall, so a half-width
+         of 0.55 is the widest of them and the ghost is therefore never narrower
+         than the dog doing the covering. `ghostAlpha` is deliberately low: this
+         is "something is there", not a second copy of the find. */
+      ghostW: 0.55, ghostAlpha: 0.34,
       hintFor: 4.2,
     },
 

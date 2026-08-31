@@ -89,7 +89,11 @@ export const HOWTO = {
     title: () => 'In the ring',
     steps: [
       () => 'The judge calls a trick',
-      (P) => `Give the signal — ${P.they} do${P.s} the rest`,
+      /* `do${P.s}` RENDERED "he dos the rest" AND HAD SINCE 8.18.0. `PRONOUNS.s`
+         is a bare 's', which is right for walks/runs/comes and wrong for every
+         verb that takes -es. Rewritten to need no ending at all, which is the
+         durable fix; `tools/howtogate.py` now fails on the whole class. */
+      (P) => `Give the signal, then leave ${P.them} to it`,
       (P) => `No stroking — this bit is ${P.theirs}`,
     ],
     note: () => 'A bath first: grooming is marked too',
@@ -104,13 +108,37 @@ export const HOWTO = {
     ],
     note: (P) => `A few goes over a few days and ${P.they} ${P.has} it`,
   },
+  /* THE STROLL IS TAUGHT HERE RATHER THAN BY A CARD OF ITS OWN, and that is a
+     decision about WHERE a card may appear, not about how many there should be.
+
+     SCOPE principle 6 wants every mode to say how it works once, and beat 2.75
+     — the road she watches and taps — had only a hint line. But the beat is 30
+     seconds of scrolling scenery with the first find level with him at `passAt`
+     0.18 (about 5.4s in) and on screen from roughly 2.8s: a dismiss-only card
+     over THAT is the exact thing docs/STROLL-PLAN.md refused, because the road
+     keeps moving behind it and things she is meant to tap go past unseen.
+
+     The walk card is shown at the MAP beat, before he sets off, which is the one
+     moment in this feature that is already a pause. So the stroll is explained
+     there — in advance, over nothing.
+
+     `rev` IS WHY SHE WILL SEE IT AGAIN. Seen-ness is a key in
+     `state.flags.howto`, so a card whose copy materially changed is a card she
+     has not read: bumping `rev` changes the key and it fires once more. Without
+     it every existing player — which is everyone, the walk being the oldest mode
+     in the game — would keep the pre-stroll copy for ever.
+
+     AND ONE LINE WAS SIMPLY FALSE. "They go out alone" predates the stroll and
+     stopped being true in 8.22.0: the first half-minute is now watched. It is
+     the last step that says it, where it is true again. */
   walk: {
+    rev: 2,
     title: () => 'Going out',
     steps: [
       (P) => `Clip the lead on ${P.them}`,
       () => 'Tap a place, or draw a route',
-      (P) => `${cap(P.they)} go${P.s} out alone`,
-      (P) => `${cap(P.they)} come${P.s} back with something`,
+      (P) => `Tap what ${P.they} walk${P.s} past`,
+      (P) => `It comes home with ${P.them}`,
     ],
     note: (P) => `Close the app if you like — ${P.they} will be back`,
   },
@@ -145,6 +173,30 @@ export const HOWTO = {
 
 /** every id that has a card, for the gates and for the settings row */
 export const HOWTO_IDS = Object.keys(HOWTO);
+
+/**
+ * WHAT "SHE HAS SEEN THIS" IS KEYED ON.
+ *
+ * Seen-ness lives in `state.flags.howto` as a plain keyed object, so a key that
+ * has never been written is unseen for everybody — no migration, no version
+ * check, nothing to run once at load.
+ *
+ * `rev` USES THAT ON PURPOSE. A card whose copy materially changed is a card
+ * she has not read, and the walk's is the case that forced it: it said "they go
+ * out alone", which stopped being true in 8.22.0 when the first half-minute
+ * became something she watches and taps. Leaving the id alone would have meant
+ * every existing player — which is everyone, the walk being the oldest mode in
+ * the game — kept the wrong copy for ever, because they dismissed `walk` months
+ * ago.
+ *
+ * Bumping `rev` is therefore a deliberate act with a cost: it shows a card
+ * again to somebody who has already learned the mode. Only do it when the copy
+ * now teaches something she could not have known.
+ */
+export function howtoSeenKey(which) {
+  const e = HOWTO[which];
+  return e && e.rev ? which + '@' + e.rev : which;
+}
 
 export function createHowto(opts = {}) {
   const game = opts.game;
@@ -216,7 +268,7 @@ export function createHowto(opts = {}) {
     /* MARKED SEEN ON THE WAY OUT, not on the way in: a card she never dismissed
        — because the app was closed, or the phone locked, or she wandered off —
        is a card she did not read, and she should meet it again. */
-    if (game && game.markHowtoSeen) game.markHowtoSeen(id);
+    if (game && game.markHowtoSeen) game.markHowtoSeen(howtoSeenKey(id));
     id = '';
     sp.card.to(0);
     press.clear();
@@ -233,7 +285,7 @@ export function createHowto(opts = {}) {
     const next = HOWTO[which] ? which : '';
     if (next === context) return;
     context = next;
-    if (context && game && !game.seenHowto(context)) open(context);
+    if (context && game && !game.seenHowto(howtoSeenKey(context))) open(context);
     /* the mode closed under an open card (she pressed the back button through
        it, or the walk moved on): the card goes with it */
     else if (!context && id) { id = ''; sp.card.to(0); }
@@ -429,7 +481,7 @@ export function createHowto(opts = {}) {
     get debug() {
       return {
         id, context, open: !!id,
-        seen: HOWTO_IDS.filter((k) => game && game.seenHowto(k)),
+        seen: HOWTO_IDS.filter((k) => game && game.seenHowto(howtoSeenKey(k))),
         box: cardBox(), done: doneBox(),
       };
     },
