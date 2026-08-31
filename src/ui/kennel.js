@@ -35,10 +35,17 @@
    never be one (ARCHITECTURE §15.6). She keeps the standing she earned.
 
    Copy is pronoun-parameterised per dog from `game.pron`, from each roster
-   entry's own `pron`, and from the offered row's `pron`: the gift puppy is a
-   male Schnoodle and the Cockapoo and the Shiba are both female, so this surface
-   can have all three on screen at once and cannot use a single pronoun for
-   "the dog". Not one string below contains "he", "she", "him" or "her".
+   entry's own `pron`, and from the offered row's `pron`. The cast is five now —
+   a male Schnoodle, a female Cockapoo, a female Shiba, a female Corgi and a male
+   Golden Retriever — and this surface can have all of them on screen at once, so
+   it cannot use a single pronoun for "the dog". Not one string below contains
+   "he", "she", "him" or "her".
+
+   THE COUNT IS NOT WRITTEN DOWN HERE ANY MORE, and that is the point of §35's
+   seam: two breeds were added after this file was last opened and not one line
+   of copy changed. `tools/kennelgate.py` walks `pp.adoptable()` and measures
+   every row it finds crossed with he/she/they, so the fit is a property of the
+   ladder rather than of a sentence somebody looked at once.
 
    Text goes through ui/text.js. There is not one `fillText` in this file.
    ========================================================================== */
@@ -89,10 +96,14 @@ const PILL = SURF.chip;
 const FLASH = SURF.chrome;
 
 const cap = (w) => (w ? w[0].toUpperCase() + w.slice(1) : w);
-/* 'Three is plenty'. Sparse on purpose: the kennel holds three dogs and the
-   words run out one past any cap this game will ever have. Past the end the
-   toast falls back to the digit, which is ugly but never wrong. */
-const NUM_WORD = ['No', 'One', 'Two', 'Three', 'Four'];
+/* 'Five is plenty'. Sparse on purpose: the words run out one past any cap this
+   game will ever have, and past the end the toast falls back to the digit —
+   ugly but never wrong.
+   IT RAN OUT WHEN THE KENNEL GREW. `economy.kennel.max` went 3 -> 5 with the
+   Corgi and the Golden and this list stopped at 'Four', so the one toast that
+   fires when she is at capacity would have said "5 is plenty" — the fallback
+   doing its job and looking like a bug. The list ends one past `max` again. */
+const NUM_WORD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'];
 
 export const COPY = {
   title: 'Your dogs',
@@ -166,7 +177,8 @@ export const COPY = {
      looking after the one in the room. Was the literal 'By caring for him',
      which was true only while the resident could only be the Schnoodle.
      Still inside the 116-unit slot documented above: 'By caring for them' is
-     the longest of the three at 18 characters. */
+     the longest of the three PRONOUNS at 18 characters — three is he/she/they,
+     not a count of dogs, so adding breeds cannot lengthen it. */
   newLockedNote: (P) => `By caring for ${P.them}`,
   /* `P` here is the OFFERED puppy's pronoun, not the resident's.
      `P.is` RATHER THAN A TYPED "is" — that is what the field is in the table
@@ -186,8 +198,8 @@ export const COPY = {
   knock: 'Someone is at the door.',
   reveal: (row) => `${(row && row.name) || 'A puppy'}, looking for a home.`,
   /* `Pnew` is the arriving puppy, `Pres` the dog already in the room. Two
-     pronouns, because with three breeds the pair can be he/she, she/he or he/he
-     and no single string covers them. For the Cockapoo arriving to the Schnoodle
+     pronouns, because the pair can be he/she, she/he, he/he or she/she and no
+     single string covers them. For the Cockapoo arriving to the Schnoodle
      this resolves to exactly the sentence that shipped before, character for
      character, which is the check that the parameterisation changed nothing.
 
@@ -1002,9 +1014,11 @@ export function createKennel(opts = {}) {
        ARCHITECTURE §11.3 intends — a new breed is a DATA entry, and this
        surface needs no change when it lands. Until then the name comes from
        the unlocks table so the card never claims to be a Shiba.
-       All three breeds on the ladder now have art, so neither fallback is
-       reachable in the shipping game; they stay because the ladder is data and
-       the next row added to it may again arrive first. */
+       EVERY breed on the ladder has art, so neither fallback is reachable in
+       the shipping game; they stay because the ladder is data and the next row
+       added to it may again arrive first. Said as "all three" until the Corgi
+       and the Golden made it five — which is why it is a count of nothing
+       now. */
     const u = BALANCE.economy.unlocks.find((x) => x.kind === 'breed'
       && (x.breedId || x.id) === id);
     if (u) return u.name;

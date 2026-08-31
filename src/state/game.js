@@ -1648,8 +1648,10 @@ export function createGame(state, opts = {}) {
       const row = api.nextAdoptable();
       const shape = (o) => ({ ok: false, reason: '', short: 0, at: row ? row.at : 0, points: pts, row, ...o });
       /* FULL IS CHECKED FIRST, and against the roster rather than the ladder: it
-         is the room's limit, not her care's. A ladder that offered a fourth dog
-         to a kennel that holds three must refuse rather than half-adopt. */
+         is the room's limit, not her care's. A ladder with more breed rows on it
+         than `kennel.max` allows must refuse rather than half-adopt — the two
+         numbers are deliberately independent (see `economy.kennel.max`), so they
+         can disagree and this is where that disagreement is answered. */
       if (state.dogs.length >= Math.max(1, Math.floor(num(K.max, 2)))) {
         return shape({ reason: 'full' });
       }

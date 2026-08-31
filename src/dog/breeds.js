@@ -519,8 +519,10 @@ export const BREEDS = {
       muzzleW: 44, muzzleH: 35,
       /* BIG AND ROUND. 1.34 was authored as "oval and deep-set" — deep-set is a
          scowl, and the socket shadow that produced it is deleted from `markings`
-         below. This is now the largest eye of the three breeds, on purpose: the
-         reference has big round very dark eyes and they are the whole read. */
+         below. This is the largest eye in the file, on purpose: the reference has
+         big round very dark eyes and they are the whole read. The Corgi ties it
+         at 1.44 for the same reason and from his own reference, which is fine —
+         it is the gift puppy's eye that must not be beaten, not shared. */
       eyeSize: 1.44,
       /* WIDE. 0.375 was explicitly "still closer than the cockapoo's 0.40" —
          close-set eyes are an anger cue and there is no reason to want one. */

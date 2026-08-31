@@ -53,7 +53,8 @@ The remaining assertions here are ones that CAN fail — the bottom edge of the 
 which is the term whose absence hid the second defect. `bowlFloorY` is read and
 reported, and deliberately never asserted against.
 
-WHAT IT ASSERTS, on every frame of the whole action, for all three breeds:
+WHAT IT ASSERTS, on every frame of the whole action, for EVERY breed the game
+publishes as `__pp.breeds` (five of them now — see the note on BREEDS below):
 
   A  THE BASE-VS-SOLE GAP IS *REPORTED*, NOT ASSERTED — see below. It is zero
      by construction, which this gate proves by injecting faults.

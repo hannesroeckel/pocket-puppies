@@ -626,10 +626,14 @@ export function createCare(rig, opts = {}) {
          the care points it pays, not the grain she has to follow. */
       /* THE BEST TOOL SHE HAS, NOT THE SUM OF THEM. The comb only counts on a
          coat the brush cannot get through — `fur.type` is the breed's own
-         declaration and two of the three are not 'short' — so on the Shiba the
-         comb is an expensive brush and says so, and the two doodles are what it
-         is for. Multiplied rather than added, and never stacked: owning both
-         should not double anything. */
+         declaration, never a breed-id check — so on the Shiba the comb is an
+         expensive brush and says so. Multiplied rather than added, and never
+         stacked: owning both should not double anything.
+         THE DATA TEST IS WHY THE CORGI AND THE GOLDEN NEEDED NOTHING HERE. He
+         declares 'short' and she declares 'curly', so the comb was already right
+         about two dogs this file has never heard of. Three of the five coats are
+         not short (cockapoo wavy, schnoodle tousled, golden curly); the Shiba and
+         the Corgi are. */
       const curly = !!(rig.breed && rig.breed.fur) && rig.breed.fur.type !== 'short';
       const brushMul = Math.max(
         toolMul('brushSoft', SHOP.brushGloss),

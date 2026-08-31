@@ -2021,8 +2021,9 @@ export const BALANCE = {
          Each is a multiplier on a thing that already existed, so the
          effect is measurable rather than described. `combCurly` is the
          biggest of the three because it is the only one gated on the
-         coat: two of the three breeds are curly and the soft brush was
-         tuned on the Shiba. */
+         coat, and the soft brush was tuned on the Shiba. Three of the five
+         coats are not 'short' — cockapoo wavy, schnoodle tousled, golden
+         curly — and the Shiba and the Corgi are. */
       kibbleFill: 1.45,      // hunger restored per mouthful of the good kibble
       combGloss: 1.7,        // brushing a CURLY coat with the comb
       soapGlossKeep: 0.55,   // multiplier on gloss decay per hour
