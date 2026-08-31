@@ -115,7 +115,23 @@ export function createSideSprite(rig) {
     const a = o.alpha === undefined ? 1 : o.alpha;
     const f = frameAt(o.phase || 0, run);
 
-    const h = (SP.height || 150) * s;
+    /* HOW TALL HE IS, PER BREED. `meta.height` is solved by
+       `tools/sideheight.py` against two deliberately unrelated landmarks — his
+       ground-to-belly clearance and his whole silhouette — calibrated so the
+       Schnoodle, who is the gift puppy and is on her phone, does not move.
+
+       FOUR OF THE FIVE ARE 250 FOR THREE DIFFERENT REASONS, which is why the
+       generated file carries a note per breed rather than a bare number:
+       the Schnoodle is the calibration anchor; the Shiba and the Cockapoo have
+       frontal data older than their sheets and the two views disagree by 14% and
+       20%, so NO single scale is correct and the tool declines to invent one;
+       and the Corgi solves cleanly to 295.7 and was overruled on framing, since
+       at that size he spans the whole screen in the room and widens the stroll's
+       known find-occlusion. Only the Golden actually moves.
+
+       `SP.height` remains the fallback for a sheet `sideheight.py` has never been
+       run against — which is the behaviour every sheet had before 8.27.0. */
+    const h = (meta.height || SP.height || 150) * s;
     const w = h * (meta.cellW / meta.cellH);
     /* the ground line inside the cell, in the same units */
     const footY = h * (meta.ground / meta.cellH);

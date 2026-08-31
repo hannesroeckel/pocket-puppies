@@ -4548,11 +4548,12 @@ job and looking like a bug. It ends one past `max` again.
 ### 36.6 Left imperfect
 
 - **The Corgi and the Golden stand as tall as everyone else.** `side.sprite.height` is one
-  number, 250, for every breed, and each sheet fills its cell to the same 450 px of ink. It
-  reads correctly today only because the Corgi's ear tips take the top of his cell where the
-  Golden's skull takes the top of his — so his *back* does sit lower. That is the art
-  compensating for a renderer that cannot express "this dog is smaller", and it would not
-  survive a breed whose ears are small AND who is short.
+  number, 250, for every breed. **This bullet originally offered a mechanism — that the
+  Corgi's ear tips take the top of his cell where the Golden's skull takes the top of his —
+  and that mechanism was wrong.** It was reasoning from the cell's ink box rather than from
+  any measurement of the dogs. Superseded by **§37**, which measures it: the Corgi solves
+  18% larger and the Golden 5% larger, the Shiba and the Cockapoo cannot be solved at all,
+  and the reason has nothing to do with ears.
 - **The front views are at three passes.** Good, not Schnoodle-polished.
 - **The two new ladder rows sit above every word `careWords` has.** Deliberate (SCOPE stage
   6), but it means the last two dogs arrive with the game's warmest description of her
@@ -4560,3 +4561,105 @@ job and looking like a bug. It ends one past `max` again.
 - **The offered card's portrait is still an anonymous silhouette**, now four times in one
   playthrough rather than twice. §35.5 called this "a little more visible than it was once";
   it is more visible again.
+
+## 37. How tall each profile sheet is drawn (8.27.0) — as built
+
+§36.6 said the profile dogs are all the same height and offered a reason. The observation was
+right and **the reason was wrong**, which is the useful part of this section: it was reasoning
+from the cell's ink box instead of measuring the dogs.
+
+`BALANCE.side.sprite.height` was one number, 250, for every breed. balance.js records how it
+was got — the Schnoodle's body width, through the Schnoodle's cell aspect — so it was exactly
+right for him and accidental for everyone else. **That is the bowl's own mistake in a
+different file**, and the bowl's note already says the general form of it: *"Typed numbers
+could only ever be right for one of the three breeds, and stage 7's were right for none of
+them."*
+
+### 37.1 Two landmarks, because one cannot be checked
+
+A scale factor needs a landmark that means the same thing in the painted sheet and in the
+drawn frontal dog. `tools/sideheight.py` uses two, chosen to be about as unrelated as two
+landmarks can be:
+
+| | in the sheet | in the frontal dog |
+| --- | --- | --- |
+| **belly** | walk UP from the ground; the lowest row where the separate LEG runs have merged into one body | `stance().pawSole - bodyBottom`, analytic |
+| **total** | the cell's ink box | his drawn ink box |
+
+**Using two is the entire method.** If the sheet and the drawn dog agree about a breed, the
+two landmarks give the same answer and the scale is real. If they disagree, *there is no
+correct single scale* — match his legs and the whole dog is too small, match his height and
+his legs are wrong — and the tool says so instead of picking a winner and calling it derived.
+
+Calibrated on the **Schnoodle**, who is the gift puppy and is on her phone, so he is
+pixel-identical and everything else moves relative to him.
+
+| breed | via belly | via total | disagree | drawn at | |
+| --- | --- | --- | --- | --- | --- |
+| corgi | 294.4 | 297.1 | **0.9%** | 250 | solves cleanly, **overruled on framing** |
+| golden | 266.2 | 260.8 | **2.1%** | **263.5** | the only dog that moves |
+| schnoodle | 250.0 | 250.0 | 0.0% | 250 | the calibration anchor |
+| shiba | 227.7 | 265.4 | 14.2% | 250 | **held — the art disagrees with itself** |
+| cockapoo | 199.8 | 250.8 | 20.4% | 250 | **held — the art disagrees with itself** |
+
+**The split is not arbitrary.** The Corgi's and the Golden's frontal entries in `dog/breeds.js`
+were authored *from these very sheets* (§36), so the two views describe one animal. The
+Shiba's and the Cockapoo's frontal data predates their sheets by several stages and nobody
+ever reconciled the two. Four of the five end up at 250 for **three different reasons**, which
+is why the generated file carries a note per breed instead of a bare number.
+
+### 37.2 The Corgi is held on framing, and that is recorded as a decision
+
+He solves to 295.7 with two landmarks agreeing to 0.9%, and he is drawn at 250 anyway. That is
+a legitimate call — *measurably correct* and *reads well* are different questions — but it
+must never be laundered into looking like a measurement, so `sideheight.py` still computes the
+number, still prints it, and records the override with its reason.
+
+The reason is what he does to the two shots he appears in, measured on a 390×844 screen:
+
+| | room (2.1s) | road (~30s) |
+| --- | --- | --- |
+| at 250 | 329 wide, **84%** | ~202 wide, **52%** |
+| at 295.7 | 389 wide, **100%** | 241 wide, **62%** |
+
+The room is cosmetic — he is fading out and nothing is behind him. The road is not.
+`balance.js` says the stroll's `0.62` exists precisely because a wide dog meant *"every find
+he passed hidden behind him"*, and STROLL-PLAN already lists *"an untaken find is hidden
+behind him for about a second"* as that beat's one unfixed flaw. 18% wider makes the occlusion
+roughly **2.2s → 2.6s**. The `0.62` was tuned against the flat 250 and the comment shows its
+arithmetic, so a per-breed height quietly invalidates that tuning.
+
+Worth knowing for whoever revisits it: **the Golden already spanned more than the screen at
+250** (101%), so "wider than the frame" is not a category this change invented.
+
+### 37.3 Three extractions that had to be thrown away
+
+Recorded so nobody re-tries them. All three were caught by **drawing the measured line onto
+the art and looking at it**, which no amount of staring at numbers would have done:
+
+- **topmost ink in the REAR of the cell** — reads the Shiba's tail, which curls up over his back.
+- **topmost ink in the MIDDLE** — reads the Corgi's ears, which are set back over his shoulders.
+- **the flattest run of the top contour** — picks a different landmark on each dog.
+
+They disagreed with each other by 23–48%, which is what said none of them was measuring
+anything. An earlier pass had quoted the first one's numbers as if they were withers heights;
+they were not, and a conclusion was drawn from them and had to be withdrawn.
+
+A fourth error belongs here too, because it produced *confident wrong pictures*: the probe
+harness called `rig.place(...)` and `rig.resize(...)`, **neither of which exists**. Both were
+written as `rig.place && rig.place(...)`, so they short-circuited silently and every frontal
+dog was drawn at the rig's default placement. The renders looked broken (the dog straddling
+the ground line) which is how it was noticed — but the *numbers* survived, because all five
+breeds were drawn identically and every anchor is calibrated on the Schnoodle, so the ratios
+were never affected. A short-circuiting optional call is a very quiet way to not do something.
+
+### 37.4 Left imperfect
+
+- **The Shiba and the Cockapoo remain unsolvable** and are drawn at a number that is right for
+  neither view. Fixing that means re-authoring their frontal proportions against their sheets,
+  the way the Corgi's and the Golden's were — a breed-art job, not a scaling one.
+- **The Corgi is drawn 18% smaller than he measures.** Held deliberately; if the stroll ever
+  gains a per-breed road scale, the reason for the hold goes away and he should be revisited.
+- **`sideheight.py` is not in the gate suite.** It is a solver whose output is committed data,
+  like `side-meta.py`, and re-running it is how you check it. Nothing asserts that the numbers
+  in `side-meta.js` are still what the tool would produce today.

@@ -40,5 +40,7 @@
       "h": 285
     }
   ],
-  "breed": "cockapoo"
+  "breed": "cockapoo",
+  "height": 250.0,
+  "heightNote": "HELD at 250: the sheet and the frontal dog disagree by 20.4% about this breed's proportions, so no one scale is correct"
 }

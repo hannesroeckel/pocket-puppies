@@ -109,6 +109,23 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.27.0: THE GOLDEN IS DRAWN AT HIS OWN SIZE IN PROFILE. No new files; one
+   number per breed in `assets/side-meta.js`, which changed, so the generation
+   has to move. `BALANCE.side.sprite.height` was ONE number (250) for every
+   breed and balance.js records that it was derived from the Schnoodle's body
+   and the Schnoodle's cell aspect — so it was exactly right for him and
+   accidental for everybody else. `tools/sideheight.py` solves it per breed
+   against two unrelated landmarks (ground-to-belly clearance, whole
+   silhouette), anchored so the gift puppy is pixel-identical.
+   ONLY THE GOLDEN MOVES, +5.4% to 263.5. The Shiba and the Cockapoo are HELD
+   because their two landmarks disagree by 14% and 20% — their frontal data
+   predates their sheets by several stages and the two views do not describe the
+   same animal, so no single scale is correct and the tool refuses to invent
+   one. The Corgi solves cleanly to 295.7 and is HELD ANYWAY on a human framing
+   decision: at that size he spans the full 390-unit screen in the room and
+   widens the stroll's documented find-occlusion from ~2.2s to ~2.6s.
+   NO SCHEMA BUMP: nothing here is persisted.
+
    8.26.0: TWO MORE DOGS — A CORGI AND A GOLDEN RETRIEVER. TWO NEW ASSETS,
    `side-corgi.webp` (104KB) and `side-golden.webp` (122KB), both from the
    human's own art and both in the list below; `py tools/check-precache.py` now
@@ -329,7 +346,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.26.0';
+const VERSION = '8.27.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

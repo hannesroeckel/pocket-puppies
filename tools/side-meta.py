@@ -104,8 +104,16 @@ def classify(path, frames, cellW, cellH):
     return ("bound" if ratio < TWIN else "walk"), ratio
 
 
+def _wrap(breed, note, width=74):
+    """one breed's height note as an indented, wrapped comment block"""
+    import textwrap
+    body = textwrap.wrap(note, width - 6)
+    head = "     %-10s %s" % (breed, body[0] if body else "")
+    return "\n".join([head] + ["                " + l for l in body[1:]])
+
+
 def main():
-    rows, notes = [], []
+    rows, notes, heights = [], [], {}
     for f in sorted(SHEETMETA.glob("side-*.json")):
         m = json.loads(f.read_text(encoding="utf-8"))
         # THE FILENAME COMES FROM THE DISK, not from the JSON. The slicer writes
@@ -119,15 +127,37 @@ def main():
             continue
         name = "side-%s.%s" % (breed, img)
         cycle, ratio = classify(ASSETS / name, m["frames"], m["cellW"], m["cellH"])
+        # HOW TALL TO DRAW HIM, from tools/sideheight.py. Absent for a sheet that
+        # tool has not been run against, and `dog/sidesprite.js` then falls back
+        # to the one-size-fits-all `BALANCE.side.sprite.height` — which is the
+        # behaviour every sheet had before 8.26.0.
+        height = m.get("height")
+        if height:
+            heights[breed] = m.get("heightNote", "")
+            notes.append("    %-10s height=%-6g %s" % (breed, height,
+                                                       heights[breed]))
         notes.append("    %-10s cycle=%-5s (frame0~frame2 is %.2f of the rest%s)"
                      % (breed, cycle, ratio,
                         "  <-- NEAR THE THRESHOLD, LOOK AT IT"
                         if abs(ratio - TWIN) < 0.12 else ""))
         rows.append("  %s: { file: '%s', frames: %d, cellW: %g, cellH: %g,"
-                    " ground: %g, centre: %g, cycle: '%s' }," % (
+                    " ground: %g, centre: %g, cycle: '%s'%s }," % (
                         breed, name, m["frames"],
-                        m["cellW"], m["cellH"], m["ground"], m["centre"], cycle))
-    out = HEADER + "export const SIDE_SPRITES = {\n" + "\n".join(rows) + \
+                        m["cellW"], m["cellH"], m["ground"], m["centre"], cycle,
+                        (", height: %g" % height) if height else ""))
+    # WHY EACH HEIGHT IS WHAT IT IS, IN THE GENERATED FILE ITSELF. Three of the
+    # five are held at the default for three DIFFERENT reasons, and a bare number
+    # cannot tell them apart: the Schnoodle is the calibration anchor, the Shiba
+    # and the Cockapoo have art that disagrees with itself, and the Corgi solves
+    # cleanly and was overruled on framing. Somebody reading `height: 250` four
+    # times needs to know that.
+    why = ""
+    if heights:
+        why = ("\n   WHY EACH `height` IS WHAT IT IS (tools/sideheight.py):\n\n"
+               + "\n".join(_wrap(b, n) for b, n in sorted(heights.items())) + "\n")
+    out = HEADER.rstrip()[:-len("========================================== */")] \
+        + why + "   ========================================================================== */\n" \
+        + "\nexport const SIDE_SPRITES = {\n" + "\n".join(rows) + \
         "\n};\n\nexport default SIDE_SPRITES;\n"
     (ASSETS / "side-meta.js").write_text(out, encoding="utf-8")
     print("src/assets/side-meta.js — %d breed(s):" % len(rows))

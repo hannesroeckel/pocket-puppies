@@ -49,5 +49,7 @@
     }
   ],
   "breed": "corgi",
-  "mode": "components"
+  "mode": "components",
+  "height": 250.0,
+  "heightNote": "HELD at 250 though it solves to 295.7 \u2014 the two landmarks agree, and he is overruled on FRAMING. At his solved height he spans 100% of the 390-unit screen in the room (from 84%) and 62% of it on the road (from 52%). The stroll's 0.62 scale exists precisely because a wide dog meant 'every find he passed hidden behind him', and STROLL-PLAN already lists an untaken find being hidden for about a second as that beat's one unfixed flaw; 18% wider makes the occlusion roughly 2.2s -> 2.6s. Human decision, 2026-08-31."
 }
