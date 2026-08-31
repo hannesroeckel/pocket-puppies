@@ -93,21 +93,40 @@ What actually went wrong was none of them:
 
 ## 5. Left imperfect
 
-- **An untaken find is hidden behind him for about a second** at its closest approach, because it
-  passes at his own x and the reach line will not let a tap target sit below 676 (his feet are at
-  ~696), so nothing can pass in *front* of him. She has ~5 seconds of it on screen either side, and a
-  dog walking past something does occlude it — but it means the moment of "he's right next to it" is
-  the one moment she cannot see it.
+- ~~**An untaken find is hidden behind him for about a second** at its closest approach~~ ✅ **FIXED
+  (8.28.0).** It passes at his own x and the reach line will not let a tap target sit below 676 (his
+  feet are at ~696), so nothing can pass in *front* of him — and the moment of "he's right next to
+  it" was the one moment she could not see it.
+
+  **The depth was not the thing to change.** Letting a find sit nearer than him means letting a tap
+  target below the reach line, and that line is what closed queue item 1c — *"sometimes when flicking
+  the ball it is behind the navigation buttons which doesn't allow the player to reach it again"*.
+  The nav is not drawn during the stroll (`!walk.modal`), so it would have been safe *here*, but the
+  guard is per-frame and global and loosening it for one beat to buy two seconds is the trade that
+  bug was made of.
+
+  So the object stays behind him and **the affordance comes forward**: while he covers it, it is
+  drawn again over him at `ghostAlpha` 0.34, fading in as he takes it and out as he passes. Nothing
+  about the hit box changed — it was always tappable through him; what changed is that she can see
+  that it is. `strollgate` asserts it on pixels and is its own control: 4,614 of 19,600 pixels in a
+  box around the find change, and setting `ghostAlpha` to 0 removes them.
 
   The *confirmation* is not left imperfect, and it was the same defect one step worse: the tap lands
   where he is, so the first render drew the pop, the arc **and** the sparks behind the dog — she
   touched the thing she was told to touch and nothing happened. `drawFront` is three passes now
   (untaken finds → him → what she just took) and the taken pass draws its own ring at her finger,
   because the room's particles are drawn before this layer and are behind him too.
-- **No explainer card.** `howtoContext()` gives the stroll nothing, so the one hint line is the whole
-  teaching. That is deliberate for now — a card over a scene she is meant to be watching is the
-  thing `ui/howto.js` exists to avoid — but if the hint turns out not to be enough it is one line in
-  `howtoContext()` and one entry in `HOWTO`.
+- ~~**No explainer card.**~~ ✅ **FIXED (8.28.0), and not the way this note expected.** It proposed
+  "one line in `howtoContext()` and one entry in `HOWTO`" — a card of its own. That is wrong for the
+  reason the same note gives one clause earlier: a card over a scene she is meant to be watching is
+  what `ui/howto.js` exists to avoid, and the numbers are against it — the first find is level with
+  him at `passAt` 0.18 (~5.4s into a 30s beat) and on screen from about 2.8s, so a dismiss-only card
+  at the start of the road hides the very things it is explaining.
+
+  **It is taught on the walk card instead**, which is shown at the MAP beat — before he sets off,
+  over nothing, at the one moment in this feature that is already a pause. `HOWTO.walk` gains
+  `rev: 2` so it fires once more for everyone who dismissed the old one, and the step that said
+  *"they go out alone"* — false since 8.22.0 — is gone (ARCHITECTURE §38).
 - **What she taps is not re-gated by how far he actually got.** Tap three things and bring him home
   after twenty seconds and you keep all three, including tier-2 finds a twenty-second walk would
   never roll. It is deliberate: re-checking her picks against the progress she got would mean taking

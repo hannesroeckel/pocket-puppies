@@ -192,6 +192,11 @@ export function createSideSprite(rig) {
     get frames() { return meta.frames; },
     /** 'bound' or 'walk' — what kind of cycle the artist drew (side-meta.py) */
     get cycle() { return isWalk ? 'walk' : 'bound'; },
+    /** HOW TALL HE IS at `s === 1`, per breed — see `draw` for where it comes
+        from. Published because callers place things ON him (the stroll flies a
+        tapped find to his mouth) and were reading `BALANCE.side.sprite.height`
+        directly, which stopped being his height for every breed in 8.27.0. */
+    get height() { return meta.height || SP.height || 150; },
     /** is frame 0 a real standing pose? false on a 'walk' sheet — see frameAt */
     get hasStand() { return !isWalk; },
     frameAt,

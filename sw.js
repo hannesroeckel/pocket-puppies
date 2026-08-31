@@ -109,6 +109,30 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.28.0: THE STROLL EXPLAINS ITSELF, AND SHE CAN SEE WHAT HE IS STANDING IN
+   FRONT OF. No new files. Beat 2.75 had no explainer, and a card of its own was
+   the wrong answer — the first find is level with him ~5.4s into a 30s beat and
+   on screen from ~2.8s, so a card at the start of the road hides the things it
+   is teaching. It is taught on the WALK card instead, which is shown at the map
+   beat, before he sets off, over nothing. `HOWTO.walk` carries `rev: 2` and
+   `howtoSeenKey()` turns that into the flag `walk@2`, so it fires once more for
+   everyone who dismissed the old one — without which the fix would have taught
+   nobody, the walk being the oldest mode in the game.
+   TWO SHIPPED CARDS WERE NOT ENGLISH: `PRONOUNS.s` is a bare 's', so the walk
+   said "he gos out alone" and the ring said "he dos the rest", both since the
+   day they were written and both invisible to every existing check — the
+   they/them expansion is correct, and only the pronouns anybody plays with were
+   broken. howtogate now fails the whole class, derived rather than wordlisted.
+   AND THE FIND HE COVERS IS DRAWN OVER HIM, faintly, for the ~2.2s he is in
+   front of it. The depth is unchanged and deliberately so: putting a find nearer
+   than him means a tap target below the reach line, which is what closed queue
+   item 1c. The hit box never changed — it was always tappable through him.
+   ONE 8.27.0 BUG FIXED WITH IT: `dog/stroll.js` flew a tapped find to a mouth
+   computed from `BALANCE.side.sprite.height`, which stopped being every dog's
+   height last release, so the Golden's finds landed ~11 units low.
+   NO SCHEMA BUMP — `state.flags.howto` is an open keyed object and `walk@2` is
+   simply a key nobody has written yet.
+
    8.27.0: THE GOLDEN IS DRAWN AT HIS OWN SIZE IN PROFILE. No new files; one
    number per breed in `assets/side-meta.js`, which changed, so the generation
    has to move. `BALANCE.side.sprite.height` was ONE number (250) for every
@@ -346,7 +370,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.27.0';
+const VERSION = '8.28.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
