@@ -29,13 +29,31 @@
               The body lifts TWICE per cycle, once under each diagonal pair —
               and there is NO frame that can be held still, which is why
               `hasStand` is published beside it.
+   ================================
+   WHY EACH `height` IS WHAT IT IS (tools/sideheight.py):
+
+     cockapoo   HELD at 250: the sheet and the frontal dog disagree by 20.4% about
+                this breed's proportions, so no one scale is correct
+     corgi      HELD at 250 though it solves to 295.7 — the two landmarks agree, and
+                he is overruled on FRAMING. At his solved height he spans 100% of
+                the 390-unit screen in the room (from 84%) and 62% of it on the road
+                (from 52%). The stroll's 0.62 scale exists precisely because a wide
+                dog meant 'every find he passed hidden behind him', and STROLL-PLAN
+                already lists an untaken find being hidden for about a second as
+                that beat's one unfixed flaw; 18% wider makes the occlusion roughly
+                2.2s -> 2.6s. Human decision, 2026-08-31.
+     golden     two landmarks agree to 2.1%
+     schnoodle  two landmarks agree to 0.0%
+     shiba      HELD at 250: the sheet and the frontal dog disagree by 14.2% about
+                this breed's proportions, so no one scale is correct
    ========================================================================== */
+
 export const SIDE_SPRITES = {
-  cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274, cycle: 'bound' },
-  corgi: { file: 'side-corgi.webp', frames: 4, cellW: 458, cellH: 458, ground: 454, centre: 229, cycle: 'walk' },
-  golden: { file: 'side-golden.webp', frames: 4, cellW: 549, cellH: 458, ground: 454, centre: 274.5, cycle: 'walk' },
-  schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257, cycle: 'bound' },
-  shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5, cycle: 'bound' },
+  cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274, cycle: 'bound', height: 250 },
+  corgi: { file: 'side-corgi.webp', frames: 4, cellW: 458, cellH: 458, ground: 454, centre: 229, cycle: 'walk', height: 250 },
+  golden: { file: 'side-golden.webp', frames: 4, cellW: 549, cellH: 458, ground: 454, centre: 274.5, cycle: 'walk', height: 263.5 },
+  schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257, cycle: 'bound', height: 250 },
+  shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5, cycle: 'bound', height: 250 },
 };
 
 export default SIDE_SPRITES;

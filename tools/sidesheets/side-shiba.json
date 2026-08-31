@@ -40,5 +40,7 @@
       "h": 324
     }
   ],
-  "breed": "shiba"
+  "breed": "shiba",
+  "height": 250.0,
+  "heightNote": "HELD at 250: the sheet and the frontal dog disagree by 14.2% about this breed's proportions, so no one scale is correct"
 }
