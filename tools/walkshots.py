@@ -12,8 +12,8 @@ side-profile effort was for.
 one breed that was fine; with five it meant every run overwrote the last one's
 pictures, so two sheets could never be compared side by side — which is the
 only way to see that one of them is drawn at a different size or on a different
-ground line. The default breed keeps the original names, because they are
-quoted by ARCHITECTURE §33 and by `review/index.html`.
+ground line. The default breed keeps the unsuffixed names so the shots already
+in `review/` are replaced rather than joined by a near-duplicate set.
 
 Usage:  py tools/walkshots.py [--breed schnoodle]
 """
