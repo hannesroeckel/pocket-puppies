@@ -18,11 +18,24 @@
    A BREED WITH NO ENTRY HAS NO SHEET. `dog/sidesprite.js` reports that rather
    than guessing, and the drawn profile (`dog/side.js`) is the fallback — which is
    why that file was kept after the sprites arrived.
+
+   `cycle` IS WHAT KIND OF ANIMATION THE FOUR FRAMES ARE, and it is MEASURED off
+   the sheet rather than typed (see the generator's header):
+
+     'bound'  stand, step, stand, bound — frames 0 and 2 are the same standing
+              pose. The body lifts ONCE per cycle, and frame 0 is a real stand
+              that can be held while he is stationary.
+     'walk'   four different poses of an alternating cycle, no stand anywhere.
+              The body lifts TWICE per cycle, once under each diagonal pair —
+              and there is NO frame that can be held still, which is why
+              `hasStand` is published beside it.
    ========================================================================== */
 export const SIDE_SPRITES = {
-  cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274 },
-  schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257 },
-  shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5 },
+  cockapoo: { file: 'side-cockapoo.webp', frames: 4, cellW: 548, cellH: 458, ground: 454, centre: 274, cycle: 'bound' },
+  corgi: { file: 'side-corgi.webp', frames: 4, cellW: 458, cellH: 458, ground: 454, centre: 229, cycle: 'walk' },
+  golden: { file: 'side-golden.webp', frames: 4, cellW: 549, cellH: 458, ground: 454, centre: 274.5, cycle: 'walk' },
+  schnoodle: { file: 'side-schnoodle.webp', frames: 4, cellW: 514, cellH: 458, ground: 454, centre: 257, cycle: 'bound' },
+  shiba: { file: 'side-shiba.webp', frames: 4, cellW: 505, cellH: 458, ground: 454, centre: 252.5, cycle: 'bound' },
 };
 
 export default SIDE_SPRITES;

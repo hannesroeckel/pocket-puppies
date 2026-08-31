@@ -247,6 +247,25 @@ Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but m
     He is the ladder's last row at **1600 care points** (`careWords`' threshold for
     *devoted*), the kennel holds **three**, and a breed is now a data row carrying its own
     `breedId` and `sex` so a fourth needs no UI change. That is the handful.
+  - **Five, 8.26.0 — and the seam above is what proves it was the right shape.** A
+    **Corgi** at 2400 and a **Golden Retriever** at 3400, from the human's own art, both
+    of them a row of data and a breed entry. Not one line of copy in `ui/kennel.js`
+    changed to admit them, which is the promise the 8.23.0 note made being kept rather
+    than restated. `kennel.max` is 5.
+    - **2400 and 3400 keep the ladder's existing rhythm, on the human's decision.** The
+      spacing has been about ×1.6 since stage 6 and the alternative on the table was to
+      pull all four dogs inside a fortnight (400/800/1300/1900) so a child meets everybody
+      sooner. He chose the existing rhythm knowing the cost: at the ~150–205 care points
+      an attentive day earns, the Corgi is around day 12–16 and the Golden day 17–23.
+      Recorded because the temptation to "fix" a number that looks far away is exactly how
+      a deliberately slow ladder gets quietly sped up.
+    - **Both sit above `careWords`' last word (1600, *devoted*), and that is fine.** The
+      words describe how she is looking after them and there is nothing warmer than
+      devoted to say. They are not a rank.
+    - **Five is the layout's ceiling, not a round number.** `ui/kennel.js` sizes its dog
+      cards to the space the earned list and the Done button leave; at five they are at
+      their 64-unit floor. Nothing in this game scrolls, by design, so a sixth breed needs
+      a layout decision and not just a row.
 - **Kennel copy names no dog.** Every line on the adoption card and in its beat is a
   function of a ladder row and a pronoun table. This is not tidiness: the Cockapoo being
   spelled out in `ui/kennel.js`'s COPY was half of why there was nowhere to put a second

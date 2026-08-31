@@ -519,8 +519,10 @@ export const BREEDS = {
       muzzleW: 44, muzzleH: 35,
       /* BIG AND ROUND. 1.34 was authored as "oval and deep-set" — deep-set is a
          scowl, and the socket shadow that produced it is deleted from `markings`
-         below. This is now the largest eye of the three breeds, on purpose: the
-         reference has big round very dark eyes and they are the whole read. */
+         below. This is the largest eye in the file, on purpose: the reference has
+         big round very dark eyes and they are the whole read. The Corgi ties it
+         at 1.44 for the same reason and from his own reference, which is fine —
+         it is the gift puppy's eye that must not be beaten, not shared. */
       eyeSize: 1.44,
       /* WIDE. 0.375 was explicitly "still closer than the cockapoo's 0.40" —
          close-set eyes are an anger cue and there is no reason to want one. */
@@ -826,6 +828,523 @@ export const BREEDS = {
 
     temperament: { energy: 0.78, focus: 0.58, friendliness: 0.80 },
     aptitude: { disc: 0.62, agility: 0.70, obedience: 0.66 },
+  },
+
+  /* ======================================================================
+     CORGI — Pembroke Welsh Corgi. Dog four (8.24.0), from the human's own
+     reference sheet (`docs/reference/character-sheet-corgi.png`).
+
+     THE READ IS EARS AND A BLAZE. Front-on, this dog is two enormous erect
+     ears and a white stripe up the middle of an orange face, and every number
+     below is in service of one of those two things. Measured off the sheet's
+     front view rather than guessed:
+
+       - the widest point of the whole animal is at 7% of his HEIGHT, and it is
+         144 of his 145 pixels of width. The ears ARE the silhouette. They are
+         also taller than the skull, which no other breed here does;
+       - the eyes sit 0.31 of the body width apart, centre to centre, and are
+         0.10 of it across — so a hair over three eye-widths of gap. Wide;
+       - a WHITE blaze runs from the muzzle up over the forehead, white cheeks
+         and jaw below the eye line, white chest, white front legs.
+
+     THE CONTRAST IS THE BREED, and this is the one place the Schnoodle's hard-
+     won lesson does NOT transfer. That dog's four failed passes were about a
+     stark pale mask on a coat whose reference had no contrasting furnishings at
+     all, so `cream` there became the coat's own hue 25 points lighter. Here the
+     reference is a genuine bicolour: near-white against orange, 90 luminance
+     points, drawn with a hard clean edge. Softening it would be inventing a
+     dog. What carries over is the FEATHERING technique, not the low contrast —
+     the blaze and bib are feathered into the coat so they read as fur that is
+     white rather than as paint applied on top.
+
+     Against the Shiba, who is the other prick-eared orange dog here: the ears
+     are half again as tall (66 vs 44) and much wider (34 vs 29), the legs are a
+     quarter shorter (24 vs 32 — the breed's headline), the tail is a stub
+     (tailLen 0.42 against his 1.0 curled plume), the markings are WHITE against
+     his cream urajiro, and the blaze is a shape the Shiba has nowhere.
+     ====================================================================== */
+  corgi: {
+    id: 'corgi',
+    name: 'Corgi',
+
+    /* sampled off the sheet's front view, not chosen: the lit face reads
+       #f7b05f, the shaded flank #d88f48, and #e89b4a is the mid the two sit
+       either side of. `cream` is NEAR-WHITE (#fdf6ec, luminance ~244) because
+       the reference's markings are white — the only breed in this file whose
+       cream really is one. */
+    palette: {
+      coat: '#e89b4a',
+      coatShade: '#c2712f',
+      cream: '#fdf6ec',
+      nose: '#2a211c',           // small black button
+      eye: '#241f19',
+      tongue: '#f08e97',
+      blush: '#f08284',
+      /* the salmon of the inner ear and the paw pads, sampled at #f9b6a4. It
+         matters more on this dog than on any other: those ears are the biggest
+         single shape on him and the lining is a third of each one. */
+      pad: '#f2a897',
+    },
+
+    /* ---- face: ROUND EYES, AND THE REASON IS ALREADY WRITTEN DOWN --------
+       The first render of this dog came back with small narrow heavily-lidded
+       eyes that read as a squint, and the Schnoodle's entry above diagnoses that
+       exact failure at length: `BALANCE.rig.eyeTilt` lifts the outer corner by
+       0.05 rad and balance.js annotates the number as "higher reads as a stern
+       glare", almond-rather-than-round is on its anger list, and a specular that
+       survives the lid is most of what makes an animal look alive.
+       So this dog opts out of the global tilt the same way, and its catchlight
+       comes up. The reference's eyes are big, perfectly round and very glossy,
+       and they are the first thing anybody looks at.
+       ------------------------------------------------------------------- */
+    face: {
+      eyeTilt: 0,
+      eyeHi: 0.96,
+      /* the reference nose is a small neat black button on a short muzzle, and
+         the default 1.14 was drawing it heavy enough to lengthen the face */
+      noseSize: 1.04,
+    },
+
+    proportions: {
+      headScale: 1.14,
+      /* broader than the Shiba and no deeper: a corgi front-on is a wide dog on
+         short legs, and the width has to come from the barrel because the legs
+         are too short to spread */
+      bodyW: 108, bodyH: 88,
+      headW: 94, headH: 86,      // wider than tall: the broad foxy skull
+      /* THE HEADLINE NUMBER. 24 against the Shiba's 32 and the Schnoodle's 33 —
+         a quarter shorter than any other dog here. Achondroplasia is the whole
+         breed and it is the one thing that must survive at 60 units on a phone. */
+      legLen: 24, legW: 13.2,
+      /* AND THE OTHER HEADLINE, TWICE THE SHIBA'S EAR IN BOTH DIRECTIONS.
+         Authored at 66x34 first, rendered, and it came back as a Shiba with
+         slightly perky ears — because the reference was measured wrong by eye.
+         Measured properly off the sheet instead: each ear is 69 of the dog's 145
+         pixels of width, and the pair spans 144 of them. So one ear is very
+         nearly HALF THE WIDTH OF THE WHOLE ANIMAL, its base is almost as wide as
+         it is tall, and 37 of the dog's 218 pixels of height are ear standing
+         clear above the crown.
+         84x48 against the Shiba's 44x29 is what that measures to. It looks like
+         a typo in a table of numbers and it is what the art draws. */
+      earH: 84, earW: 48,
+      muzzleW: 42, muzzleH: 30,  // short, blunt, and wider than deep
+      /* up from 1.22 after the first render: see `face` above. This is now level
+         with the Schnoodle, who is the roundest-eyed dog in the file and the one
+         that survived the "looks angry and not cute" pass. */
+      eyeSize: 1.44,
+      /* 0.46 of the head half-width. Measured: 0.31 of the body width apart on a
+         sheet where the eye is 0.10 of it — three eye-widths of gap. */
+      eyeSpacing: 0.46,
+      /* A STUB. Pembrokes are born bobtailed, and the reference draws a short
+         low fluffy tail rather than a plume or a curl. `tailLen` 0.42 is the
+         shortest in the file by a distance; `tailCurl` 0.10 keeps it off the
+         back, where a Shiba's 0.72 puts it. */
+      tailCurl: 0.10, tailLen: 0.42, tailCarry: -0.06, tailPlume: 1.20,
+      neckRuff: 1.24,            // the reference's chest and neck ruff is full
+      pawScale: 1.06,
+      anchors: {
+        neckDY: -0.35,
+        neckOverlap: 12,
+        muzzleY: 0.44,
+        eyeY: 0.00,
+        browY: -0.34,
+        /* PRICK EARS SIT ON TOP OF THE SKULL, not beside it — the opposite of
+           the Cockapoo's `earY: -0.10`, and further up than the Shiba's -0.72,
+           because these ones stand well clear of the crown.
+           THE ROOT HAS TO BE INSIDE THE SKULL, and this is where the second pass
+           went wrong. `earX` was pushed to 0.92 to spread the pair to the edge of
+           the head, which is where the reference's ear CENTRES are — and it
+           rendered with a visible gap of room between each ear and the head,
+           because at x = 0.92 of the half-width the skull's own outline has
+           already curved up out of the way, so the base was hanging in mid-air
+           beside a dog. A prick ear is drawn as a rigid triangle from its
+           anchor (`earChain` is null for `prick`), so nothing closes that gap for
+           you the way `behind: true` closes it for a hanging ear.
+           0.74 x -0.68 puts the base a few units INSIDE the silhouette on both
+           axes, where the head's own fur scallop covers the join. The pair still
+           spans the animal, because the ears are 48 wide and lean outward — the
+           span comes from their SIZE now, which is what the reference actually
+           draws, rather than from moving the roots apart. */
+        earX: 0.74,
+        earY: -0.68,
+        shoulderX: 0.37,
+        pawX: 0.40,
+        hipX: 0.70,
+        hindPawX: 0.86,
+        tailBase: [0.60, 0.10],
+        cheekY: 0.36,
+      },
+    },
+
+    silhouette: {
+      front: {
+        /* generated superellipses (exponent in the comment), so the curvature is
+           continuous and no segment is long enough to read as a straight side —
+           the lesson the Schnoodle's flat crown paid for */
+        /* exponent 2.20: a broad barrel, squarer than an ellipse */
+        body: {
+          origin: [0.5000, 0.5000], box: [108, 88], pts: [
+            [0.5000, 0.0000], [0.6885, 0.0275], [0.8346, 0.1076], [0.9387, 0.2337], [0.9931, 0.3982],
+            [0.9931, 0.6018], [0.9387, 0.7663], [0.8346, 0.8924], [0.6885, 0.9725], [0.5000, 1.0000],
+            [0.3115, 0.9725], [0.1654, 0.8924], [0.0613, 0.7663], [0.0069, 0.6018], [0.0069, 0.3982],
+            [0.0613, 0.2337], [0.1654, 0.1076], [0.3115, 0.0275],
+          ],
+        },
+        bib: {
+          origin: [0.5000, 0.3000], box: [46, 62], pts: [
+            [0.5000, 0.0000], [0.7584, 0.0640], [0.9360, 0.2416], [1.0000, 0.5000], [0.9360, 0.7584],
+            [0.7584, 0.9360], [0.5000, 1.0000], [0.2416, 0.9360], [0.0640, 0.7584], [0.0000, 0.5000],
+            [0.0640, 0.2416], [0.2416, 0.0640],
+          ],
+        },
+        /* exponent 2.30: the broadest skull in the file, and the squarest */
+        head: {
+          origin: [0.5000, 0.5000], box: [94, 86], pts: [
+            [0.5000, 0.0000], [0.6967, 0.0263], [0.8405, 0.1034], [0.9412, 0.2263], [0.9934, 0.3909],
+            [0.9934, 0.6091], [0.9412, 0.7737], [0.8405, 0.8966], [0.6967, 0.9737], [0.5000, 1.0000],
+            [0.3033, 0.9737], [0.1595, 0.8966], [0.0588, 0.7737], [0.0066, 0.6091], [0.0066, 0.3909],
+            [0.0588, 0.2263], [0.1595, 0.1034], [0.3033, 0.0263],
+          ],
+        },
+        muzzle: {
+          origin: [0.5000, 0.4200], box: [42, 30], pts: [
+            [0.5000, 0.0000], [0.7543, 0.0655], [0.9345, 0.2457], [1.0000, 0.5000], [0.9345, 0.7543],
+            [0.7543, 0.9345], [0.5000, 1.0000], [0.2457, 0.9345], [0.0655, 0.7543], [0.0000, 0.5000],
+            [0.0655, 0.2457], [0.2457, 0.0655],
+          ],
+        },
+        /* THE EAR IS AUTHORED, NOT GENERATED, and it is the only shape on this
+           dog that is. A superellipse cannot be this: the reference ear is a
+           broad-based triangle whose SIDES ARE CONVEX and whose tip is a small
+           tight round — an isoceles shape with a bulge, not a lozenge and not a
+           cone. Twelve points rather than the Shiba's six, because the tip round
+           needs three of them to itself or it comes back as a corner, and the
+           whole read of this dog is these two shapes.
+           `origin` puts local (0,0) low and slightly inboard of centre, which is
+           where the leather actually meets the skull. */
+        ear: {
+          origin: [0.4700, 0.9400], box: [34, 66], pts: [
+            [0.0300, 1.0000], [0.0000, 0.7100], [0.0850, 0.4300], [0.2300, 0.2000],
+            [0.3700, 0.0600], [0.5000, 0.0000], [0.6300, 0.0600], [0.7700, 0.2000],
+            [0.9150, 0.4300], [1.0000, 0.7100], [0.9700, 1.0000], [0.5000, 1.0400],
+          ],
+        },
+        /* the lining, held well inside the leather so the outer edge always reads
+           as coat. A third of the ear, which is what the reference shows. */
+        earInner: {
+          origin: [0.4700, 0.9400], box: [34, 66], pts: [
+            [0.1900, 0.9300], [0.1700, 0.7000], [0.2400, 0.4600], [0.3400, 0.2700],
+            [0.4300, 0.1600], [0.5000, 0.1200], [0.5700, 0.1600], [0.6600, 0.2700],
+            [0.7600, 0.4600], [0.8300, 0.7000], [0.8100, 0.9300], [0.5000, 0.9700],
+          ],
+        },
+      },
+    },
+
+    markings: [
+      /* the white chest. `feather` 0.14 is the LOWEST of the four breeds that
+         have a bib: this is a real white marking with a real edge, not a paler
+         area of coat, so it is feathered just enough to read as fur. */
+      { shape: 'patch', where: 'body', outline: 'bib', color: 'cream', grad: 'bib', deform: 0.75, feather: 0.14 },
+      /* THE BLAZE — the shape that makes this dog a corgi at a glance.
+         A tall narrow ellipse up the centre line of the face, from the muzzle to
+         the crown. It is an `ellipse` rather than a `patch` because `patch` can
+         only name one of the six outlines the rig publishes (`rig.sil` in
+         dog/rig.js) and a blaze is not one of them; a 0.15 x 0.86 ellipse at
+         x 0 IS a stripe, and `soft` 0.5 feathers its long edges into the coat
+         without softening it into a smear. Drawn before the cheeks and the brow
+         dots so those sit on top of it, which is the order the reference reads.
+
+         NARROWED from 0.15 to 0.11 on the third render. At 0.15 — with `soft`
+         adding two wider feathered passes on top — the stripe plus the white
+         muzzle below it left more white on the face than orange, and the dog read
+         as a white-faced breed with ginger patches rather than a ginger dog with
+         a blaze. The reference is unambiguous about which way round that is: the
+         blaze is a stripe you notice, not the field it sits in. */
+      { shape: 'ellipse', where: 'head', at: [0, -0.06], size: [0.11, 0.82], color: 'cream', alpha: 0.95, soft: 0.45 },
+      /* the white lower face — cheeks and jaw below the eye line, meeting the
+         blaze so the two read as one white mask with an orange forehead above it.
+         0.46 wide, down from 0.52, for the same reason as the blaze. */
+      { shape: 'ellipse', where: 'head', at: [0, 0.48], size: [0.46, 0.32], color: 'cream', alpha: 0.90, soft: 0.8 },
+      { shape: 'ellipse', where: 'head', at: [0.44, 0.40], size: [0.26, 0.24], color: 'cream', alpha: 0.72, rot: 0.24, mirror: true, soft: 0.9, tag: 'cheek' },
+      /* THE TWO PALE DOTS ABOVE THE EYES. A real Pembroke tell, clearly drawn in
+         the reference, and the cheapest possible expressiveness: `tag: 'brow'`
+         pins them to the brow animation, so they rise and fall with his mood
+         exactly as the Shiba's cream brows do. Small and soft — at 0.13 x 0.08
+         they are dots, and a dot that grew into a lozenge would be the
+         Schnoodle's whole four-pass problem again. */
+      { shape: 'ellipse', where: 'head', at: [0.40, -0.40], size: [0.13, 0.08], color: 'cream', alpha: 0.80, rot: 0.20, mirror: true, soft: 0.7, tag: 'brow' },
+      /* a darker saddle and flank shading, so the barrel is a volume. Same
+         strengths as the Shiba's — this is form, not marking. */
+      { shape: 'ellipse', where: 'body', at: [0, -0.80], size: [0.86, 0.44], color: 'coatSh', alpha: 0.20, soft: 0.9 },
+      { shape: 'ellipse', where: 'body', at: [0.70, -0.06], size: [0.30, 0.54], color: 'coatSh', alpha: 0.11, mirror: true, soft: 1.0 },
+      /* WHITE FRONT LEGS, not socks. `from` 0.10 takes the white almost to the
+         shoulder, which is what the reference draws and is a stronger version of
+         the Shiba's 0.34 stockings; `cream` rather than `creamMid` and alpha
+         0.88 rather than 0.55, because these are white legs on an orange dog. */
+      { shape: 'stocking', where: 'legFront', color: 'cream', alpha: 0.88, from: 0.10 },
+      { shape: 'tailUnder', color: 'cream', alpha: 0.42 },
+    ],
+
+    /* `short`, like the Shiba: the reference is a smooth-coated dog with a
+       fluffy ruff, not a doodle. The ruff comes from `neckRuff` 1.24 and the
+       clump list below, not from a curly fur type. */
+    fur: {
+      type: 'short',
+      clump: {
+        body: { at: [0.15, 0.21, 0.29, 0.35, 0.44, 0.56, 0.65, 0.71, 0.79, 0.85], scale: 1.02 },
+        head: { at: [0.30, 0.38, 0.44, 0.56, 0.62, 0.70], scale: 0.90 },
+      },
+    },
+
+    ear: 'prick',
+
+    /* herding dog: keen and quick, and the friendliest of the prick-eared pair.
+       Cosmetic either way — `newDog` has not read `aptitude` since stage 5 (see
+       the note there), and it is here because the breed seam's schema says so. */
+    temperament: { energy: 0.80, focus: 0.62, friendliness: 0.82 },
+    aptitude: { disc: 0.52, agility: 0.66, obedience: 0.74 },
+  },
+
+  /* ======================================================================
+     GOLDEN RETRIEVER — dog five (8.24.0), from
+     `docs/reference/character-sheet-golden.png`.
+
+     THE READ IS ONE PALE GOLD COLOUR AND A BROKEN OUTLINE. There is not a
+     single marking on this dog in the reference — no bib, no mask, no socks,
+     nothing but a barely lighter chest — and the entire character is carried by
+     the SHAPE of the edge: a scalloped, fluffed contour all the way round, a
+     round skull with a full crown, short rounded ears hanging flat beside the
+     face, and a plume tail.
+
+     THE ONE REAL RISK ON THIS DOG IS THE COCKAPOO, and it has to be named
+     rather than hoped away. She is apricot #d9a56f; he is #f4c489. Same hue
+     family (33 degrees against 33), 30 luminance points apart, and both are
+     fluffy pale floppy-eared puppies. Colour alone will not tell them apart at
+     a third of a 390-unit screen. So the separation is put entirely into
+     geometry and texture, and each of these is a deliberate step AWAY from her
+     rather than an independent choice:
+
+       - EARS: 56 deep against her 80, and set at `earY -0.32` against her
+         -0.10. Hers are long spaniel curtains hung at eye level that fall past
+         the jaw and frame the face; his are short rounded flaps set high on the
+         skull that stop at the cheek. This is the single biggest difference and
+         it is why his came out at barely two thirds of hers.
+       - MUZZLE: 46 wide and 34 deep against her 46 x 32, and `muzzleY` 0.38
+         against her 0.46 — a longer face carried higher, where hers is the
+         scissored "muff" disc pushed low.
+       - FUR: `curly` against her `wavy`. That table's `curly` is a tighter,
+         rounder, deeper lobe with 46 fringe pieces to her 40, which is what
+         draws the broken contour the reference has everywhere.
+       - EYES: 1.20 against her 1.28, spaced 0.43 against her 0.40. Slightly
+         smaller and slightly wider — a retriever's face is broader and less
+         doll-like than a teddy-bear trim's.
+       - AND NO TOPKNOT. She has a `furnishings` fluff on the crown, which is a
+         groomer's mark. He has none: his crown is full because the coat is,
+         which is `neckRuff` and the fur type, not a scissored shape.
+     ====================================================================== */
+  golden: {
+    id: 'golden',
+    name: 'Golden Retriever',
+
+    /* sampled off the sheet: crown #fdd4a1, lit face #facc92, shaded flank
+       #dba162. Nothing here is a pure value and nothing is white — the palest
+       thing on him is `cream`, and it is only 20 points off the coat, because a
+       uniform dog is the whole instruction. */
+    palette: {
+      coat: '#f4c489',
+      coatShade: '#d79f61',
+      /* barely lighter than the coat, and that is the point. Cf. the Schnoodle's
+         note: on a dog whose reference has no contrasting markings, a `cream`
+         that is genuinely cream builds a pale mask nobody asked for. This one
+         drives the chest, the muzzle ramp and the paws, all of which the
+         reference draws as the same gold as the rest of him. */
+      cream: '#fde0ba',
+      nose: '#241d19',           // small dark button, and the only dark on him
+      eye: '#241a14',
+      tongue: '#f2939b',
+      blush: '#e89a86',
+      pad: '#e5ab88',
+    },
+
+    /* THE SAME EYE FIX AS THE CORGI, for the same reason and found in the same
+       render: the global `rig.eyeTilt` lifts the outer corner into a glare, and
+       on a face this pale a small dark lidded eye reads as a cross little dot.
+       Round, level, and glossy. See the Corgi's `face` note for the full
+       argument — it is the Schnoodle's, twice removed. */
+    face: {
+      eyeTilt: 0,
+      eyeHi: 0.98,               // the glossiest eye in the file: the reference's is
+      noseSize: 1.06,
+    },
+
+    proportions: {
+      /* UP FROM 1.14 after the first render. The reference's head is close to
+         half the height of the whole animal — a retriever puppy is mostly head
+         and feet — and at 1.14 he came back correctly coloured, correctly fluffy
+         and slightly weaselly, because the skull was not carrying the frame. */
+      headScale: 1.20,
+      bodyW: 106, bodyH: 92,
+      headW: 96, headH: 92,      // round: as tall as wide
+      legLen: 30, legW: 13.6,    // lost in coat, like hers
+      /* SHORT AND ROUND, and this is the number that keeps him off the Cockapoo.
+         56 against her 80. Hers are curtains that fall past the jaw; his stop at
+         the cheek. `floppy` is still the right STYLE — the leather hangs flat
+         from a high set, which is a retriever — it is just much shorter. */
+      /* 64 after the first render, up from 56. At 56 the leather did not clear
+         the cheek and the pair read as two flat pads applied to the sides of his
+         head rather than as ears that hang — which is EAR_STYLE.semi's
+         documented failure ("two hard pointed flaps standing off the head")
+         arriving by a different route. It is still a long way short of the
+         Cockapoo's 80, and the SET is what really separates them: see `earY`. */
+      earH: 64, earW: 36,
+      /* a touch deeper and wider than hers (46x32), carried higher: a retriever
+         has a real muzzle where a teddy-bear trim has a disc */
+      muzzleW: 46, muzzleH: 34,
+      eyeSize: 1.40,             // up from 1.20; see `face` above
+      eyeSpacing: 0.43,
+      tailCurl: 0.08,            // straight, not curled
+      tailLen: 1.02,
+      tailCarry: -0.20,          // level with the back, the retriever's carry
+      tailPlume: 1.70,           // the fullest plume in the file
+      neckRuff: 1.34,            // the ruff IS his crown and chest
+      pawScale: 1.18,            // big soft feet
+      anchors: {
+        neckDY: -0.34,
+        neckOverlap: 13,
+        /* HIGHER THAN HERS (0.46). The muzzle sits further up the face, which
+           lengthens it visually and is most of why he does not read as a
+           cockapoo with the lights up. */
+        muzzleY: 0.38,
+        eyeY: 0.00,
+        browY: -0.32,
+        /* SET HIGH AND WIDE. `earY -0.32` against her -0.10: a retriever's ear
+           is set at or above eye level on the side of a round skull, which with
+           `earH` 56 leaves it hanging to about the cheek. Getting this wrong in
+           the other direction — low and long — is precisely how he would become
+           her. */
+        earX: 0.88,
+        earY: -0.32,
+        shoulderX: 0.37,
+        pawX: 0.40,
+        hipX: 0.69,
+        hindPawX: 0.85,
+        tailBase: [0.60, 0.06],
+        cheekY: 0.36,
+      },
+    },
+
+    silhouette: {
+      front: {
+        /* exponent 2.12 — very nearly an ellipse. The scallop that makes this dog
+           look like this comes from `fur.type: 'curly'`, not from the outline;
+           the outline's job is to be a clean round mass underneath it. */
+        body: {
+          origin: [0.5000, 0.5000], box: [106, 92], pts: [
+            [0.5000, 0.0000], [0.6817, 0.0285], [0.8295, 0.1112], [0.9366, 0.2400], [0.9928, 0.4041],
+            [0.9928, 0.5959], [0.9366, 0.7600], [0.8295, 0.8888], [0.6817, 0.9715], [0.5000, 1.0000],
+            [0.3183, 0.9715], [0.1705, 0.8888], [0.0634, 0.7600], [0.0072, 0.5959], [0.0072, 0.4041],
+            [0.0634, 0.2400], [0.1705, 0.1112], [0.3183, 0.0285],
+          ],
+        },
+        bib: {
+          origin: [0.5000, 0.3000], box: [46, 60], pts: [
+            [0.5000, 0.0000], [0.7568, 0.0646], [0.9354, 0.2432], [1.0000, 0.5000], [0.9354, 0.7568],
+            [0.7568, 0.9354], [0.5000, 1.0000], [0.2432, 0.9354], [0.0646, 0.7568], [0.0000, 0.5000],
+            [0.0646, 0.2432], [0.2432, 0.0646],
+          ],
+        },
+        /* exponent 2.14, in a square box: the round retriever skull */
+        head: {
+          origin: [0.5000, 0.5000], box: [96, 92], pts: [
+            [0.5000, 0.0000], [0.6834, 0.0282], [0.8308, 0.1102], [0.9371, 0.2384], [0.9929, 0.4026],
+            [0.9929, 0.5974], [0.9371, 0.7616], [0.8308, 0.8898], [0.6834, 0.9718], [0.5000, 1.0000],
+            [0.3166, 0.9718], [0.1692, 0.8898], [0.0629, 0.7616], [0.0071, 0.5974], [0.0071, 0.4026],
+            [0.0629, 0.2384], [0.1692, 0.1102], [0.3166, 0.0282],
+          ],
+        },
+        muzzle: {
+          origin: [0.5000, 0.4200], box: [46, 34], pts: [
+            [0.5000, 0.0000], [0.7517, 0.0664], [0.9336, 0.2483], [1.0000, 0.5000], [0.9336, 0.7517],
+            [0.7517, 0.9336], [0.5000, 1.0000], [0.2483, 0.9336], [0.0664, 0.7517], [0.0000, 0.5000],
+            [0.0664, 0.2483], [0.2483, 0.0664],
+          ],
+        },
+        /* the chain renderer builds the hanging ear from `EAR_STYLE.floppy`'s
+           width profile, so these two are mostly the seam's requirement rather
+           than the drawn shape — see the same note on the Cockapoo. Kept as a
+           short rounded lobe so anything that reads them directly gets the right
+           silhouette. */
+        ear: {
+          origin: [0.5000, 0.1000], box: [34, 52], pts: [
+            [0.5000, 0.0000], [0.6589, 0.0560], [0.7753, 0.2437], [0.8100, 0.5000], [0.7753, 0.7563],
+            [0.6589, 0.9440], [0.5000, 1.0000], [0.3411, 0.9440], [0.2247, 0.7563], [0.1900, 0.5000],
+            [0.2247, 0.2437], [0.3411, 0.0560],
+          ],
+        },
+        earInner: {
+          origin: [0.5000, 0.1000], box: [34, 52], pts: [
+            [0.5000, 0.0000], [0.6210, 0.0836], [0.6928, 0.3434], [0.6928, 0.6566], [0.6210, 0.9164],
+            [0.5000, 1.0000], [0.3790, 0.9164], [0.3072, 0.6566], [0.3072, 0.3434], [0.3790, 0.0836],
+          ],
+        },
+      },
+    },
+
+    /* ---- markings: ALMOST NOTHING, ON PURPOSE ---------------------------
+       The reference has no markings at all. What is here is FORM — the shading
+       that makes a pale round animal read as a volume rather than a silhouette —
+       plus the faint heart-shaped chest the sheet does draw. Every alpha is the
+       lowest of any breed in this file, and if any of them starts reading as a
+       patch the answer is to lower it further, not to soften its edge.
+       ------------------------------------------------------------------- */
+    markings: [
+      /* the chest, a whisper. `feather` 0.26 is the highest in the file: on a
+         uniform dog the bib must have no findable edge anywhere. */
+      { shape: 'patch', where: 'body', outline: 'bib', color: 'cream', grad: 'bib', deform: 0.75, feather: 0.26 },
+      /* a gentle saddle. 0.14, below even the Schnoodle's 0.17 — a pale gold coat
+         shows a dark stripe far more readily than an auburn one. */
+      { shape: 'ellipse', where: 'body', at: [0, -0.76], size: [0.84, 0.44], color: 'coatSh', alpha: 0.14, soft: 1.0 },
+      { shape: 'ellipse', where: 'body', at: [0.70, -0.04], size: [0.30, 0.54], color: 'coatSh', alpha: 0.09, mirror: true, soft: 1.0 },
+      /* a barely-there warm lift around each eye, `tag: 'eye'` so it tracks the
+         lens through every pose. Same trick and the same reasoning as the
+         Schnoodle's: it is what stops a very dark eye on a pale face reading as
+         a hole punched in him. */
+      { shape: 'ellipse', where: 'head', at: [0.43, 0.00], size: [0.23, 0.15], color: 'creamMid', alpha: 0.12, mirror: true, soft: 1.0, tag: 'eye' },
+      /* the lighter muzzle and cheeks the sheet does draw, at half the
+         Cockapoo's strength (she is 0.55) because his coat is 30 points paler
+         and the same alpha on it is a visible pale patch */
+      { shape: 'ellipse', where: 'head', at: [0, 0.40], size: [0.42, 0.28], color: 'cream', alpha: 0.26, soft: 1.0 },
+      { shape: 'ellipse', where: 'head', at: [0.54, 0.32], size: [0.26, 0.22], color: 'cream', alpha: 0.22, rot: 0.20, mirror: true, soft: 0.95, tag: 'cheek' },
+      /* NO STOCKINGS. Every other breed here has them and he must not: the
+         reference's legs are the same gold as the rest of him, and a pale sock
+         on a pale dog is the one marking that cannot help but read as applied. */
+      { shape: 'tailUnder', color: 'cream', alpha: 0.18 },
+    ],
+
+    /* `curly`, not `wavy`. The reference's contour is broken everywhere — crown,
+       cheeks, chest, haunches, tail — and `curly` is the table's tighter, rounder,
+       deeper lobe: 46 fringe pieces to `wavy`'s 40, four curl arcs to three.
+       This is one of the five things keeping him off the Cockapoo, and it is the
+       one that does the most work at small sizes, because a broken outline
+       survives being 120 units tall and a hue difference does not. */
+    fur: {
+      type: 'curly',
+      clump: {
+        body: { at: [0.10, 0.17, 0.235, 0.30, 0.37, 0.45, 0.55, 0.63, 0.70, 0.765, 0.83, 0.90], scale: 1.08 },
+        head: { at: [0.24, 0.31, 0.38, 0.44, 0.56, 0.62, 0.69, 0.76], scale: 0.94 },
+      },
+    },
+
+    ear: 'floppy',
+
+    /* NO `furnishings`. The Cockapoo has a topknot because a groomer left her
+       one; a retriever is not groomed and his full crown comes from the coat
+       itself. Adding a fluff here would be borrowing her single most
+       recognisable shape. */
+
+    temperament: { energy: 0.74, focus: 0.66, friendliness: 0.96 },
+    aptitude: { disc: 0.78, agility: 0.58, obedience: 0.80 },
   },
 
 };

@@ -4417,3 +4417,146 @@ failing.
 - **`COPY.earnedNone` is dead.** The earned list always has five rows, so the empty-state line
   cannot render. It was already dead before this pass; it is now a dead *function*. Left rather
   than deleted, because deleting copy is a decision about the game and not about this seam.
+
+## 36. Two more dogs (8.26.0) — as built
+
+The Corgi and the Golden Retriever, from the human's own art, on the seam §35 built. The
+whole claim of that section was that a breed had become **a row of data**; this is the
+first time anything tested it, and the result is the part worth recording: **not one line
+of copy in `ui/kennel.js` changed to admit either dog.** `game.adoptable()` reads two more
+rows off `economy.unlocks`, `PRONOUNS` resolves them, and the surface says the right thing
+about a Corgi it has never heard of.
+
+What did NOT fall out for free is everything below.
+
+| | Corgi | Golden Retriever |
+| --- | --- | --- |
+| the read | **ears and a blaze** | **one pale gold colour and a broken outline** |
+| measured, not eyeballed | each ear is 69 of his 145 px of width and the pair spans 144 — so `earH/earW` is 84×48 against the Shiba's 44×29 | ears 64 deep set at −0.32, against the Cockapoo's 80 at −0.10 |
+| the risk | none of the others is bicolour, so the Schnoodle's low-contrast lesson deliberately does NOT transfer — `cream` is a genuine near-white `#fdf6ec` | the Cockapoo: same hue, 30 luminance points apart, both fluffy pale floppy-eared puppies. Every separation is geometric and each is named in the entry |
+| the outlier | `legLen` 24, a quarter shorter than any other dog here | `headScale` 1.20 on `muzzleY` 0.38 — the biggest head, carried highest |
+
+### 36.1 The slicer had to learn to find a dog
+
+`tools/make-sidesprites.py --mode components` labels connected regions of kept ink and
+treats each as a frame, instead of dividing the sheet into equal cells. Forced by the
+Golden: **his plume tail reaches past where the next puppy's nose begins**, so there is no
+vertical line anywhere in that sheet that separates the four dogs. Every equal-cell cut
+either flat-ended a tail or dragged a fragment of the neighbour into the box — and a
+fragment moves the body centre, which is the one thing frame alignment cannot survive.
+
+`even` stays the default and reproduces the three shipped sheets **bit-identically**.
+
+### 36.2 The new sheets are a different animation, and nothing said so
+
+    shiba / cockapoo / schnoodle    STAND, step, STAND, step-or-bound
+    corgi / golden                  four different poses, no stand at all
+
+This matters because `dog/sidesprite.js` **adds the vertical bob itself** — every frame of
+every sheet is drawn flat on one ground line, the lowest paw at `ground` in all twenty of
+them, measured, which is what makes them alignable. A bound lifts **once** per cycle; an
+alternating walk lifts **twice**, once under each diagonal pair, by less than half as much.
+One hump per cycle on a walk sheet floats him for two frames and sinks him for two,
+unrelated to what his legs are doing.
+
+**It is derived, not typed.** `tools/side-meta.py` classifies each sheet by whether it
+**contains the same frame twice** — a stand/step/stand/step sheet has frame 0 and frame 2 in
+the same standing pose — and writes `cycle` into `assets/side-meta.js`. Frames 0 and 2 are
+compared against the spread of the other pairs:
+
+    cockapoo 0.15   shiba 0.27   schnoodle 0.46  |  corgi 0.85   golden 0.99
+
+A hand-written table would have been a fact about the art kept somewhere the art cannot
+correct it, which is §35's whole lesson entered from the other end. A sixth sheet
+classifies itself, and one landing near the threshold says so out loud.
+
+`gait.bobWalk` is 4 against the bound's 9 — physics rather than taste, since a trot never
+leaves the ground. The contact shadow shrinks against the amplitude **actually used** rather
+than always against the bound's. And `hasStand` is published because frame 0 is not a stand
+on a walk sheet: nothing reads it today (both callers pass `run: 1`, so the profile dog is
+never on screen standing still) and **that is exactly why it is written down** — the
+assumption was load-bearing, undocumented, and true of three sheets out of five.
+
+### 36.3 The Golden's bowl was clamped on every frame
+
+`tools/bowlgate.py` failed four checks and only on him. His honest solve is **2.3013**
+against a `scaleRange` ceiling of 2.20, so the clamp fired on all 337 frames of feeding and
+all 304 of drinking, at both insets, and `muzIntoBowl` came out **13.37 against the 16**
+`dipInto` asks for. Not a floating bowl — the base is written as `sole - BOWL_BASE * scale`
+and stays on the floor at any scale — but the "sniffing at a bowl he never touches" end of
+the failure `dog/care.js` names.
+
+He is the one because a big head held high does not get as far down when he stoops, so the
+vessel has to span more floor-to-food. **That is the geometry being right, not a bad
+number** — which is why the fix is the ceiling and not his proportions. `balance.js`'s own
+note already said so: *"the band is a bug detector, not a design limit"*, written when it
+moved 1.95 → 2.20 for the gift puppy. It moves 2.20 → **2.45** here, keeping the same 0.15
+of slack over the honest maximum that 2.20 gave over the old 2.05.
+
+| breed | solved scale | |
+| --- | --- | --- |
+| corgi | 1.5840 | short-legged, his muzzle nearly on the rug |
+| shiba | 1.8636 | |
+| cockapoo | 2.0189 | |
+| schnoodle | 2.1248 | |
+| golden | 2.3013 | the new ceiling exists for this number |
+
+Every one of them reaches `dipInto` **16.00 exactly**. bowlgate 113/113; breedproof on each
+new breed 122/122.
+
+### 36.4 `walkgate` was testing three breeds and saying "EVERY"
+
+It read `pp.app.breeds`, **which is assigned nowhere** — `BREED_IDS` is published as
+`__pp.breeds`, the way `bowlgate`, `breedproof` and `dogalone` all read it — so the
+`|| ['shiba','schnoodle','cockapoo']` fell through on every run since the check was written.
+*"EVERY breed in the game has a sheet of his own art"* was really *"these three I typed have
+one"*. **§35's defect, living inside a gate that exists to catch it.**
+
+The list now comes from the game, and a missing list is a **failure** rather than a silent
+default: a gate may not quietly test less than it claims. Its per-breed departure runs five
+times now instead of three.
+
+Five new checks assert the gait **on the drawn pixels** rather than on the config: within one
+frame index the sprite image cannot change, so any movement of the top of his ink *is* the
+bob. A walk sheet spends half a hump in each quarter-cycle so all four quarters swing
+equally; a bound sheet spends one whole hump across four, so they cannot.
+
+    shiba / cockapoo  6, 3, 2, 6 px     schnoodle  6, 2, 2, 6 px   (bound, 9)
+    corgi / golden    4, 4, 4, 4 px                                (walk, 4)
+
+Fault-injected to prove it can fail — forcing `bobWalk` to 9 and the frequency back to one
+hump failed the Corgi and the Golden and left all three bound sheets passing, so the check is
+specific rather than blanket. walkgate 33/33.
+
+### 36.5 Five cards, and nothing in this game scrolls
+
+`ui/kennel.js` sizes its dog cards to the space the earned list and the Done button leave,
+clamped between 92 (what it has always drawn, and what one to four cards still get exactly)
+and a 64 floor. Five land at 74. No surface in the tree has a scroll offset, by design, and
+the alternative was the Done button's own clamp sliding it under the last two earned rows —
+which would have looked fine and left one control unreachable behind another.
+
+`COPY.lockedChip` replaces *"N more care points"* on the adoption chip with the earned list's
+own *"N to go"*. Forced, not cosmetic: `kennelgate` measured `"2380 more care points"` at
+exactly 9.5, which is `ui.type.minSize` — the point where `ui/text.js` stops shrinking and
+starts ellipsising.
+
+`NUM_WORD` ran out. `economy.kennel.max` went 3 → 5 and the list stopped at `'Four'`, so the
+toast that fires at capacity would have said **"5 is plenty"** — the digit fallback doing its
+job and looking like a bug. It ends one past `max` again.
+
+### 36.6 Left imperfect
+
+- **The Corgi and the Golden stand as tall as everyone else.** `side.sprite.height` is one
+  number, 250, for every breed, and each sheet fills its cell to the same 450 px of ink. It
+  reads correctly today only because the Corgi's ear tips take the top of his cell where the
+  Golden's skull takes the top of his — so his *back* does sit lower. That is the art
+  compensating for a renderer that cannot express "this dog is smaller", and it would not
+  survive a breed whose ears are small AND who is short.
+- **The front views are at three passes.** Good, not Schnoodle-polished.
+- **The two new ladder rows sit above every word `careWords` has.** Deliberate (SCOPE stage
+  6), but it means the last two dogs arrive with the game's warmest description of her
+  already spent.
+- **The offered card's portrait is still an anonymous silhouette**, now four times in one
+  playthrough rather than twice. §35.5 called this "a little more visible than it was once";
+  it is more visible again.

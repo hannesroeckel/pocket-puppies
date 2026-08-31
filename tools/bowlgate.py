@@ -53,7 +53,8 @@ The remaining assertions here are ones that CAN fail — the bottom edge of the 
 which is the term whose absence hid the second defect. `bowlFloorY` is read and
 reported, and deliberately never asserted against.
 
-WHAT IT ASSERTS, on every frame of the whole action, for all three breeds:
+WHAT IT ASSERTS, on every frame of the whole action, for EVERY breed the game
+publishes as `__pp.breeds` (five of them now — see the note on BREEDS below):
 
   A  THE BASE-VS-SOLE GAP IS *REPORTED*, NOT ASSERTED — see below. It is zero
      by construction, which this gate proves by injecting faults.
@@ -74,7 +75,25 @@ from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHOTS = ROOT / "review"
-BREEDS = ["schnoodle", "cockapoo", "shiba"]
+# THE BREED LIST IS NOT WRITTEN DOWN HERE ANY MORE.
+#
+# It was `["shiba", "cockapoo", "schnoodle"]`, typed out, and that habit is
+# exactly what let a finished Shiba sit unreachable in the game for eight
+# stages: every list of breeds in the tree had to be found and edited by hand,
+# so the ones that were missed stayed missed. `__pp.breeds` is `BREED_IDS` from
+# dog/breeds.js — the real table — so a breed added there is swept here with no
+# edit at all, and a breed REMOVED there cannot leave a stale name behind.
+# The fallback list is only for a harness that failed to boot.
+BREEDS = ["shiba", "cockapoo", "schnoodle", "corgi", "golden"]
+
+
+def breeds_from(pg, fallback=("shiba", "cockapoo", "schnoodle")):
+    """every breed dog/breeds.js actually defines, asked of the running game"""
+    try:
+        got = pg.evaluate("() => (window.__pp && window.__pp.breeds) || []")
+    except Exception:
+        got = []
+    return list(got) if got else list(fallback)
 TOL = 1.5          # units of slack between the bowl's base and the drawn sole
 fails, notes = [], []
 

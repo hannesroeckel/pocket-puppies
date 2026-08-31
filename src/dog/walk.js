@@ -992,11 +992,12 @@ export function createWalk(rig, opts = {}) {
      thing the profile dog is used for, and the only thing this file needed him
      for: the absence and the frontal return are unchanged.
 
-     THE SPRITE IF THERE IS ONE, THE DRAWN DOG IF NOT. All three breeds have
-     sheets as of 8.21.0 — the Shiba's landed last, and he became a dog a player
-     can actually own later still — so the drawn fallback is now unreachable in
-     the shipping game and stays only because `assets/side-meta.js` is data and a
-     fourth breed would arrive without a sheet. `hasSideSprite` decides and both
+     THE SPRITE IF THERE IS ONE, THE DRAWN DOG IF NOT. Every breed has a sheet —
+     the first three as of 8.21.0, the Corgi and the Golden with 8.26.0 — so the
+     drawn fallback is unreachable in the shipping game and stays only because
+     `assets/side-meta.js` is data and a SIXTH breed would arrive without a
+     sheet. That is not hypothetical: it is exactly how the Corgi and the Golden
+     arrived. `hasSideSprite` decides and both
      take the same arguments, so nothing below knows which it got. Built on the
      first walk rather than at
      construction, because most sessions never take one and a sheet is 111KB of

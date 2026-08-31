@@ -301,8 +301,31 @@ export const BALANCE = {
          food surface and the floor, and the vessel has to span it, so the
          honest solve now lands at 1.75 (Shiba) to 2.05 (Schnoodle). The band
          is a bug detector, not a design limit; leaving it at 1.95 would have
-         clamped the gift puppy's own bowl and lifted its base off the floor. */
-      scaleRange: [1.10, 2.20],
+         clamped the gift puppy's own bowl and lifted its base off the floor.
+
+         AND IT MOVED AGAIN, 2.20 -> 2.45, FOR THE GOLDEN RETRIEVER (8.26.0) —
+         the same situation and the same reasoning, so the precedent above is
+         doing its job. `tools/bowlgate.py` failed four checks on him and only
+         on him: his honest solve is 2.3013 against a 2.20 ceiling, so the clamp
+         was firing on all 337 frames of feeding and all 304 of drinking, and
+         `muzIntoBowl` came out 13.37 against the 16 `dipInto` asks for. Not a
+         floating bowl — the base is written as `sole - BOWL_BASE * scale` and
+         stays on the floor at any scale — but a nose 2.6 units short of the
+         food, which is the "sniffing at a bowl he never touches" end of the
+         failure care.js names.
+
+         WHY HE IS THE ONE. He carries the biggest head in the file
+         (`headScale` 1.20 against 1.12-1.14) on the highest muzzle
+         (`muzzleY` 0.38). A big head held high does not get as far down when he
+         stoops, so the vessel has to span more floor-to-food, so the solve wants
+         a taller bowl. That is the geometry being right, not a bad number.
+
+         THE BAND, HONESTLY: the five shipping breeds now solve to 1.5840
+         (Corgi, short-legged, his muzzle nearly on the rug) through 2.3013
+         (Golden). The ceiling keeps the SAME 0.15 of slack over the honest
+         maximum that 2.20 gave over the old 2.05 — a bug detector wants to sit
+         just past the truth, not comfortably clear of it. */
+      scaleRange: [1.10, 2.45],
       targetR: 34, snap: 44,
       bowlScale: 0.86,
       /* THE GRAB ELLIPSES, AND THE DRAG RANGES. Six magic numbers inside
@@ -1868,12 +1891,40 @@ export const BALANCE = {
          to female instead of male in the game".
          She shipped male in 8.23.0 for a weak reason (an alternating pattern of
          pronouns), which is exactly the kind of default that should give way to
-         somebody actually saying what they want. The kennel now reads he / she /
-         she. Nothing else moved: every line on that surface is a function of this
-         key and the pronoun table, which is what the note above promised. */
+         somebody actually saying what they want. Nothing else moved: every line
+         on that surface is a function of this key and the pronoun table, which is
+         what the note above promised — and the two rows below were added after
+         it without touching a word of copy, which is the proof. */
       { id: 'shiba', kind: 'breed', at: 1600, name: 'A Shiba Inu puppy',
         breedId: 'shiba', sex: 'f',
-        note: 'The last one, once the other two are settled' },
+        note: 'Once the other two are settled' },
+      /* ---- FOUR AND FIVE (8.24.0) --------------------------------------
+         Two more breeds, from the human's own art — the same source the profile
+         sheets came from ("i built the side view ... with chatgpt as yours looked
+         bad"), and the same arrangement: his front view is the REFERENCE that
+         `dog/breeds.js`'s data was authored against, and his side sheet is the
+         asset the walk composites.
+
+         2400 and 3400 KEEP THE LADDER'S OWN RHYTHM, and that was a decision
+         rather than an extrapolation. The spacing has been about x1.6 since stage
+         6 (90, 150, 220, 400, 650, 1100, 1600) and the alternative on the table
+         was to pull all four dogs inside a fortnight — 400/800/1300/1900 — so
+         that a child meets everybody sooner. The human chose the existing
+         rhythm knowing what it costs: at the ~150-205 care points an attentive
+         day earns, the Corgi is around day 12-16 and the Golden around day
+         17-23. Recorded because the temptation to "fix" a number that looks far
+         away is exactly how a deliberately slow ladder gets quietly sped up.
+
+         `careWords` tops out at 1600/devoted, so both of these sit ABOVE the last
+         word the game has for her. That is fine and is worth saying: the words
+         describe how she is looking after them, and there is nothing warmer than
+         devoted to say. They are not a rank. */
+      { id: 'corgi', kind: 'breed', at: 2400, name: 'A Corgi puppy',
+        breedId: 'corgi', sex: 'f',
+        note: 'For looking after all three' },
+      { id: 'golden', kind: 'breed', at: 3400, name: 'A Golden Retriever puppy',
+        breedId: 'golden', sex: 'm',
+        note: 'The last of them' },
     ],
     /* the word-scale for how well she is looking after him. WORDS, NEVER A
        BAR — care points are a number she can see (they are a currency), but
@@ -1970,8 +2021,9 @@ export const BALANCE = {
          Each is a multiplier on a thing that already existed, so the
          effect is measurable rather than described. `combCurly` is the
          biggest of the three because it is the only one gated on the
-         coat: two of the three breeds are curly and the soft brush was
-         tuned on the Shiba. */
+         coat, and the soft brush was tuned on the Shiba. Three of the five
+         coats are not 'short' — cockapoo wavy, schnoodle tousled, golden
+         curly — and the Shiba and the Corgi are. */
       kibbleFill: 1.45,      // hunger restored per mouthful of the good kibble
       combGloss: 1.7,        // brushing a CURLY coat with the comb
       soapGlossKeep: 0.55,   // multiplier on gloss decay per hour
@@ -1998,17 +2050,20 @@ export const BALANCE = {
        the last one.
        ================================================================ */
     kennel: {
-      /* THE SCHNOODLE, THE COCKAPOO AND THE SHIBA — every breed dog/breeds.js
-         draws, and no more. Was 2, which capped the kennel one dog below the
-         art that existed.
+      /* EVERY BREED dog/breeds.js DRAWS, and no more: the Schnoodle, the
+         Cockapoo, the Shiba, the Corgi and the Golden. Was 2 (which capped the
+         kennel below the art that already existed), then 3.
          It is a SEPARATE number from the count of breed rows on the ladder on
          purpose: the rows say what she can earn, this says how many dogs the
          room and the kennel layout can hold. Raising it without adding a row
          unlocks nothing; adding a row without raising it is refused with
-         `reason: 'full'` rather than silently ignored. Three cards plus the
-         earned list is also exactly what fits above the Done button at 844
-         units — a fourth would need the panel to scroll, which it cannot. */
-      max: 3,
+         `reason: 'full'` rather than silently ignored.
+         FIVE IS THE LAYOUT'S CEILING, not a round number. `ui/kennel.js` sizes
+         its cards to the space left over after the earned list and the Done
+         button, and at five it has come down to its 64-unit floor with about
+         ten units to spare on a 40-unit-inset phone. A sixth would need the
+         panel to scroll, and nothing in this game scrolls. */
+      max: 5,
       /* `adoptId` / `adoptBreed` / `adoptSex` USED TO BE HERE. They are now
          per-row on `economy.unlocks` (see the breed rows there): with one
          adoptable breed a single triple was the same thing said more simply,
@@ -2393,10 +2448,34 @@ export const BALANCE = {
        obvious next variant, but the art contract is the reference.
 
        `lagFar` is why he reads as four legs rather than two: the far leg of a
-       pair is a fraction of a cycle behind the near one. */
+       pair is a fraction of a cycle behind the near one.
+
+       AND THE SECOND TWO SHEETS ARE A TROT AFTER ALL (8.26.0). The Corgi's and
+       the Golden's art draws four different poses of an alternating cycle — no
+       stand, no suspension — where the first three draw stand/step/stand/bound.
+       `tools/side-meta.py` measures which is which off the sheet and writes it
+       into `assets/side-meta.js` as `cycle`, so the sprite renderer picks the
+       matching bob rather than one of them being animated wrong. Everything
+       below still describes the BOUND, which is what `dog/side.js` draws and
+       what three of the five sheets are. */
     gait: {
       hz: 2.1,            // cycles per second at a normal trot
       bob: 9,             // how far the whole dog lifts, once per cycle
+      /* THE WALK SHEETS' LIFT, twice per cycle instead of once (`dog/sidesprite.js`).
+         Less than half the bound's, and that is the physics rather than taste: a
+         bound is a leap with all four feet off the ground and a trot never leaves
+         it, so the body only rises by the difference between a straight leg and a
+         bent one. He is 250 units tall, so this is a 1.6% oscillation against the
+         bound's 3.6%.
+
+         MEASURED, by sweeping the cycle and reading the top of his drawn ink
+         INSIDE each frame index — where the sprite image cannot change, so the
+         movement is the bob and nothing else:
+           shiba / schnoodle ('bound')  6, 3, 2, 6 px  — one hump, 9 up and 9 down
+           corgi / golden    ('walk')   4, 4, 4, 4 px  — two humps, 4 each way
+         An even swing in every quarter is the signature of two humps per cycle,
+         which is the thing that had to be proved rather than asserted. */
+      bobWalk: 4,
       stretch: 0.5,       // body lengthening on the extension
       /* how far a paw travels fore and aft. 13 was tuned against legs a third
          shorter; on a real limb the four frames came back nearly identical, and
@@ -2966,7 +3045,15 @@ export const BALANCE = {
        is the right family of sound for meeting somebody. */
     kennel: {
       pad: 14, headH: 62,
-      cardH: 92, cardGap: 8,
+      /* `cardH` IS NOW A CEILING, NOT A HEIGHT. ui/kennel.js sizes a dog card to
+         the space the earned list and the Done button leave, clamped between
+         these two: 92 is what the surface has always drawn and is what one to
+         four cards still get exactly, and 64 is the floor below which the three
+         lines of a card (name, breed, collar) stop fitting. Five dogs land at
+         about 74. See `cardH()` in that file for why the alternative — letting
+         the Done button's clamp slide it under the last earned rows — was the
+         worst of the options. */
+      cardH: 92, cardMinH: 64, cardGap: 8,
       rowH: 46,                 // the earned-list rows
       portraitR: 30,
       flash: 0.28,
