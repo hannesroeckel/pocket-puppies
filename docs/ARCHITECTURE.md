@@ -4931,3 +4931,113 @@ table rather than from the surface. It picks a card that is actually on screen n
   default.
 - **Nothing she has today scrolls.** This is a floor under future content, not a change she can
   see: it takes a sixth dog or a thirteenth shop row to engage, and neither exists.
+
+---
+
+## 40. The room knows what time it is (8.30.0) — as built
+
+> *"as this is a nintendogs inspired game, what else could we do to improve the game
+> or extend features to make it more fun and interactive?"* — 2026-09-09
+
+The answer to that question was mostly **nothing**, and finding that out is the useful part.
+`docs/nintendogs-design-reference.md` §1 is a ranked ten of "get these right or it isn't
+Nintendogs", and all ten are built: attention tracking, petting with sweet and bad spots,
+calling him by name, idle autonomy with attention-bids, physical toys, the care loop, the
+reunion, training with imperfect memory, foley sound, the cosy corner. So the remaining wins
+are not mechanics. They are the world being bigger and more alive.
+
+This is the first of four agreed in that order: **the room's time of day**, then the four walk
+routes as four places, then the dogs he meets, then two dogs in the room at once.
+
+### 40.1 It was already computed, and read by nobody
+
+`state/time.js` has exported `timeOfDay()` since stage 1, returning `{ t, phase, hour }`, and
+its own docstring says the phase is *"for lighting later"*. Later never came. The value was put
+on the app object at construction —
+
+```js
+elapsed, timeOfDay: timeOfDay(),
+```
+
+— and read by nothing, ever. So the room was identical at breakfast and at bedtime, in a game
+whose entire design is about **returning**: the reunion is called the highest return-on-effort
+asset in the project, and research §1.10 asks for "a cozy, static, ownable corner".
+
+### 40.2 Baked, not washed over — and that is the whole design
+
+The obvious implementation is a translucent wash drawn live over the finished room each frame.
+It was rejected for one concrete reason: **a wash cannot take the sunbeam out of a room.** The
+baked art has daylight in it — a bloom of sun on the wall around the window frame, and a pool of
+it on the floorboards — and at midnight those are not meant to be dimmer, they are meant to be
+*absent*. Anything drawn on top can only ever darken them, which is what makes a dimmed daytime
+room read as a photograph at dusk rather than as evening.
+
+So the light reaches the art itself, through the rebuild path `decorSig()` already provides for
+the rug, the garland and the portrait. `scenes/daylight.js` is therefore a **model, not a
+painter**: it answers "what is the light doing at time t" and nothing else. `scenes/room.js`
+does the painting, because it already owns the window — and the window is the hard part, since
+its glazing bars are stroked *over* the glass and anything repainting the glass from another
+file would erase them and have to redraw them. Two files painting one window is one file too
+many, which is the argument §32 already makes about the ring's mat.
+
+**The price of baking is a bucket.** A continuous rebuild would rebuild the room every frame, so
+`bucketOf` quantises the day into `light.buckets` steps — 96, one every fifteen minutes, against
+sessions the design says are "90 seconds or 20 minutes". Most sessions cross no boundary at all;
+one that does pays a few milliseconds of flat fills.
+
+### 40.3 The dog is not relit, and midday is untouched
+
+Two rules, both inherited rather than invented.
+
+**§32 rule 2, verbatim:** his shading was tuned over eight stages and a background change may not
+touch it. Every number in `light` reaches the baked room only; the dog, the bowls, the ball and
+his sill are all drawn live afterwards and keep their own lighting. `tools/lightgate.py` proves
+it the way `placegate` proves the park: one pair of captures, two boxes — the same move from noon
+to midnight must repaint the **wall** and leave the **coat** alone. 36,000 wall pixels change; his
+coat changes by 1, against 4 pixels of drift from his own springs over the same redraws and
+17,922 for the fault injection.
+
+The consequence is accepted rather than worked around, and it is the same one the park accepted:
+**night is dim and warm, never dark and blue**, because the room has to stay a place a
+warmly-lit dog can stand in. `dim` above about 0.36 is where he starts to look pasted on.
+
+**And midday draws nothing at all.** At noon every light term is neutral (`sun: 1`, everything
+else `0`) and every added code path is guarded off, so the afternoon room is the one that has
+always been there. Checked two ways: the gate asserts the whole daytime plateau renders
+byte-identically at 12:00, 13:00 and 14:24, and — once, by hand, from a **git worktree of
+8.29.0** served side by side — the noon room on 8.30.0 against the previous release is
+**0 pixels different of 514,800**.
+
+### 40.4 Three things found by building it
+
+- **The test harness pins the clock to midnight.** `_drive.PIN` freezes `Date.now` at
+  1767225600000, which is 00:00. From this release that would have silently made *every gate in
+  the folder* render a night-time room — dimmer walls, no sunbeam, a dark window — against
+  baselines all captured when the room ignored the clock. That is a property of pinning the clock
+  and not of anything under test, exactly like the boot veil, so `_drive.boot` now pins
+  `forceT = 0.54` alongside it and `lightgate` overrides it. Nineteen gates would otherwise have
+  needed the argument had one at a time.
+- **The dust motes hung in a sunbeam that was no longer there.** `drawMotes` bands its alpha to a
+  diagonal shaft centred on the window's beam. Taking the beam away after dark left motes lit by
+  light that is not in the picture — the same fault §32 caught when the park kept the room's
+  bowls. They are scaled by `sun` now: still moving at night (an undrawn mote is an invisible
+  mote, and they pick up where they were), simply not lit.
+- **The window went flat at dusk.** First rendered with dusk and dawn sky alphas at 0.80/0.75,
+  which wiped the garden's hills out and made the glass a uniform amber panel — a blind pulled
+  down, not evening. 0.62/0.55 lets the hills survive as darker shapes behind the colour. Only
+  true night goes to 1.0, where there really is nothing to see. Found by rendering four times of
+  day side by side and looking, which is the only way this kind of thing is ever found.
+
+### 40.5 Left imperfect
+
+- **There is light but no lamp.** The warm pool that says "something is switched on" is light
+  without a fixture, because a drawn lamp is a new object in a composition that took eight stages
+  to settle and would have to stand somewhere the dog, the rug, the bowls and the sill are not.
+- **The step is visible if you are watching for it.** A bucket boundary repaints the room between
+  one frame and the next. At 96 buckets the colour step is small and dusk is the only time it is
+  even findable, but it is a step and not a fade.
+- **Only the room knows.** The park, the show ring and the stroll's road are all still permanently
+  midday. A walk at 10pm goes down a sunlit road, which is now the most obviously wrong thing in
+  the game — and it lands squarely in the next item on the list.
+- **Nothing else responds to the hour.** He does not get sleepier at night, the idle director does
+  not bias toward dozing, and no sound changes. The room dims and that is all it does.
