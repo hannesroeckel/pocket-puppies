@@ -43,8 +43,24 @@
    ========================================================================== */
 import BALANCE from '../state/balance.js';
 import { clamp, lerp, mix } from '../engine/draw.js';
+import { timeOfDay } from '../state/time.js';
 
 const L = BALANCE.room.light;
+
+/**
+ * WHERE THE DAY HAS GOT TO, 0..1 from local midnight — or the value a gate has
+ * pinned. ONE READER OF THE OVERRIDE, so nothing else has to know it exists.
+ *
+ * It lives here rather than in the room because the room stopped being the only
+ * caller in 8.31.0: the stroll's road takes the hour too, and two files each
+ * deciding what time it is would be two files that can disagree about it — the
+ * same argument the window's glazing bars make one paragraph up.
+ */
+export function dayT() {
+  const f = L.forceT;
+  if (f !== null && f !== undefined && Number.isFinite(+f)) return clamp(+f, 0, 1);
+  return timeOfDay().t;
+}
 
 /**
  * WHICH STEP OF THE DAY, for the bake signature. A change here rebuilds the
@@ -150,4 +166,4 @@ export function drawRoomLight(c, light, bounds) {
   }
 }
 
-export default { lightAt, bucketOf, drawRoomLight };
+export default { lightAt, bucketOf, drawRoomLight, dayT };

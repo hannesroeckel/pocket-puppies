@@ -67,6 +67,9 @@ import BALANCE from '../state/balance.js';
 import { makeSprings } from '../engine/spring.js';
 import { TAU, clamp, lerp, smooth, hump, easeOutBack, makeOff } from '../engine/draw.js';
 import { drawStrip } from '../scenes/outdoors.js';
+/* WHICH ROAD, AND WHAT HOUR OF IT. Both are baked into the tile, so both
+   are part of its key — see `ensureTile`. */
+import { lightAt, bucketOf, dayT } from '../scenes/daylight.js';
 import { drawFind } from '../scenes/props.js';
 import reach from '../ui/reach.js';
 
@@ -139,6 +142,11 @@ export function createStroll(rig, opts = {}) {
   let items = [];
   let hintT = 0;
   let ended = '';
+  /* THE ROAD SHE CHOSE, LOCKED FOR THIS WALK. Read once in `begin()` from
+     the walk record's dominant route, for the same reason `opts.side` locks
+     the profile dog for one departure: asking again every frame invites a
+     swap halfway down the road, and this one would swap the WORLD. */
+  let place = 'park';
 
   /* the bake, and the view it was baked for */
   let tile = null;
@@ -184,6 +192,9 @@ export function createStroll(rig, opts = {}) {
     const offer = game.walkOffer();
     items = buildItems(offer.finds || [], d, wp.active.seed || 1);
 
+    /* the dominant route of the mix she drew — `state/walks.js` resolves it,
+       so the road and the finds are reading the same field */
+    place = (wp.active && wp.active.route) || 'park';
     on = true;
     ended = '';
     t = 0;
@@ -369,7 +380,13 @@ export function createStroll(rig, opts = {}) {
    * seconds, from a tile that is genuinely seamless.
    */
   function ensureTile(view) {
-    const key = [view.cw, view.ch, view.vs, view.offX, view.offY].join(':');
+    /* THE ROUTE AND THE HOUR ARE PART OF THE KEY (8.31.0). The tile used to
+       depend on the view alone, because there was only ever one road. Leaving
+       them out now would mean she draws a route through the woods, the tile she
+       already has is the park's, and the key says nothing changed — the same
+       class of bug as a cached module against a fresh one. */
+    const key = [view.cw, view.ch, view.vs, view.offX, view.offY,
+      place, bucketOf(dayT())].join(':');
     if (tile && tileKey === key) return;
     const vLeft = -view.offX / view.vs;          // the virtual x of device x = 0
     const tileVW = view.cssW / view.vs;          // ...and how wide the canvas is
@@ -380,7 +397,11 @@ export function createStroll(rig, opts = {}) {
       view.dpr * view.offX, view.dpr * view.offY);
     c.lineJoin = 'round'; c.lineCap = 'round';
     c.translate(vLeft, -by);
-    drawStrip(c, tileVW, VH + by * 2, { floorY: FLOOR + by });
+    drawStrip(c, tileVW, VH + by * 2, {
+      floorY: FLOOR + by,
+      place,
+      light: lightAt(dayT()),
+    });
     tileKey = key;
     tileW = view.cw;
     /* the horizon in DEVICE pixels, rounded: the two planes are blitted as two
@@ -658,6 +679,7 @@ export function createStroll(rig, opts = {}) {
         on, ended, t: +t.toFixed(2), dur: +dur.toFixed(2),
         w: +sp.strollW.x.toFixed(3), dist: Math.round(dist),
         tile: tile ? [tile.width, tile.height, horizon] : null,
+      place,
         items: items.map((it) => ({
           id: it.id, at: +it.at.toFixed(2), x: Math.round(it.x), y: Math.round(it.y),
           depth: +it.depth.toFixed(2), taken: it.taken,

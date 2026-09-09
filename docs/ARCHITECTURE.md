@@ -5041,3 +5041,102 @@ byte-identically at 12:00, 13:00 and 14:24, and — once, by hand, from a **git 
   the game — and it lands squarely in the next item on the list.
 - **Nothing else responds to the hour.** He does not get sleepier at night, the idle director does
   not bias toward dozing, and no sound changes. The room dims and that is all it does.
+
+---
+
+## 41. Four routes are four roads (8.31.0) — as built
+
+Second of the four agreed on 2026-09-09. The gap was found by reading rather than by playing:
+`state/walks.js` has blended a per-route weight into every find since stage 4, so a walk in the
+woods really does come home with pinecones and one down the high street really does drop coins
+— and `dog/stroll.js` called `drawStrip` with no place at all. **The choice was honest in the
+loot and invisible in the world.** She could pick the woods and walk through the park.
+
+### 41.1 Each road quotes the map she chose it on
+
+`ui/routemap.js` already draws four little places on the paper: round trees and a bench for the
+park, awnings over shopfronts and a lamp post for the high street, a wooden bridge and reeds for
+the river, conifers and a mushroom for the woods. Inventing a second visual language for the
+same four words would have meant the map promising one thing and the road delivering another, so
+the strips take the map's own vocabulary — the same greens, the same awning colours, the same
+firs.
+
+The silhouette does the work, because these go past at 92 units/s behind a dog:
+
+| road | what tells it apart at a glance |
+|---|---|
+| park | soft round clumps on the horizon, daisies (unchanged) |
+| woods | two rows of **triangles** instead of ellipses, a track, ferns, mushrooms |
+| high street | a **terrace** — three brick tones, awnings, lit upstairs windows, paving and a kerb |
+| river | a **band of water** with ripples, between a far bank and the towpath |
+
+**The high street was the hardest, for a reason that is in this file already.** A real pavement
+is grey and grey is the one surface a warmly-lit dog cannot stand on (§32 rule 2 — he is not
+relit out here either), so its stone is a warm sand rather than concrete.
+
+### 41.2 Two structural rules, and they are about the blit rather than the look
+
+Every road obeys both, because `dog/stroll.js` blits ONE bake as two parallax planes:
+
+1. **Periodic by construction.** Waves are `sin(TAU * k * u)` with a whole `k`; anything
+   scattered sits at a hashed `u` and is drawn again one tile over when it straddles the join.
+2. **Nothing crosses the horizon.** The ground is a full-width fill from `floor` down, drawn
+   after everything above it. This is why the high street's lamp posts stand **on** the horizon
+   rather than in front of it, and why the river's reeds start below the water line: a shape
+   spanning that line would be sawn in half and its halves would then scroll at different
+   speeds, which is the one artefact the two-plane blit cannot survive.
+
+The lamp post is the single place a road tells a small lie — it is a near object drawn far. It
+reads anyway because a whole terrace moves behind it at the same rate, and the alternative was
+no lamp post.
+
+### 41.3 The park is byte-identical, and that was checked rather than assumed
+
+It is the road every walk has shown since 8.22.0. It is unchanged — including after the clouds
+were lifted out of it into a shared `stripClouds` so the other three could have a sky (the river
+in particular is two thirds sky and had nothing in it). The extraction is verbatim maths, and
+the park road was re-rendered before and after: **identical**.
+
+### 41.4 The road takes the hour, which closes 8.30.0's own loose end
+
+§40.5 recorded it: *"a walk at 10pm goes down a sunlit road, which is now the most obviously
+wrong thing in the game"*. The road is washed rather than relit, and that asymmetry with the
+room is deliberate — indoors the light had to reach the **art** because a sunbeam has to be able
+to be *absent*, and out here there is no sunbeam to remove, so the cheap thing is the right
+thing. `dim` is capped below the room's because he is a smaller fraction of the screen out
+there and a dark road under a bright dog reads worse than a merely dusky one.
+
+`dayT()` moved from `scenes/room.js` into `scenes/daylight.js` when the road became a second
+caller: two files each deciding what time it is are two files that can disagree about it.
+
+**`place` and the light bucket are part of the tile key.** The tile used to depend on the view
+alone, because there was only ever one road — leaving them out now would mean she draws a route
+through the woods, the tile already in hand is the park's, and the key says nothing changed.
+That is the same class of bug as a cached module against a fresh one.
+
+### 41.5 What proves it
+
+`tools/strollgate.py`, now **50 checks** (was 39):
+
+- the seam test runs **per road**. It used to call `drawStrip` with no place — i.e. the park —
+  so the three new roads would have been seam-tested by nobody, and periodicity is something
+  each has to earn separately: the high street's paving joints and the river's water band are
+  exactly the full-width structures that close on themselves only if the column count divides
+  the tile.
+- **no two roads render the same tile**, from a coarse fingerprint of each. A palette swap that
+  silently fell back to the park would pass every seam check and fail the only thing anybody
+  asked for.
+- **the road she drew is the road he walks**, all four, driven through `setOff` with a real mix
+  rather than by poking the layer.
+
+### 41.6 Left imperfect
+
+- **The route is the DOMINANT one, not the journey.** A path she draws across three places shows
+  the road she covered most of. Crossfading between roads mid-stroll would need a second
+  full-screen tile resident at once, which §32.2 forbids on iOS.
+- **The four roads are four pictures, not four behaviours.** The high street has no traffic, the
+  river has no ducks and the woods have no birds; nothing on any road moves except by scrolling.
+- **He walks on water's edge and never in it.** The river is scenery he passes, not a thing he
+  can reach.
+- **The map still draws its own four places separately.** The paper and the road agree by hand
+  and by review, not by construction — the two would drift if either were repainted.

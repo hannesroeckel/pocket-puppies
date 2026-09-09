@@ -109,6 +109,26 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.31.0: FOUR ROUTES ARE FOUR ROADS. NO NEW FILES, so the PRECACHE list below
+   is unchanged (`py tools/check-precache.py`: still 73) — but the generation
+   MUST still move, or `scenes/outdoors.js` and `dog/stroll.js` are served from
+   the old cache and the three new roads ship to nobody. That is the mistake
+   stage 8's note describes.
+   She has picked park / high street / river / woods on the map since stage 4
+   and the pick was always real in the loot — `state/walks.js` blends a
+   per-route weight into every find — and always invisible in the world,
+   because there was one strip and four names. There are four now, each quoting
+   the little place `ui/routemap.js` already draws for it on the paper.
+   THE PARK IS BYTE-IDENTICAL, proven by re-render rather than asserted: it is
+   the road every walk has shown since 8.22.0.
+   AND THE ROAD TAKES THE HOUR (8.30.0's other half). The room learned the time
+   and the road had not, so an evening walk went down a midday street. Out here
+   it is a wash rather than the room's treatment — there is no sunbeam to have
+   to remove — and `dim` is capped below the room's because the dog is not
+   relit out here either.
+   `place` and the light bucket are part of the TILE KEY: a route change with a
+   stale key would have handed her the park's road for a walk in the woods.
+
    8.30.0: THE ROOM KNOWS WHAT TIME IT IS. ONE NEW MODULE —
    `src/scenes/daylight.js` — so this generation MUST move and it MUST appear in
    PRECACHE below: `scenes/room.js` imports it unconditionally, and a phone that
@@ -412,7 +432,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.30.0';
+const VERSION = '8.31.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 

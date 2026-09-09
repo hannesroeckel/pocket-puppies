@@ -122,43 +122,117 @@ def main():
         # the next AT THE JOIN against how much it changes in an ordinary stretch
         # of the same picture. A seamless tile makes the join an ordinary column;
         # a clipped shape makes it the biggest step in the image.
+        # ALL FOUR ROADS, NOT JUST THE ONE THAT SHIPPED (8.31.0). This used to
+        # test `drawStrip` with no `place`, which is the park — so the three
+        # roads added for the four routes would have been seam-tested by nobody.
+        # Periodicity is a property each of them has to earn separately: the
+        # high street's paving joints and the river's water band are exactly the
+        # kind of full-width structure that closes on itself only if the column
+        # count divides the tile.
         ctx, pg = fresh(wait=0)
-        seam = pg.evaluate("""async () => {
+        seams = pg.evaluate("""async () => {
           const mod = await import('/src/scenes/outdoors.js');
           const W = 520, H = 900;
-          const cv = document.createElement('canvas');
-          cv.width = W * 2; cv.height = H;
-          const c = cv.getContext('2d');
-          const opts = { floorY: H * 0.62 };
-          c.save(); mod.drawStrip(c, W, H, opts); c.restore();
-          c.save(); c.translate(W, 0); mod.drawStrip(c, W, H, opts); c.restore();
-          const img = c.getImageData(0, 0, W * 2, H).data;
-          /* mean per-channel change between column x and column x+1 */
-          const step = (x) => {
-            let s = 0;
-            for (let y = 0; y < H; y++) {
-              const a = (y * W * 2 + x) * 4, b = (y * W * 2 + x + 1) * 4;
-              s += Math.abs(img[a] - img[b]) + Math.abs(img[a+1] - img[b+1])
-                 + Math.abs(img[a+2] - img[b+2]);
+          const out = {};
+          const tiles = {};
+          for (const place of ['park', 'woods', 'high', 'river']) {
+            const cv = document.createElement('canvas');
+            cv.width = W * 2; cv.height = H;
+            const c = cv.getContext('2d');
+            const opts = { floorY: H * 0.62, place };
+            c.save(); mod.drawStrip(c, W, H, opts); c.restore();
+            c.save(); c.translate(W, 0); mod.drawStrip(c, W, H, opts); c.restore();
+            const img = c.getImageData(0, 0, W * 2, H).data;
+            /* mean per-channel change between column x and column x+1 */
+            const step = (x) => {
+              let s = 0;
+              for (let y = 0; y < H; y++) {
+                const a = (y * W * 2 + x) * 4, b = (y * W * 2 + x + 1) * 4;
+                s += Math.abs(img[a] - img[b]) + Math.abs(img[a+1] - img[b+1])
+                   + Math.abs(img[a+2] - img[b+2]);
+              }
+              return s / H / 3;
+            };
+            let join = 0;
+            for (let x = W - 3; x <= W + 1; x++) join = Math.max(join, step(x));
+            /* the control: the busiest ordinary column in the middle of a tile,
+               which is where the scatter and the skyline are */
+            let worst = 0;
+            for (let x = Math.round(W * 0.25); x < Math.round(W * 0.75); x++) {
+              worst = Math.max(worst, step(x));
             }
-            return s / H / 3;
-          };
-          let join = 0;
-          for (let x = W - 3; x <= W + 1; x++) join = Math.max(join, step(x));
-          /* the control: the busiest ordinary column in the middle of a tile,
-             which is where the tufts and the treeline are */
-          let worst = 0;
-          for (let x = Math.round(W * 0.25); x < Math.round(W * 0.75); x++) {
-            worst = Math.max(worst, step(x));
+            out[place] = { join: +join.toFixed(3), worst: +worst.toFixed(3) };
+            /* a coarse fingerprint of the left tile, for the "they are actually
+               different roads" check below */
+            let sig = '';
+            for (let y = 40; y < H; y += 60) {
+              for (let x = 40; x < W; x += 60) {
+                const i = (y * W * 2 + x) * 4;
+                sig += (img[i] >> 4) + ',' + (img[i+1] >> 4) + ',' + (img[i+2] >> 4) + ';';
+              }
+            }
+            tiles[place] = sig;
           }
-          return { join: +join.toFixed(3), worst: +worst.toFixed(3) };
+          return { out, tiles };
         }""")
-        check(seam["worst"] > 0.5,
-              "control: the tile has real detail to be discontinuous IN", seam)
-        check(seam["join"] <= seam["worst"] * 1.35,
-              "THE JOIN IS AN ORDINARY COLUMN — the tile is seamless in pixels, "
-              "not just in intention",
-              "join %.2f vs busiest ordinary column %.2f" % (seam["join"], seam["worst"]))
+        for place, seam in seams["out"].items():
+            check(seam["worst"] > 0.5,
+                  "control: the %s tile has real detail to be discontinuous IN" % place,
+                  seam)
+            check(seam["join"] <= seam["worst"] * 1.35,
+                  "THE JOIN IS AN ORDINARY COLUMN on the %s — seamless in pixels, "
+                  "not just in intention" % place,
+                  "join %.2f vs busiest ordinary column %.2f"
+                  % (seam["join"], seam["worst"]))
+        # ...AND THEY ARE FOUR ROADS, NOT ONE ROAD FOUR TIMES. The whole point of
+        # the item: she picks the woods and walks through the woods. A palette
+        # swap that silently fell back to the park would pass every seam check
+        # above and fail the only thing anybody asked for.
+        sigs = seams["tiles"]
+        names = list(sigs.keys())
+        same = [(a, b) for i, a in enumerate(names) for b in names[i+1:]
+                if sigs[a] == sigs[b]]
+        check(not same,
+              "FOUR ROUTES ARE FOUR ROADS — no two of them render the same tile",
+              same or "all four differ")
+        ctx.close()
+
+        # ---- THE ROAD IS THE ONE SHE DREW (8.31.0) ------------------------
+        # `state/walks.js` has blended a per-route weight into every find since
+        # stage 4, so the choice was always real in the loot — and always
+        # invisible in the world, because there was one strip. This is the check
+        # that the two now agree, driven through `setOff` with a real mix rather
+        # than by poking the layer.
+        #
+        # AND IT IS LOCKED FOR THE WALK. `place` is read once in `begin()`, for
+        # the same reason `opts.side` locks the profile dog for one departure:
+        # re-asking every frame invites a swap halfway down, and this one would
+        # swap the world he is walking through.
+        ctx, pg = fresh()
+        picked = pg.evaluate("""() => {
+          const pp = window.__pp;
+          const out = [];
+          for (const route of ['woods', 'high', 'river', 'park']) {
+            if (pp.app.game.walkActive) pp.app.game.cancelWalk();
+            pp.loop.scene.startWalk();
+            pp.step(1/60, 20);
+            pp.setOff(route, 600);
+            let g = 0;
+            while (g++ < 400 && pp.dbg().walk.leaving) pp.step(1/60, 1);
+            pp.step(1/60, 40);
+            const d = pp.dbg().walk;
+            out.push({ route, place: d.stroll.place, on: d.stroll.on,
+                       recordRoute: (pp.app.game.walkActive || {}).route });
+            pp.loop.scene.walk.bringHome();
+            pp.step(1/60, 30);
+            pp.app.nav.go('room', { switched: true });
+            pp.step(1/60, 30);
+          }
+          return out;
+        }""")
+        for row in picked:
+            check(row["on"] and row["place"] == row["route"],
+                  "the road she drew is the road he walks — %s" % row["route"], row)
         ctx.close()
 
         # ---- A : the road, and the reason it has no seam ------------------
