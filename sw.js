@@ -109,6 +109,29 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.29.0: A PANEL THAT OUTGROWS THE SCREEN SCROLLS INSTEAD OF HIDING A BUTTON.
+   ONE NEW MODULE — `src/ui/scroll.js` — so this generation MUST move and it MUST
+   appear in PRECACHE below: `ui/shop.js` and `ui/kennel.js` both import it
+   unconditionally, and a phone that took this generation without it would fail
+   to resolve the import offline and show a blank screen (the failure 8.5.0's
+   note describes). NO SCHEMA BUMP — nothing here is persisted.
+   WHAT IT IS NOT: a new way to browse. `max` is zero whenever the content fits,
+   and a zero `max` makes every path inert, so the twelve-row shelf and the
+   five-dog kennel are pixel-for-pixel what they were on 8.28.0. What it
+   replaces is the SILENT failure past that point — a sixth dog overflows the
+   kennel by 20 units at a 40-unit inset, and `closeRect`'s own `Math.min` clamp
+   answered that by sliding Done up UNDER the last card.
+   THE ONE BEHAVIOUR CHANGE, AND IT IS ON EVERY TAP: these two panels used to
+   commit on `down`, which cannot survive a list that moves — a flick to see the
+   bottom of the kennel would swap the dog in the room. Both now arm on `down`
+   and commit on the lift, and skip the commit if the gesture became a drag. The
+   press animation still starts on `down`, so nothing feels slower.
+   A phone serving a cached `ui/shop.js` against a fresh `ui/kennel.js` is fine
+   in isolation — but a cached `ui/kennel.js` against a fresh `state/balance.js`
+   would read `BALANCE.ui.scroll` as undefined inside `ui/scroll.js`, which is
+   why the generation moves rather than only the two files.
+   `py tools/check-precache.py` now expects 72 entries.
+
    8.28.0: THE STROLL EXPLAINS ITSELF, AND SHE CAN SEE WHAT HE IS STANDING IN
    FRONT OF. No new files. Beat 2.75 had no explainer, and a card of its own was
    the wrong answer — the first find is level with him ~5.4s into a 30s beat and
@@ -370,7 +393,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.28.0';
+const VERSION = '8.29.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -451,6 +474,11 @@ const PRECACHE = [
      feature, which is why `tools/check-precache.py` exists. */
   './src/ui/reach.js',
   './src/ui/routemap.js',
+  /* 8.29.0. The one scroller, imported by the shop and the kennel — the two
+     panels that can outgrow the screen. Same failure mode as `reach.js` above:
+     a missing line here does not degrade a feature, it 404s an import and
+     blanks the game offline. */
+  './src/ui/scroll.js',
   './src/ui/sheet.js',
   /* stage 6. Two new modules mean two new lines here, and forgetting them is
      exactly the failure the note at the fetch handler describes: the game

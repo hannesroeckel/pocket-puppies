@@ -4793,3 +4793,141 @@ of five.
   simply what the world looks like.
 - **`rev` has no upgrade story beyond "show it again".** A card that changed for a player mid-walk
   will appear at her next map beat with no acknowledgement that she has seen most of it before.
+
+---
+
+## 39. A panel that outgrows the screen (8.29.0) — as built
+
+> *"why cant we make the kennel and the shop scrollable?"* — 2026-09-09
+
+Answered rather than obeyed, because the rule it asks about was written down twice and both
+times with a reason attached:
+
+| where | the rule, verbatim |
+|---|---|
+| `ui/kennel.js` | *"NOTHING IN THIS GAME SCROLLS, and that is a design property rather than an omission — no surface in the tree has a scroll offset, because a child hunting for a row below the fold is a child who does not find it."* |
+| `state/balance.js` | *"THE SHOP DOES NOT SCROLL. That is a constraint on the catalogue, not a thing to solve with a scroll view: a shop you cannot see the bottom of is the retention scaffolding research §7 warns about, and a list that fits is a list she can hold in her head."* |
+
+**Neither is repealed.** What is repealed is a third thing that was never a decision, because
+nobody wrote it down: a panel that outgrows its screen had no honest way to fail. The kennel's
+own note names the failure exactly — the Done button's `Math.min` clamp *"would have hidden
+that by sliding it up UNDER the last two earned rows, which is the worst possible failure: the
+panel would look fine and one control would be unreachable behind another."*
+
+That is not hypothetical. Measured, at a 40-unit inset:
+
+| roster | card height | content | band | verdict |
+|---|---|---|---|---|
+| 4 dogs | 92 (the ceiling) | 668 | 680 | fits |
+| 5 dogs | 74 (shrunk) | 678 | 680 | fits, by 2 units |
+| **6 dogs** | **64 (the floor)** | **700** | **680** | **overflows by 20** |
+
+So the choice was never "scroll or don't". It was "scroll, or hide a control behind another one
+and call it a layout".
+
+### 39.1 The three rules that keep the original reasoning intact
+
+1. **It only scrolls when it must.** `max` is `contentH - viewH` and is zero whenever the content
+   fits; a zero `max` makes every path in `ui/scroll.js` inert — no offset, no affordance, no
+   gesture claimed. **The twelve-row shelf and the five-dog kennel are pixel-for-pixel what they
+   were**, which is asserted positionally by `tools/scrollgate.py` and was additionally checked
+   by rendering the five-dog kennel before and after and comparing the two PNGs byte for byte.
+   The child who would have hunted below the fold is never given a fold to hunt below.
+2. **It says there is more.** The objection was never *"scrolling is bad"*, it was *"she will not
+   know"*. A list that scrolls draws a fade into the panel colour at the edge it continues past,
+   plus a thumb saying how much is left — so "there is more below" is a thing on the screen
+   rather than a thing she has to guess. The fade alone says the list continues; the thumb is
+   what says whether that is one row or nine, which is what stops a child giving up halfway.
+3. **It is not a licence to grow the catalogue.** The shop's rule is about restraint and lives in
+   SCOPE.md. Twelve rows is still the catalogue and the next thing added still has to replace
+   something. This only means a thirteenth would be legible instead of hidden under Done.
+
+`economy.kennel.max` stays at **5**, and the comment on it changed from "five is the layout's
+ceiling" to "five is the *art's* ceiling" — it is held down by `dog/breeds.js` and the five side
+sheets now, not by the panel. Raising it without a sixth breed to draw unlocks nothing.
+
+### 39.2 The commit moved from the press to the lift, and that is the load-bearing change
+
+Every panel in this game commits on `down`. That is safe only while nothing moves under a
+finger. The moment a list scrolls, committing on `down` means **a flick to see the bottom of the
+kennel swaps the dog in the room**, and a flick down the shelf spends her coins.
+
+So both panels now:
+
+```
+down  -> armPending(ev)      decide what is under the finger; start its press
+move  -> if (sc.dragged)     drop it — her finger has travelled
+up    -> if (!sc.dragged)    commit
+```
+
+Three details that are not incidental:
+
+- **`dragged` survives the `up`.** The panel reads it *while handling* that same `up`, so
+  clearing it on release would make every drag look like a tap at exactly the moment the answer
+  matters. It is cleared by the next `down`.
+- **`armed` does not ask whether the list can scroll.** The first version gated it on `can`, and
+  that made the verdict depend on how many dogs happened to be in the kennel: the identical
+  gesture scrolled a six-dog list and *swapped the dog* in a five-dog one. A finger that presses
+  a card, slides 160 units and lifts has not tapped that card either way. Scrolling is what
+  `dragging` is for; `dragged` is just "she moved".
+- **The press animation still starts on `down`**, so nothing feels slower — she can hold a card
+  and think, and lift somewhere else without swapping anybody.
+
+`slop` is **8** units, against the petting field's `tapMoveSlop` of 5. Deliberately the larger of
+the two: a thumb's own wobble still buys the thing she meant to buy.
+
+### 39.3 Two things that were only found by building it
+
+- **`closeRect` flowed off the earned rows, which now carry the offset.** The kennel's Done
+  button was positioned from `earnedTop()`, so the first working version had it creep *up* the
+  screen as she scrolled down and off the bottom as she scrolled back — a worse version of the
+  bug being fixed. It reads `listTop() + contentH() + 10` now, which is identical arithmetic at
+  offset 0 and immune to the offset. `scrollgate` asserts Done does not move by one unit across
+  a drag, which is the check that would have caught it.
+- **`cardLines()` and `newCardLines()` were written for this exact problem and never called.**
+  The type pass carried the authored baselines `30 / 50 / 68` as literals. At 92 and at the
+  five-dog 74 that is correct — 68 plus a descender lands at 72, inside a 74 card. At the
+  64-unit floor a sixth dog reaches it is not: **"No collar" was drawn 4 units below its own
+  card, on top of the next dog.** Nothing had ever rendered a 64-unit card, because nothing
+  could until the panel learned to scroll. They are wired up now and, crucially, they *scale
+  only once the baselines stop fitting* — the flat `h * (30/92)` the dead function actually
+  contained would have moved the five-dog card's type by six units to fix a card height that did
+  not exist yet.
+
+### 39.4 What proves it
+
+`tools/scrollgate.py`, **30 checks**, in the suite. The ones worth naming:
+
+- the shop at twelve rows and the kennel at five report `can: false`, and every row and card is
+  at exactly the y the pre-scroll arithmetic put it at;
+- a sixth dog scrolls, and Done does not move while it does;
+- **a real drag started on a dog card does not swap the dog**, and one started on a shop row
+  spends nothing — driven as a press, a trail of moves and a lift through `scene.pointer`, never
+  by calling the layer's handler (the 8.16.1 lesson);
+- ...and a tap on the same card still brings that dog in, which is the other half of it;
+- hauling past either end stops at the end, and the last card is *fully inside the band* — so
+  "everything is reachable" is geometry rather than hope;
+- the affordance is asserted **on pixels and against itself**: read the bottom edge, set `fadeA`
+  and `barA` to zero, read it again. 26,164 pixels of 38,064 change, and the check is therefore
+  its own fault injection.
+
+Three of the four failures on the first run were the *gate* tapping where a card no longer was —
+after a drag, `roster[1]` is 30 units above the band, and the tap landed on the panel's top edge
+and closed the kennel. Same fault as 8.16.1, one level up: a gate that reads a position from the
+table rather than from the surface. It picks a card that is actually on screen now.
+
+### 39.5 Left imperfect
+
+- **No rubber band.** The offset is hard-clamped, so hitting an end is a stop rather than a
+  bounce. That was chosen so "it can never show past either end" is one assertion instead of a
+  tolerance that also needs tuning, but a soft overscroll is the thing that makes a list feel
+  like a physical object, and this does not have it.
+- **The scroll position is not kept between openings.** Both panels `home()` on `start()`. Right
+  for the kennel — the dog she wants is more likely to be near the top than where she left off —
+  and arguable for the shop.
+- **Only these two panels scroll.** `ui/collection.js`, `ui/tricklist.js` and `ui/sheet.js` have
+  the same latent failure and have not been given the same floor; none of them is near
+  overflowing, and giving a surface a scroller it never uses is how a rule quietly becomes a
+  default.
+- **Nothing she has today scrolls.** This is a floor under future content, not a change she can
+  see: it takes a sixth dog or a thirteenth shop row to engage, and neither exists.

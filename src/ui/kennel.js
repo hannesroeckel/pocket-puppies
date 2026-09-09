@@ -55,6 +55,7 @@ import { Spring } from '../engine/spring.js';
 import { drawText, measure } from './text.js';
 import { INK, SURF, C, R, PRESS, type, alpha } from './tokens.js';
 import { tactile, createPresses } from './surface.js';
+import { createScroll } from './scroll.js';
 import { getBreed, BREEDS } from '../dog/breeds.js';
 import { collarGlyph, WEAR_COLOUR } from './shop.js';
 
@@ -299,6 +300,17 @@ export function createKennel(opts = {}) {
   let adopt = { ok: false, reason: '', short: 0, at: 0, points: 0, row: null };
 
   const pad = K.pad;
+  /* THE CARDS STILL SHRINK BEFORE ANYTHING SCROLLS — see `cardH()`. This is
+     the floor under that: at five dogs the panel fits and this is inert, and
+     at six it stops the Done button sliding up over the last card, which is
+     what the note in `cardH()` calls "the worst possible failure". */
+  const sc = createScroll({ reduced });
+  /* WHAT HER FINGER IS ON, which is not the same as what she has chosen. A
+     panel that moves cannot commit on `down`: a flick to see the bottom of the
+     kennel would otherwise swap the dog in the room, or knock on the door. */
+  let pendId = '';
+  let pendKind = '';
+  let pendIdx = -1;
 
   function topY() { return H * (1 - clamp(slide.x, 0, 1)); }
   function listTop() { return topY() + K.headH; }
@@ -364,12 +376,36 @@ export function createKennel(opts = {}) {
     return clamp(step - K.cardGap, K.cardMinH, K.cardH);
   }
   function cardStep() { return cardH() + K.cardGap; }
+
+  /* ---- the scrollable band ------------------------------------------------
+     Everything between the header and Done travels together: the dog cards,
+     the next puppy's card, the "earned" heading and its rows. Her care points
+     and the way out do not travel, because a control that scrolls off the
+     screen is the whole failure this guards against.
+
+     `contentH` is measured with NO offset in it — `closeRect` and the scroller
+     itself both read it, and an offset folded in here would move the Done
+     button by however far she had scrolled. */
+  function contentH() {
+    const n = roster.length + (showNewCard() ? 1 : 0);
+    return n * cardStep() + 16 + 22 + earned.length * K.rowH;
+  }
+  function bandTop() { return listTop(); }
+  function bandH() { return Math.max(0, closeRect().y - 10 - bandTop()); }
+  function layout() { sc.measure(bandTop(), bandH(), contentH()); return sc; }
+  /** a card or row scrolled out of the band is drawn clipped and is not tappable */
+  function inBand(r) {
+    return r.y + r.h > sc.top - 0.5 && r.y < sc.bottom + 0.5;
+  }
+
   function cardRect(i) {
-    return { x: pad, y: listTop() + i * cardStep(), w: W - pad * 2, h: cardH() };
+    /* THE ONE PLACE THE OFFSET IS APPLIED to a card, so hit-testing and drawing
+       cannot disagree about where a dog is */
+    return { x: pad, y: listTop() + i * cardStep() - sc.offset, w: W - pad * 2, h: cardH() };
   }
   function newCardRect() {
     const i = roster.length;
-    return { x: pad, y: listTop() + i * cardStep(), w: W - pad * 2, h: cardH() };
+    return { x: pad, y: listTop() + i * cardStep() - sc.offset, w: W - pad * 2, h: cardH() };
   }
   function adoptChipRect() {
     const r = newCardRect();
@@ -382,21 +418,28 @@ export function createKennel(opts = {}) {
     return { x: r.x + r.w - 84 - 12, y: r.y + (r.h - 30) / 2, w: 84, h: 30 };
   }
   /**
-   * THE THREE TEXT BASELINES ON A CARD, as fractions of its height.
+   * THE THREE TEXT BASELINES ON A CARD.
    *
-   * 30 / 50 / 68 of 92 is what the surface shipped with, and they are kept as
-   * exact fractions of it so a 92-unit card is bit-identical and a 74-unit one
-   * compresses evenly instead of having its last line hang off the bottom.
+   * THESE WERE WRITTEN AND NEVER CALLED. The type pass carried the authored
+   * 30 / 50 / 68 as literals, and at 92 and at the five-dog 74 that is correct
+   * — the last baseline plus its descender lands at 72, inside a 74 card. At
+   * the 64-unit floor it does not: "No collar" was drawn 4 units BELOW the card
+   * it belongs to, on top of the next dog. Nothing had ever rendered a 64-unit
+   * card, because nothing could until the panel learned to scroll (8.29.0).
+   *
+   * SCALED ONLY ONCE THEY STOP FITTING, which is why this is not the flat
+   * `h * (30/92)` the first version of this function used: that would have
+   * moved the five-dog card's type by six units to fix a card height that did
+   * not exist yet. Every layout that has ever shipped is untouched to the unit,
+   * and the compression is reachable at 64 and nowhere else.
    */
-  function cardLines(h) {
-    return [h * (30 / 92), h * (50 / 92), h * (68 / 92)];
-  }
-  function newCardLines(h) {
-    return [h * (26 / 92), h * (46 / 92), h * (64 / 92)];
-  }
+  const lineFit = (h, at, need) => (h >= need ? at : at.map((v) => v * (h / need)));
+  function cardLines(h) { return lineFit(h, [30, 50, 68], 72); }
+  function newCardLines(h) { return lineFit(h, [26, 46, 64], 68); }
+  /** where the earned heading is DRAWN — inside the band, so it travels */
   function earnedTop() {
     const n = roster.length + (showNewCard() ? 1 : 0);
-    return listTop() + n * cardStep() + 16;
+    return listTop() + n * cardStep() + 16 - sc.offset;
   }
   function earnedRect(i) {
     return { x: pad, y: earnedTop() + 22 + i * K.rowH, w: W - pad * 2, h: K.rowH - 6 };
@@ -406,7 +449,12 @@ export function createKennel(opts = {}) {
     return { x: r.x + r.w - 56 - 10, y: r.y + (r.h - 26) / 2, w: 56, h: 26 };
   }
   function closeRect() {
-    const y = earnedTop() + 22 + earned.length * K.rowH + 10;
+    /* FROM `contentH`, NOT FROM `earnedTop()`, and that is the whole point of
+       the split. It used to flow off the earned rows, which now carry the
+       scroll offset — so Done would have crept UP the screen as she scrolled
+       down and off the bottom as she scrolled back, which is a worse version
+       of the bug this replaced. Identical arithmetic at offset 0. */
+    const y = listTop() + contentH() + 10;
     return { x: pad, y: Math.min(y, H - 52 - bottomInset), w: W - pad * 2, h: 38 };
   }
   /**
@@ -433,6 +481,82 @@ export function createKennel(opts = {}) {
     return ev.x >= r.x && ev.x <= r.x + r.w && ev.y >= r.y && ev.y <= r.y + r.h;
   }
 
+  /* ---- arm / drop / commit ----------------------------------------------
+     The three halves of a tap, kept apart so that "a drag changes nothing" is
+     one test on the lift rather than a guard on every branch. `armPending`
+     decides what is under the finger and does nothing else; `commit` is the
+     only thing in this file that swaps a dog or knocks on the door. */
+  function armPending(ev) {
+    dropPending();
+    if (ev.y < topY() + 6) { pendKind = 'backdrop'; pendId = 'backdrop'; return; }
+    if (hit(closeRect(), ev)) { pendKind = 'close'; pendId = 'close'; return; }
+    if (!sc.inBand(ev.y)) return;
+    for (let i = 0; i < roster.length; i++) {
+      if (roster[i].active) continue;
+      const r = cardRect(i);
+      if (!inBand(r)) continue;
+      if (hit(r, ev) || hit(cardChipRect(i), ev)) {
+        pendKind = 'dog'; pendIdx = i; pendId = roster[i].id; return;
+      }
+    }
+    if (showNewCard()) {
+      /* the whole card is the target, chip included — a milestone should not
+         need a precise thumb */
+      const r = newCardRect();
+      if (inBand(r) && hit(r, ev)) { pendKind = 'new'; pendId = 'new'; return; }
+    }
+    for (let i = 0; i < earned.length; i++) {
+      const e = earned[i];
+      if (!e.wearable || !e.got) continue;
+      const r = earnedRect(i);
+      if (!inBand(r)) continue;
+      if (hit(earnedChipRect(i), ev) || hit(r, ev)) {
+        pendKind = 'earned'; pendIdx = i; pendId = e.id; return;
+      }
+    }
+  }
+  function dropPending() {
+    if (pendId) presses.clear();
+    pendId = ''; pendKind = ''; pendIdx = -1;
+  }
+  function commit(p) {
+    if (p.kind === 'backdrop' || p.kind === 'close') { kennel.stop(); return; }
+    if (p.kind === 'dog') {
+      /* by ID, not by index: the roster is rebuilt every frame and a walk
+         finishing mid-gesture could have reordered it under her finger */
+      const d = roster.find((x) => x.id === p.id);
+      if (!d || d.active) return;
+      flashId = d.id; flashT = K.flash;
+      sound(K.sfx.pick);
+      switchTo = d.id; switchT = 0;
+      return;
+    }
+    if (p.kind === 'new') {
+      if (!showNewCard()) return;
+      flashId = 'new'; flashT = K.flash;
+      if (adopt.ok) {
+        beat = 'knock'; beatT = 0;
+        /* WHO IS AT THE DOOR, PINNED NOW. See the note on `beatRow`: from the
+           reveal onward `adopt.row` has moved on to the next puppy. */
+        beatRow = adopt.row;
+        beatHostPron = game.pron;
+        sound(K.sfx.knock);
+      } else {
+        sound(K.sfx.deny);
+        /* the refusal is stated in CARE POINTS. There is no second way. */
+        toast(adopt.reason === 'locked' ? COPY.newLocked(adopt.short) : COPY.full(kennelMax()));
+      }
+      return;
+    }
+    if (p.kind === 'earned') {
+      const e = earned.find((x) => x.id === p.id);
+      if (!e || !e.wearable || !e.got) return;
+      flashId = e.id; flashT = K.flash;
+      if (game.equipWear(e.worn ? '' : e.id)) { sound(K.sfx.pick); refresh(); }
+      else sound(K.sfx.deny);
+    }
+  }
+
   const kennel = {
     get isOpen() { return open; },
     get modal() { return open; },
@@ -448,6 +572,11 @@ export function createKennel(opts = {}) {
       if (why) return why;
       open = true;
       refresh();
+      /* opened fresh means opened at the top — the dog she is looking for is
+         far more likely to be one of the first than one she scrolled to last
+         time */
+      sc.home();
+      dropPending();
       slide.to(1);
       sound(K.sfx.open);
       return '';
@@ -456,6 +585,8 @@ export function createKennel(opts = {}) {
       if (!open) return;
       if (beat) return;               // never close out from under the beat
       open = false;
+      dropPending();
+      sc.reset();
       slide.to(0);
       sound(K.sfx.close);
     },
@@ -465,7 +596,18 @@ export function createKennel(opts = {}) {
       t += dt;
       slide.step(dt);
       glow.step(dt);
-      if (flashT > 0) {
+      if (open && !beat) refresh();
+      layout();
+      /* the beat owns the whole screen, so a gesture left half-finished under
+         it must not still be scrolling when it hands back */
+      if (beat) sc.reset(); else sc.update(dt);
+      /* THE PRESS FOLLOWS THE FINGER FIRST, THE FLASH SECOND. A card stays
+         down while she holds it — she can rest a thumb on a dog and think, and
+         lift somewhere else without swapping anybody. The flash is what plays
+         AFTER a commit and is unchanged. */
+      if (pendId) {
+        presses.set(pendId, true);
+      } else if (flashT > 0) {
         /* down for the first `PRESS.dur * 1.1`, then released, so the card
            compresses and springs back while the highlight is still fading —
            rather than staying squashed for the whole 0.28s (the same shape
@@ -475,7 +617,6 @@ export function createKennel(opts = {}) {
         if (flashT === 0) presses.clear();
       }
       presses.update(dt);
-      if (open && !beat) refresh();
 
       /* ---- the switch hold ---- */
       if (switchTo) {
@@ -530,54 +671,37 @@ export function createKennel(opts = {}) {
       }
     },
 
-    /** @returns true if the event was consumed */
+    /**
+     * @returns true if the event was consumed
+     *
+     * DOWN ARMS, THE LIFT COMMITS — and on this surface that matters more than
+     * anywhere else in the game. Committing on `down` while the list can move
+     * would mean a flick to see the bottom of the kennel swaps the dog in the
+     * room, or knocks on the door for a puppy she was not adopting. So `down`
+     * only records what is under her finger, and the `up` acts on it if
+     * `ui/scroll.js` says nothing in between was a drag.
+     */
     pointer(ev) {
       if (!open) return false;
       if (beat || switchTo) return true;        // the beat owns everything
-      if (ev.type !== 'down') return true;
-      if (ev.y < topY() + 6) { kennel.stop(); return true; }
-      if (hit(closeRect(), ev)) { kennel.stop(); return true; }
+      layout();
+      /* the scroller sees every event FIRST — it is the thing that decides
+         whether this gesture is a tap at all */
+      sc.pointer(ev);
 
-      for (let i = 0; i < roster.length; i++) {
-        if (roster[i].active) continue;
-        if (hit(cardRect(i), ev) || hit(cardChipRect(i), ev)) {
-          flashId = roster[i].id; flashT = K.flash;
-          sound(K.sfx.pick);
-          switchTo = roster[i].id; switchT = 0;
-          return true;
-        }
-      }
-      if (showNewCard()) {
-        /* the whole card is the target, chip included — a milestone should not
-           need a precise thumb */
-        const r = newCardRect();
-        if (hit(r, ev)) {
-          flashId = 'new'; flashT = K.flash;
-          if (adopt.ok) {
-            beat = 'knock'; beatT = 0;
-            /* WHO IS AT THE DOOR, PINNED NOW. See the note on `beatRow`: from
-               the reveal onward `adopt.row` has moved on to the next puppy. */
-            beatRow = adopt.row;
-            beatHostPron = game.pron;
-            sound(K.sfx.knock);
-          } else {
-            sound(K.sfx.deny);
-            /* the refusal is stated in CARE POINTS. There is no second way. */
-            toast(adopt.reason === 'locked' ? COPY.newLocked(adopt.short) : COPY.full(kennelMax()));
-          }
-          return true;
-        }
-      }
-      for (let i = 0; i < earned.length; i++) {
-        const e = earned[i];
-        if (!e.wearable || !e.got) continue;
-        if (hit(earnedChipRect(i), ev) || hit(earnedRect(i), ev)) {
-          flashId = e.id; flashT = K.flash;
-          if (game.equipWear(e.worn ? '' : e.id)) { sound(K.sfx.pick); refresh(); }
-          else sound(K.sfx.deny);
-          return true;
-        }
-      }
+      if (ev.type === 'down') { armPending(ev); return true; }
+      /* HER FINGER HAS TRAVELLED, so whatever she was pressing is let go of.
+         `dragged` and not `drag === 'drag'`: a five-dog kennel does not scroll,
+         but sliding off a card is still not a tap on that dog. */
+      if (ev.type === 'move') { if (sc.dragged) dropPending(); return true; }
+      if (ev.type === 'cancel') { dropPending(); return true; }
+      if (ev.type !== 'up') return true;
+
+      const p = { id: pendId, kind: pendKind, i: pendIdx };
+      dropPending();
+      /* `dragged` survives the `up` on purpose — see ui/scroll.js */
+      if (sc.dragged || !p.kind) return true;
+      commit(p);
       return true;
     },
 
@@ -595,6 +719,10 @@ export function createKennel(opts = {}) {
          by its own bookkeeping. Nothing behind it is drawn at all. */
       if (beat) { drawBeat(g); return; }
 
+      /* MEASURED HERE TOO, not only in `update`. The loop happens to run update
+         first, but a clip whose height came from a stale measure is a blank
+         panel, and that is too quiet a failure to leave resting on call order. */
+      layout();
       c.save();
       c.fillStyle = SURF.scrim(SCRIM * a);
       c.fillRect(0, 0, W, H);
@@ -629,6 +757,11 @@ export function createKennel(opts = {}) {
          `*Dy` is kept per index because the type is a SECOND pass below: content
          has to sink WITH its face or the label floats while the card goes down,
          which is the one mistake ui/surface.js returns `dy` to prevent. */
+      /* CLIPPED TO THE BAND — see the note on `sc` above. The header carries
+         her care points and Done is the way out, so the scroll starts below
+         one and stops above the other, and a card can never be drawn over
+         either. That overlap is the failure this replaced. */
+      sc.clip(c);
       const cardDy = [];
       let newDy = 0;
       for (let i = 0; i < roster.length; i++) {
@@ -718,6 +851,8 @@ export function createKennel(opts = {}) {
         }
       }
 
+      sc.unclip(c);
+
       const cl = closeRect();
       /* Done is tactile too. Nothing can be SEEN pressing it — the panel closes
          on the same down event — but the bottom edge is what makes it a button
@@ -741,6 +876,9 @@ export function createKennel(opts = {}) {
         maxWidth: sr.w - 32,
       });
 
+      /* the type takes the same clip as the faces it sits on, or a name rides
+         up over her care points while its card is being cut off */
+      sc.clip(c);
       for (let i = 0; i < roster.length; i++) {
         const d = roster[i];
         const r = cardRect(i);
@@ -750,19 +888,24 @@ export function createKennel(opts = {}) {
         /* the sink of the face this type sits on — the card and its chip share
            one press, so one offset serves the whole card */
         const dy = cardDy[i] || 0;
+        /* THROUGH `cardLines`, WHICH USED TO BE DEAD CODE. Identical to the
+           30/50/68 that were typed here at every card height that has ever
+           shipped; the difference is at the 64-unit floor a sixth dog reaches,
+           where the last line used to be drawn onto the card below. */
+        const ln = cardLines(r.h);
         drawText(g, d.name || COPY.unnamed, {
           ...type('labelMd', { weight: 800 }),
-          x: lx, y: r.y + dy + 30, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[0], anchor: 'free', align: 'left',
           ink: INK.body, over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, breedName(d.breedId), {
           ...type('labelSm', { weight: 600, track: 0 }),
-          x: lx, y: r.y + dy + 50, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[1], anchor: 'free', align: 'left',
           ink: INK.soft(0.76), over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, d.worn ? COPY.wearing(wornName(d.worn)) : COPY.wearNothing, {
           ...type('labelSm', { weight: 500, track: 0 }),
-          x: lx, y: r.y + dy + 68, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[2], anchor: 'free', align: 'left',
           ink: INK.soft(0.66), over: bg, fade: a, maxWidth: lw,
         });
         if (d.active) {
@@ -793,9 +936,10 @@ export function createKennel(opts = {}) {
            entry's is resolved from the dog's — a puppy who does not exist yet
            still has to be spoken about correctly. */
         const NP = (adopt.row && adopt.row.pron) || game.pron;
+        const ln = newCardLines(r.h);
         drawText(g, COPY.newTitle(adopt.row), {
           ...type('labelMd', { weight: 800 }),
-          x: lx, y: r.y + dy + 26, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[0], anchor: 'free', align: 'left',
           ink: INK.body, over: bg, fade: a, maxWidth: lw,
         });
         /* the GOAL, stated as a number she is saving toward — care points are a
@@ -803,12 +947,12 @@ export function createKennel(opts = {}) {
            `#8a4b22` for the ready state was `primary` typed from memory. */
         drawText(g, ready ? COPY.newReady(NP) : `${game.carePoints} / ${adopt.at} care points`, {
           ...type('labelSm', { weight: 700, track: 0 }),
-          x: lx, y: r.y + dy + 46, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[1], anchor: 'free', align: 'left',
           ink: ready ? INK.heading : INK.body, over: bg, fade: a, maxWidth: lw,
         });
         drawText(g, ready ? COPY.newReadyNote : COPY.newLockedNote(game.pron), {
           ...type('labelSm', { weight: 500, track: 0 }),
-          x: lx, y: r.y + dy + 64, anchor: 'free', align: 'left',
+          x: lx, y: r.y + dy + ln[2], anchor: 'free', align: 'left',
           ink: INK.soft(0.72), over: bg, fade: a,
           maxWidth: lw - 130,
         });
@@ -867,6 +1011,14 @@ export function createKennel(opts = {}) {
           });
         }
       }
+
+      sc.unclip(c);
+      /* AND THE THING THAT SAYS THERE IS MORE — the fade at whichever edge the
+         list carries on past, and a thumb saying how much of it is left. This
+         is the answer to the objection this panel's own note raised: she is
+         never left to guess that there is a row below the fold. Inert at five
+         dogs, where nothing scrolls. */
+      sc.drawEdges(g, { x: pad - 2, w: W - pad * 2 + 4, face: PANEL, alpha: a });
 
       /* the same button as the shop's Done, which was 13/800 there and 12.5/800
          here — one control, two spellings, which is what the ramp is for */
@@ -975,6 +1127,15 @@ export function createKennel(opts = {}) {
            table — tools/kennelgate.py tapped `K.cardH * i` and would have started
            missing the moment a fifth dog shrank the rows. */
         cardH: cardH(), cardStep: cardStep(), listTop: K.headH,
+        /* AND WHERE THE CARDS ACTUALLY ARE, offset included. `listTop +
+           i * cardStep` stopped being the answer the moment the list could
+           scroll, and a gate computing a tap from the table rather than from
+           the surface is the mistake this block already had to fix once. */
+        scroll: sc.debug,
+        pending: pendKind ? { kind: pendKind, id: pendId, i: pendIdx } : null,
+        cardsAt: roster.map((d, i) => +cardRect(i).y.toFixed(1)),
+        newCardAt: showNewCard() ? +newCardRect().y.toFixed(1) : null,
+        closeY: +closeRect().y.toFixed(1),
         roster: roster.map((d) => ({ id: d.id, name: d.name, breedId: d.breedId, sex: d.sex, active: d.active, worn: d.worn })),
         earned: earned.map((e) => ({ id: e.id, at: e.at, got: e.got, short: e.short, worn: !!e.worn })),
         showNew: showNewCard(),
