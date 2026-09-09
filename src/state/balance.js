@@ -2068,11 +2068,15 @@ export const BALANCE = {
          room and the kennel layout can hold. Raising it without adding a row
          unlocks nothing; adding a row without raising it is refused with
          `reason: 'full'` rather than silently ignored.
-         FIVE IS THE LAYOUT'S CEILING, not a round number. `ui/kennel.js` sizes
-         its cards to the space left over after the earned list and the Done
-         button, and at five it has come down to its 64-unit floor with about
-         ten units to spare on a 40-unit-inset phone. A sixth would need the
-         panel to scroll, and nothing in this game scrolls. */
+         FIVE IS THE ART'S CEILING NOW, NOT THE LAYOUT'S (8.29.0). It used to
+         be both: "a sixth would need the panel to scroll, and nothing in this
+         game scrolls". The panel scrolls when it has to (`ui/scroll.js`), and
+         a sixth dog was measured at 20 units of overflow at a 40-unit inset —
+         which used to slide the Done button up over the last card and now
+         simply scrolls. So this number is held down by `dog/breeds.js` and by
+         the side sheets in `src/assets`, and raising it without a sixth breed
+         to draw unlocks nothing. The cards still shrink before they scroll, so
+         at five every pixel of this surface is where it was. */
       max: 5,
       /* `adoptId` / `adoptBreed` / `adoptSex` USED TO BE HERE. They are now
          per-row on `economy.unlocks` (see the breed rows there): with one
@@ -3014,12 +3018,64 @@ export const BALANCE = {
       collarTag: '#8d6a4a',
     },
 
+    /* ---- SCROLLING, AND WHEN IT IS ALLOWED TO HAPPEN -------------------
+       Read `src/ui/scroll.js`'s header before changing anything here. The
+       short version: a panel scrolls ONLY when its content does not fit, and
+       every panel that fits today still fits and still does not scroll. What
+       this replaced was not a no-scroll layout but a SILENT one — a sixth dog
+       overflows the kennel by 20 units at a 40-unit inset, and the failure was
+       the Done button clamping up over the last card.
+
+       `slop` IS THE NUMBER THAT PROTECTS HER COINS. Every panel used to commit
+       on `down`; a scrolling panel commits on the lift instead, and this is
+       how far a finger may travel before the lift stops counting as a tap.
+       8 units is under a thumb's own wobble on a 390-wide phone (the petting
+       field's `tapMoveSlop` makes the same judgement for the same reason) and
+       well under the distance anybody moves when they mean to scroll.
+
+       `fadeA` and the bar ARE THE FEATURE, not decoration. The objection to
+       scrolling was "a child hunting for a row below the fold is a child who
+       does not find it", and the answer is that she is never left to guess:
+       the fade says the list continues and the bar says how much of it is
+       left. Turning these off does not make it tidier, it reinstates the
+       objection. */
+    scroll: {
+      slop: 8,
+      /* the fling: units/s below which a release is not a fling at all, the
+         ceiling on one, and how fast it bleeds off (e^-friction per second) */
+      minFling: 40, maxFling: 2600, friction: 4.6,
+      /* THE FADE AT AN EDGE THE CONTENT CARRIES ON PAST, AND IT MUST NOT ERASE
+         THE THING IT IS POINTING AT. First rendered at 26 units and 0.92, which
+         is a fade that reaches the panel colour — so the row peeking over the
+         edge was painted OUT, and the bottom of the shelf read as an ordinary
+         margin. That is the original objection walking back in through the
+         thing built to answer it. Looked at, zoomed: the next row was a ghost.
+         18 and 0.55 leave it clearly half-there. The fade's job is to stop a
+         cut row looking like a rendering fault, NOT to hide it. */
+      fadeH: 18, fadeA: 0.55,
+      /* the thumb: its width, its inset from the band, its shortest legible
+         length, and how solid it is at rest and under a finger. This is the
+         part that survives a small overflow — when only six units of a row
+         peek, the fade has almost nothing to soften and the bar is the whole
+         message, so it is deliberately readable rather than tasteful. */
+      barW: 4, barPad: 4, barMinH: 28, barA: [0.30, 0.55],
+      barInk: '#7c4a2f',
+    },
+
     /* ---- the shop (stage 6) -------------------------------------------
        Eight rows at 58 plus a header and a Done button comes to 604 of the
        844 the screen has, so THE SHOP DOES NOT SCROLL. That is a constraint
        on the catalogue, not a thing to solve with a scroll view: a shop you
        cannot see the bottom of is the retention scaffolding research §7 warns
        about, and a list that fits is a list she can hold in her head.
+
+       STILL TRUE AT TWELVE, AND NOW IT FAILS HONESTLY (8.29.0). The paragraph
+       above is a rule about the CATALOGUE and it stands — twelve rows fit, and
+       the next thing added still has to earn its place by replacing something.
+       What changed is only what happens if that rule is ever broken: a
+       thirteenth row used to be drawn underneath the Done button, and now the
+       list scrolls and says so. `ui/scroll.js` is inert while the content
+       fits, so this shelf is pixel-for-pixel what it was.
 
        `sfx` MAPS ONTO THE STAGE-7 BANK and invents nothing. engine/audio.js
        records every unresolved name in `audio.pending`, which stage 7 got to

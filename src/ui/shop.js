@@ -30,6 +30,7 @@ import { Spring } from '../engine/spring.js';
 import { drawText } from './text.js';
 import { INK, SURF, R, PRESS, type } from './tokens.js';
 import { tactile, createPresses } from './surface.js';
+import { createScroll } from './scroll.js';
 import { drawBone, drawBall, drawBrush, drawSoap, drawSack } from '../scenes/props.js';
 
 const W = BALANCE.view.W;
@@ -185,6 +186,18 @@ export function createShop(opts = {}) {
      and no second answer to "which row did she touch"; the flash highlight goes
      on doing exactly what it did. */
   const presses = createPresses(reduced);
+  /* THE SHELF SCROLLS ONLY IF IT HAS TO, and at twelve rows it does not — see
+     `ui/scroll.js`. This is here so that a thirteenth row is legible rather
+     than drawn underneath the Done button, which is what used to happen. */
+  const sc = createScroll({ reduced });
+  /* WHAT HER FINGER IS CURRENTLY ON, and it is not the same thing as what she
+     has bought. A scrolling list cannot commit on `down` — a flick down the
+     shelf would spend her coins on whatever it started on — so `down` only
+     arms this, and the lift commits it if `ui/scroll.js` says the gesture was
+     never a drag. */
+  let pendId = '';
+  let pendKind = '';
+  let pendIdx = -1;
 
   const pad = S6.pad;
   const rowH = S6.rowH;
@@ -194,13 +207,34 @@ export function createShop(opts = {}) {
   function height() { return H; }
   function topY() { return H * (1 - clamp(slide.x, 0, 1)); }
 
+  /* ---- the scrollable band: everything between the header and Done -------
+     The header carries the purse and Done is the way out, so neither may ever
+     travel — a control that scrolls off the screen is the failure this whole
+     thing exists to avoid. */
+  function bandTop() { return listTop(); }
+  function bandH() { return Math.max(0, closeRect().y - 8 - bandTop()); }
+  function contentH() { return Math.max(0, rows.length * rowH - S6.rowGap); }
+  function layout() { sc.measure(bandTop(), bandH(), contentH()); return sc; }
+
   /** rebuild the resolved rows. Cheap; called on open and after every buy. */
   function refresh() {
     rows = game.shopStock().map((it) => ({ ...it, glyph: glyphFor(it.id, it.kind) }));
   }
 
   function rowRect(i) {
-    return { x: pad, y: listTop() + i * rowH, w: W - pad * 2, h: rowH - S6.rowGap };
+    /* THE ONE PLACE THE OFFSET IS APPLIED. Hit-testing and drawing both come
+       through here, so they cannot disagree about where a row is — which is
+       the whole reason the offset is subtracted in the layout rather than
+       applied as a canvas translate at draw time. */
+    return {
+      x: pad, y: listTop() + i * rowH - sc.offset,
+      w: W - pad * 2, h: rowH - S6.rowGap,
+    };
+  }
+  /** ...and a row that has scrolled out of the band is not tappable */
+  function rowVisible(i) {
+    const r = rowRect(i);
+    return r.y + r.h > sc.top - 0.5 && r.y < sc.bottom + 0.5;
   }
   /** the right-hand action chip, when a row has a second thing to do */
   function chipRect(i) {
@@ -226,6 +260,10 @@ export function createShop(opts = {}) {
       if (why) return why;
       open = true;
       refresh();
+      /* opened fresh means opened at the top: coming back to a shelf she had
+         scrolled halfway down would hide the rows she knows are first */
+      sc.home();
+      dropPending();
       slide.to(1);
       sound(S6.sfx.open);
       return '';
@@ -233,6 +271,8 @@ export function createShop(opts = {}) {
     stop() {
       if (!open) return;
       open = false;
+      dropPending();
+      sc.reset();
       slide.to(0);
       sound(S6.sfx.close);
     },
@@ -241,7 +281,19 @@ export function createShop(opts = {}) {
     update(dt) {
       t += dt;
       slide.step(dt);
-      if (flashT > 0) {
+      /* the purse and the care gate can both move while she is looking at it
+         (a walk can finish, a trial can pay out), so the shelf is re-resolved
+         rather than snapshotted at open */
+      if (open) refresh();
+      layout();
+      sc.update(dt);
+      /* THE PRESS FOLLOWS THE FINGER FIRST, THE FLASH SECOND. While a touch is
+         held on a row the row stays down — she can hold it and think, and let
+         go somewhere else without buying anything. The flash below is what
+         plays AFTER a commit, and it is unchanged. */
+      if (pendId) {
+        presses.set(pendId, true);
+      } else if (flashT > 0) {
         /* down for the first `PRESS.dur * 1.1`, then released — so the row
            compresses and springs back while the highlight is still fading,
            rather than staying squashed for the whole 0.28s or snapping open the
@@ -251,33 +303,53 @@ export function createShop(opts = {}) {
         if (flashT === 0) presses.clear();
       }
       presses.update(dt);
-      /* the purse and the care gate can both move while she is looking at it
-         (a walk can finish, a trial can pay out), so the shelf is re-resolved
-         rather than snapshotted at open */
-      if (open) refresh();
     },
 
-    /** @returns true if the event was consumed */
+    /**
+     * @returns true if the event was consumed
+     *
+     * DOWN ARMS, THE LIFT COMMITS. Every other panel in the game acts on the
+     * `down`, and that is safe only for a surface that cannot move under a
+     * finger. This one can, so a `down` records what she is touching and the
+     * `up` spends the coins — but only if `ui/scroll.js` says the gesture in
+     * between was not a drag.
+     */
     pointer(ev) {
       if (!open) return false;
-      if (ev.type !== 'down') return true;
-      /* the close affordance, and the backdrop above the panel */
-      if (ev.y < topY() + 6) { shop.stop(); return true; }
-      const cl = closeRect();
-      if (hit(cl, ev)) { shop.stop(); return true; }
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const act = actionFor(row);
-        if (act === 'give' || act === 'wear') {
-          if (hit(chipRect(i), ev)) { doAction(row, act); return true; }
-        }
-        if (hit(rowRect(i), ev)) { doBuy(row); return true; }
+      layout();
+      /* the scroller sees every event FIRST — it is the thing that decides
+         whether this gesture is a tap at all */
+      sc.pointer(ev);
+
+      if (ev.type === 'down') {
+        armPending(ev);
+        return true;
       }
+      if (ev.type === 'move') {
+        /* HER FINGER HAS TRAVELLED, so whatever she was pressing is let go of.
+           `dragged` and not `drag === 'drag'`: a shelf that FITS does not
+           scroll, but sliding off a row is still not a tap on it. */
+        if (sc.dragged) dropPending();
+        return true;
+      }
+      if (ev.type === 'up') {
+        const p = { id: pendId, kind: pendKind, i: pendIdx };
+        dropPending();
+        /* `dragged` survives the `up` on purpose — see ui/scroll.js */
+        if (sc.dragged || !p.kind) return true;
+        commit(p);
+        return true;
+      }
+      if (ev.type === 'cancel') { dropPending(); return true; }
       return true;
     },
 
     draw(g) {
       if (slide.x < 0.002) return;
+      /* MEASURED HERE TOO, not only in `update`. The loop happens to run update
+         first, but a clip whose height came from a stale measure is a blank
+         panel, and that is too quiet a failure to leave resting on call order. */
+      layout();
       const c = g.ctx;
       const a = clamp(slide.x, 0, 1);
       const top = topY();
@@ -307,6 +379,12 @@ export function createShop(opts = {}) {
          she can pick up rather than as coloured bands. The edge hangs in the
          6-unit `rowGap` the layout already left, so nothing moves. */
       const rowDy = [];
+      /* CLIPPED TO THE BAND. A row scrolled past the top would otherwise be
+         drawn over the purse, and one past the bottom over the Done button —
+         the exact overlap this feature exists to stop. `sc.clip` is inert in
+         the sense that matters: with nothing to scroll the band is the whole
+         list and the clip never cuts anything. */
+      sc.clip(c);
       for (let i = 0; i < rows.length; i++) {
         const r = rowRect(i);
         const row = rows[i];
@@ -345,6 +423,7 @@ export function createShop(opts = {}) {
           });
         }
       }
+      sc.unclip(c);
       const cl = closeRect();
       /* Done is tactile too. Nothing can be SEEN pressing it — the sheet closes
          on the same down event — but the bottom edge is what makes it a button
@@ -366,6 +445,9 @@ export function createShop(opts = {}) {
         maxWidth: pr.w - 34,
       });
 
+      /* the type is clipped to the same band as the faces it sits on, or a
+         label rides up over the purse while its row is being cut off */
+      sc.clip(c);
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const r = rowRect(i);
@@ -424,6 +506,11 @@ export function createShop(opts = {}) {
         }
       }
 
+      sc.unclip(c);
+      /* AND THE THING THAT SAYS THERE IS MORE. Drawn outside the clip because
+         it marks the clip's own edge. Inert at twelve rows. */
+      sc.drawEdges(g, { x: pad - 2, w: W - pad * 2 + 4, face: PANEL, alpha: a });
+
       drawText(g, COPY.close, {
         ...type('labelMd', { weight: 800 }),
         x: cl.x + cl.w / 2, y: cl.y + cl.h / 2, anchor: 'free', align: 'center',
@@ -436,6 +523,12 @@ export function createShop(opts = {}) {
       return {
         open, weight: +slide.x.toFixed(3),
         coins: game.coins,
+        scroll: sc.debug,
+        pending: pendKind ? { kind: pendKind, id: pendId, i: pendIdx } : null,
+        /* where the Done button actually is, so a gate can assert that no row
+           is ever drawn underneath it — the failure this replaced */
+        closeY: +closeRect().y.toFixed(1),
+        rowsAt: rows.map((r, i) => +rowRect(i).y.toFixed(1)),
         /* deliberately included so a test can assert it: the shop knows the
            care-point total exists and never uses it for a price */
         carePoints: game.carePoints,
@@ -456,6 +549,48 @@ export function createShop(opts = {}) {
   }
   function hit(r, ev) {
     return ev.x >= r.x && ev.x <= r.x + r.w && ev.y >= r.y && ev.y <= r.y + r.h;
+  }
+
+  /* ---- arm / drop / commit ----------------------------------------------
+     The three halves of a tap. `armPending` decides WHAT is under the finger
+     and nothing else; `commit` is the only thing that spends anything. Keeping
+     the decision and the consequence apart is what makes "a drag buys nothing"
+     one line rather than a guard on every branch. */
+  function armPending(ev) {
+    dropPending();
+    if (ev.y < topY() + 6) { pendKind = 'backdrop'; pendId = 'backdrop'; return; }
+    if (hit(closeRect(), ev)) { pendKind = 'close'; pendId = 'close'; return; }
+    /* a touch outside the band is on chrome, and the rows below are clipped
+       out of it anyway — testing them would arm a row she cannot see */
+    if (!sc.inBand(ev.y)) return;
+    for (let i = 0; i < rows.length; i++) {
+      if (!rowVisible(i)) continue;
+      const row = rows[i];
+      const act = actionFor(row);
+      if ((act === 'give' || act === 'wear') && hit(chipRect(i), ev)) {
+        pendKind = 'chip'; pendIdx = i; pendId = row.id; return;
+      }
+      if (hit(rowRect(i), ev)) {
+        pendKind = 'row'; pendIdx = i; pendId = row.id; return;
+      }
+    }
+  }
+  function dropPending() {
+    if (pendId) presses.clear();
+    pendId = ''; pendKind = ''; pendIdx = -1;
+  }
+  function commit(p) {
+    if (p.kind === 'backdrop' || p.kind === 'close') { shop.stop(); return; }
+    /* the shelf is re-resolved every frame, so the row this index pointed at
+       when she touched it may have moved; the id is the identity */
+    const row = rows.find((r) => r.id === p.id);
+    if (!row) return;
+    if (p.kind === 'chip') {
+      const act = actionFor(row);
+      if (act === 'give' || act === 'wear') { doAction(row, act); return; }
+      return;
+    }
+    doBuy(row);
   }
 
   function doBuy(row) {

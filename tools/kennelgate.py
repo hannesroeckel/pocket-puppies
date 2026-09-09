@@ -134,13 +134,28 @@ LADDER = r"""() => {
      Done button leave, and at five dogs that is about 74 rather than 92. Reading
      the table here worked while every card was 92 and would have silently
      started tapping the wrong row the moment the fifth dog compressed them. */
+  /* A WHOLE TAP, NOT HALF OF ONE (8.29.0). This sent a `down` and stopped,
+     which was enough while every panel committed on the press. The kennel can
+     scroll now, so it arms on `down` and commits on the LIFT — a list that
+     moves under a finger cannot spend the press, or a flick to see the bottom
+     of it adopts somebody. A gate that sends half a gesture would have proved
+     that adopting no longer works.
+
+     THE Y COMES FROM `newCardAt`, NOT FROM `listTop + n * cardStep`. That
+     arithmetic was already the second version of this (the first read
+     `K.cardH` off BALANCE and would have missed the moment a fifth dog shrank
+     the cards) and it has the same fault again: it does not know the scroll
+     offset. The surface publishes where the card actually is. */
   const tapCard = () => {
     const sc = pp.loop.scene;
     const d = kdbg();
-    const n = d.roster.length;
-    const y = d.listTop + n * d.cardStep + d.cardH / 2;
+    const y = d.newCardAt !== null && d.newCardAt !== undefined
+      ? d.newCardAt + d.cardH / 2
+      : d.listTop + d.roster.length * d.cardStep + d.cardH / 2;
     const at = { x: pp.BALANCE.view.W / 2, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false };
     sc.pointer(app, { type: 'down', ...at });
+    pp.step(1/60, 2);
+    sc.pointer(app, { type: 'up', ...at });
     pp.step(1/60, 2);
     return at;
   };

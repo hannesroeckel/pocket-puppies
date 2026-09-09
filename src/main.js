@@ -1389,6 +1389,52 @@ async function boot() {
       loop.stepFixed(1 / 60, 2);
       return loop.scene.debug;
     },
+    /**
+     * A REAL DRAG, the way a thumb makes one: a press, a TRAIL of moves, and a
+     * lift. `tapAt` proves a tap; this is what proves a tap and a scroll are
+     * told apart — the thing standing between a flick down the kennel and an
+     * adopted dog (ui/scroll.js).
+     *
+     * A drag is not one event, which is the lesson 8.16.1 paid for: the disc
+     * was dead on arrival because the room routed `down` to it and nothing
+     * else, and the gate that "passed" was calling the layer's own handler.
+     * So this goes through `scene.pointer`, and it steps a frame between each
+     * move because the fling is measured off the stepped clock.
+     */
+    dragAt(x, y, dy, steps = 8) {
+      const sc = loop.scene;
+      const n = Math.max(1, steps | 0);
+      const slop = BALANCE.pet.tapMoveSlop;
+      let py = y, dist = 0;
+      sc.pointer(app, { type: 'down', x, y, id: 1, dx: 0, dy: 0, speed: 0, dist: 0, moved: false });
+      loop.stepFixed(1 / 60, 1);
+      for (let i = 1; i <= n; i++) {
+        const ny = y + (dy * i) / n;
+        const step = ny - py;
+        dist += Math.abs(step);
+        sc.pointer(app, {
+          type: 'move', x, y: ny, id: 1, dx: 0, dy: step,
+          speed: Math.abs(step), dist, moved: dist > slop,
+        });
+        py = ny;
+        loop.stepFixed(1 / 60, 1);
+      }
+      sc.pointer(app, {
+        type: 'up', x, y: py, id: 1, dx: 0, dy: 0, speed: 0, dist, moved: dist > slop,
+      });
+      loop.stepFixed(1 / 60, 2);
+      return loop.scene.debug;
+    },
+    /** a sixth dog, for proving the kennel lays out past its current roster */
+    addDog(name = 'Six') {
+      const dogs = game.state.dogs;
+      const clone = JSON.parse(JSON.stringify(dogs[0]));
+      clone.id = 'dog-extra-' + dogs.length;
+      clone.name = name;
+      dogs.push(clone);
+      loop.stepFixed(1 / 60, 2);
+      return game.roster().length;
+    },
     /** set the ladder class directly, to photograph or measure one */
     setClass(i) {
       const r = game.contest;

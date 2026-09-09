@@ -266,6 +266,28 @@ Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but m
       cards to the space the earned list and the Done button leave; at five they are at
       their 64-unit floor. Nothing in this game scrolls, by design, so a sixth breed needs
       a layout decision and not just a row.
+      - > **THE LAYOUT DECISION WAS TAKEN, 2026-09-09** — *"why cant we make the kennel
+        > and the shop scrollable?"*. **Five is now the ART's ceiling, not the layout's.**
+        > A panel scrolls when, and only when, its content does not fit
+        > (`src/ui/scroll.js`, ARCHITECTURE §39), so a sixth dog lays out instead of
+        > sliding the Done button up underneath the fifth — which is what it did, by 20
+        > units at a 40-unit inset. What is still needed for a sixth breed is a **sixth
+        > breed**: art in `dog/breeds.js`, a side sheet, and a ladder row. Nothing about
+        > the panel is in the way any more.
+        >
+        > **The rule's reason is kept, not waived.** "A child hunting for a row below the
+        > fold is a child who does not find it" was the objection, and the answer is that
+        > she is never left to guess: a list that scrolls fades at the edge it continues
+        > past and shows how much is left. And it is inert while the content fits, so the
+        > five-dog kennel and the twelve-row shop are unchanged to the pixel.
+        >
+        > **What this does NOT license, and the temptation is real:** the shop's twelve
+        > rows are still the catalogue. That cap was never about pixels — "a shop you
+        > cannot see the bottom of is the retention scaffolding research §7 warns about,
+        > and a list that fits is a list she can hold in her head" — so **the next thing
+        > added still has to replace something.** Scrolling made a thirteenth row legible;
+        > it did not make it a good idea. Same for decor: still care-point-earned, still
+        > not buyable.
 - **Kennel copy names no dog.** Every line on the adoption card and in its beat is a
   function of a ladder row and a pronoun table. This is not tidiness: the Cockapoo being
   spelled out in `ui/kennel.js`'s COPY was half of why there was nowhere to put a second
