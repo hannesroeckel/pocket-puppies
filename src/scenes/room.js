@@ -28,6 +28,9 @@ import { createWalk } from '../dog/walk.js';
 import { createContest } from '../dog/contest.js';
 import { createDisc } from '../dog/disc.js';
 import { capitalise } from '../state/game.js';
+/* WHAT TIME IT IS, IN THE ROOM. The model only — this file does the
+   painting, because it already owns the window. See daylight.js. */
+import { lightAt, bucketOf, drawRoomLight } from './daylight.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
 import { createToasts } from '../ui/toast.js';
@@ -50,7 +53,7 @@ import { drawPark, drawRing } from './outdoors.js';
    the per-frame assertion that says so. See ui/reach.js. */
 import reach from '../ui/reach.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
-import { decayLive, describeGap, reunionIntensity } from '../state/time.js';
+import { decayLive, describeGap, reunionIntensity, timeOfDay } from '../state/time.js';
 
 const VW = BALANCE.view.W, VH = BALANCE.view.H, FLOOR = BALANCE.view.floorY;
 const PA = BALANCE.particles;
@@ -79,14 +82,32 @@ const WIN = { x: 210, y: 104, w: 146, h: 214, r: 14 };
 /* ==========================================================================
    Baked room art
    ========================================================================== */
-function drawWindow(c) {
+/**
+ * @param L the light state for the time of day (scenes/daylight.js). The one
+ *   place in this file that knows the sun goes down.
+ *
+ * TWO THINGS IT REACHES, AND THE FIRST IS THE POINT. `sun` scales the OUTDOOR
+ * BLOOM — the spill of daylight onto the wall around the frame — so at night
+ * there is no glow around the window, which is a thing a wash drawn on top
+ * could never have taken away. `skyA` then replaces the glass itself.
+ *
+ * THE NIGHT GLASS IS DRAWN INSIDE THE EXISTING CLIP AND BEFORE THE GLAZING
+ * BARS, which is why this lives here and not in daylight.js: the bars are
+ * stroked OVER the glass further down, so anything repainting the glass from
+ * another file would erase them and have to redraw them. One file paints this
+ * window.
+ */
+function drawWindow(c, L) {
   const { x, y, w, h } = WIN;
-  const bl = c.createRadialGradient(x + w / 2, y + h * 0.55, 20, x + w / 2, y + h * 0.55, w * 1.5);
-  bl.addColorStop(0, 'rgba(255,240,199,0.55)');
-  bl.addColorStop(0.45, 'rgba(255,236,190,0.20)');
-  bl.addColorStop(1, 'rgba(255,236,190,0)');
-  c.fillStyle = bl;
-  c.fillRect(x - w, y - h * 0.35, w * 3, h * 2.1);
+  const sun = L ? L.sun : 1;
+  if (sun > 0.002) {
+    const bl = c.createRadialGradient(x + w / 2, y + h * 0.55, 20, x + w / 2, y + h * 0.55, w * 1.5);
+    bl.addColorStop(0, `rgba(255,240,199,${(0.55 * sun).toFixed(3)})`);
+    bl.addColorStop(0.45, `rgba(255,236,190,${(0.20 * sun).toFixed(3)})`);
+    bl.addColorStop(1, 'rgba(255,236,190,0)');
+    c.fillStyle = bl;
+    c.fillRect(x - w, y - h * 0.35, w * 3, h * 2.1);
+  }
 
   c.fillStyle = C.frameSh; roundRect(c, x - 11, y - 11, w + 22, h + 22, WIN.r + 7); c.fill();
   c.fillStyle = C.frame; roundRect(c, x - 9, y - 13, w + 18, h + 22, WIN.r + 6); c.fill();
@@ -123,6 +144,37 @@ function drawWindow(c) {
     [30, 33, 6, 3.6, 0.8], [42, 45, 7, 4, 0.35], [16, 28, 6, 3.4, 0.9]];
   c.fillStyle = '#8fa886';
   for (const l of lv) { ell(c, x + l[0], y + l[1], l[2], l[3], l[4]); c.fill(); }
+
+  /* ---- AND WHAT IS ACTUALLY OUT THERE, IF IT IS NOT DAYTIME -----------
+     Still inside the glass clip, over the daytime garden and under the
+     reflection below, so a dusk sky washes the hills rather than deleting
+     them and a night sky covers them completely. */
+  if (L && L.skyA > 0.004) {
+    c.save();
+    c.globalAlpha = clamp(L.skyA, 0, 1);
+    const ns = c.createLinearGradient(0, y, 0, y + h);
+    ns.addColorStop(0, L.skyTop);
+    ns.addColorStop(1, L.skyLow);
+    c.fillStyle = ns; c.fillRect(x, y, w, h);
+    if (L.star > 0.01) {
+      /* hashed, so they are the same stars every night rather than a different
+         sky each time she looks — the same argument the baked room makes about
+         its daisies not rearranging themselves */
+      c.globalAlpha = clamp(L.skyA * L.star, 0, 1);
+      c.fillStyle = '#fdf6e6';
+      const N = BALANCE.room.light.stars;
+      const SR = BALANCE.room.light.starR;
+      for (let i = 0; i < N; i++) {
+        const hx = Math.abs(Math.sin((i + 1) * 12.9898) * 43758.5453) % 1;
+        const hy = Math.abs(Math.sin((i + 1) * 78.233) * 43758.5453) % 1;
+        const hr = Math.abs(Math.sin((i + 1) * 39.425) * 43758.5453) % 1;
+        c.beginPath();
+        c.arc(x + hx * w, y + hy * h * 0.62, SR[0] + hr * (SR[1] - SR[0]), 0, TAU);
+        c.fill();
+      }
+    }
+    c.restore();
+  }
 
   const sh = c.createLinearGradient(x, y, x + w * 0.8, y + h);
   sh.addColorStop(0, 'rgba(255,255,255,0.34)');
@@ -541,6 +593,14 @@ export function createRoomScene() {
     }
   }
   function drawMotes(c, dt) {
+    /* DUST IN A SUNBEAM NEEDS A SUNBEAM. The band below is centred on the
+       window's beam, and 8.30.0 took that beam away after dark — so at
+       midnight these were motes hanging in light that is not in the picture,
+       which is exactly the fault §32 caught when the park kept the room's
+       bowls. They still MOVE at night (an undrawn mote is an invisible mote,
+       and they pick up where they were, the same argument the absence beat
+       makes); they are simply not lit. */
+    const sun = lightAt(dayT()).sun;
     c.fillStyle = '#fff3ce';
     for (const m of motes) {
       m.y -= m.sp * dt * PA.moteRise;
@@ -549,7 +609,7 @@ export function createRoomScene() {
       if (m.y < 90) { m.y = 790; m.x = rng.range(60, 380); }
       if (m.x < -20) m.x = 380;
       const band = clamp(1 - Math.abs((m.x + (m.y - 140) * 0.42) - 300) / 210, 0, 1);
-      c.globalAlpha = m.a * band * (0.55 + 0.45 * Math.sin(m.ph));
+      c.globalAlpha = m.a * band * (0.55 + 0.45 * Math.sin(m.ph)) * sun;
       if (c.globalAlpha > 0.01) { ell(c, m.x, m.y, m.r, m.r); c.fill(); }
     }
     c.globalAlpha = 1;
@@ -586,7 +646,30 @@ export function createRoomScene() {
       g.isUnlocked('rugBlue') ? 'blue' : 'warm',
       g.isUnlocked('garland') ? 'garland' : '-',
       g.isUnlocked('portrait') ? 'portrait:' + (g.dog.breedId || '') : '-',
+      /* WHAT TIME IT IS, QUANTISED. The light is baked into the room art (it
+         has to be: at night the sunbeam is not dimmer, it is gone), so the day
+         moving on is a reason to rebuild exactly like the rug changing is.
+         `bucketOf` is what stops that being every frame — see the note on
+         `light.buckets`.
+
+         IT IS LAST, AND IT HAS TO STAY LAST. The rebuild handler announces
+         which unlock arrived by comparing fields BY INDEX (`part(0)`, `part(1)`,
+         `part(2)`), so a field inserted above this one would shift all three
+         and make the room toast "a new rug turned up" every time the sun moved.
+         Appending is safe; inserting is not. */
+      't' + bucketOf(dayT()),
     ].join('|');
+  }
+
+  /**
+   * WHERE THE DAY HAS GOT TO, 0..1 from local midnight — or the pinned value a
+   * gate has asked for. One reader, so nothing else has to know that an
+   * override exists.
+   */
+  function dayT() {
+    const f = BALANCE.room.light.forceT;
+    if (f !== null && f !== undefined && Number.isFinite(+f)) return clamp(+f, 0, 1);
+    return timeOfDay().t;
   }
 
   /**
@@ -613,6 +696,10 @@ export function createRoomScene() {
 
   function buildRoom(view) {
     rugShown = decorSig();
+    /* SNAPSHOTTED ONCE, HERE, for the whole bake — `drawWindow` and the wash at
+       the end must be describing the same moment, and asking the clock twice
+       during one bake is how they would come to disagree at a bucket boundary. */
+    const light = lightAt(dayT());
     roomRng.reseed(BALANCE.rng.roomSeed);
     roomCv = makeOff(view.cw, view.ch);
     const c = roomCv.getContext('2d');
@@ -632,7 +719,7 @@ export function createRoomScene() {
     wf.addColorStop(0, 'rgba(150,96,58,0)'); wf.addColorStop(1, 'rgba(150,96,58,0.16)');
     c.fillStyle = wf; c.fillRect(x0, FLOOR - 120, w, 120);
 
-    drawWindow(c);
+    drawWindow(c, light);
     /* the portrait is painted from the dog's own palette, so the sitter is
        resolved here where the game is reachable and handed in as plain colours —
        `drawShelf` stays a pure art function that knows nothing about breeds */
@@ -693,17 +780,24 @@ export function createRoomScene() {
     c.globalAlpha = 1;
     c.restore();
 
-    c.save();
-    c.beginPath(); c.rect(x0, FLOOR, w, VH + BY - FLOOR); c.clip();
-    const pg = c.createRadialGradient(150, 700, 20, 150, 700, 300);
-    pg.addColorStop(0, 'rgba(255,240,196,0.34)');
-    pg.addColorStop(0.5, 'rgba(255,236,188,0.13)');
-    pg.addColorStop(1, 'rgba(255,236,188,0)');
-    c.fillStyle = pg;
-    c.save(); c.translate(150, 700); c.scale(1, 0.5); c.translate(-150, -700);
-    c.fillRect(-200, 400, 900, 600);
-    c.restore();
-    c.restore();
+    /* THE POOL OF SUN ON THE BOARDS, and it is the reason the light is baked
+       rather than washed over the top. At midnight there is no sun, so this is
+       simply not drawn — a translucent wash could only ever have made a sunbeam
+       DARKER, never absent, which is what makes a dimmed daytime room read as a
+       photograph at dusk instead of as evening. */
+    if (light.sun > 0.002) {
+      c.save();
+      c.beginPath(); c.rect(x0, FLOOR, w, VH + BY - FLOOR); c.clip();
+      const pg = c.createRadialGradient(150, 700, 20, 150, 700, 300);
+      pg.addColorStop(0, `rgba(255,240,196,${(0.34 * light.sun).toFixed(3)})`);
+      pg.addColorStop(0.5, `rgba(255,236,188,${(0.13 * light.sun).toFixed(3)})`);
+      pg.addColorStop(1, 'rgba(255,236,188,0)');
+      c.fillStyle = pg;
+      c.save(); c.translate(150, 700); c.scale(1, 0.5); c.translate(-150, -700);
+      c.fillRect(-200, 400, 900, 600);
+      c.restore();
+      c.restore();
+    }
 
     drawRug(c, rugPalette());
     drawBone(c, 96, 792, -0.22);
@@ -715,6 +809,14 @@ export function createRoomScene() {
     const ao = c.createLinearGradient(0, FLOOR, 0, FLOOR + 70);
     ao.addColorStop(0, 'rgba(110,60,32,0.26)'); ao.addColorStop(1, 'rgba(110,60,32,0)');
     c.fillStyle = ao; c.fillRect(x0, FLOOR, w, 70);
+
+    /* ---- AND WHAT TIME IT IS, LAST, OVER ALL OF IT ---------------------
+       The wash and the lamp go over the finished room and stop there: the dog,
+       the bowls, the ball and his sill are all drawn live afterwards and keep
+       their own lighting (§32 rule 2, "the dog is not relit"). At midday every
+       number in `light` is zero and this draws nothing at all, so the room she
+       knows in the afternoon is the one that has always been there. */
+    drawRoomLight(c, light, { x0, x1, y0: -BY, y1: VH + BY });
   }
 
   function buildOverlay(view) {

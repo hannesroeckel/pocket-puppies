@@ -2736,6 +2736,81 @@ export const BALANCE = {
     motes: 30, moteSpeed: [4, 13], moteRise: 0.5, moteDrift: 0.30,
   },
 
+  /* ---- the room, and what time it is in it ----------------------------
+     Read `src/scenes/daylight.js`'s header before touching any of this.
+
+     `state/time.js` has computed `timeOfDay()` since stage 1 with a docstring
+     saying the phase was "for lighting later". Later never came — the value
+     was read by nothing, and the room looked the same at breakfast as at
+     bedtime.
+
+     THESE NUMBERS REACH THE BAKED ROOM ONLY. Not the dog (§32 rule 2: his
+     shading was tuned over eight stages and a background may not touch it),
+     not the bowls, not the ball, not what is on his sill — all of those are
+     drawn live, after the bake. The consequence is deliberate and is the same
+     one the park accepted: NIGHT IS DIM AND WARM, never dark and blue, because
+     the room has to stay a place a warmly-lit dog can stand in without looking
+     pasted on. `dim` above about 0.36 is where he starts to.
+     --------------------------------------------------------------------- */
+  room: {
+    light: {
+      /* HOW MANY STEPS THE DAY IS QUANTISED INTO, and this is the price of
+         baking rather than washing over. A change of bucket rebuilds the room
+         (through `decorSig`), so this is "how often may the room be rebuilt at
+         worst": 96 is one step every fifteen minutes, against sessions the
+         design says are "90 seconds or 20 minutes". Most sessions cross no
+         boundary; one that does pays a few milliseconds of flat fills. */
+      buckets: 96,
+      /* A FIXED TIME, for gates and for looking at one. `null` means "ask the
+         clock", which is every real session. */
+      forceT: null,
+
+      /* the wash that takes the corners down, and the pool that brings the
+         middle back up. One flat darkening fill is a picture with the
+         brightness turned down; the GAP between these two is what says a lamp
+         is on somewhere. */
+      coolInk: '#241d3a',
+      /* deliberately not the window (x 210..356) and not the floor pool the
+         window already casts at (150, 700) — a glow centred on either would
+         read as the sun still being up */
+      lampAt: [150, 300], lampR: 430, lampA: 0.30,
+
+      /* THE DAY, AS KEYFRAMES, `at` being 0..1 from local midnight. It WRAPS:
+         the last lerps round to the first, so 23:50 and 00:10 are ten minutes
+         apart and not a whole day.
+           sun    how much daylight reaches the art — scales the window's
+                  outdoor bloom AND the pool of sun on the floorboards, which
+                  is the thing a wash could never have removed
+           dim    the cool wash
+           lamp   the warm pool
+           skyA   how much of the window's daytime glass is replaced
+           star   how visible the stars in it are
+         The two `skyA: 0` rows still carry sky colours: they are never drawn
+         at those keys, but they are lerped THROUGH on the way to the ones that
+         are, and a jump to black at the first frame of dusk is what happens if
+         they are left as placeholders. */
+      keys: [
+        { at: 0.00, sun: 0.00, dim: 0.34, lamp: 1.00, skyA: 1.00, skyTop: '#121a30', skyLow: '#26304a', star: 1.00 },
+        { at: 0.21, sun: 0.00, dim: 0.32, lamp: 0.95, skyA: 1.00, skyTop: '#141c34', skyLow: '#2c3450', star: 0.90 },
+        { at: 0.28, sun: 0.30, dim: 0.18, lamp: 0.50, skyA: 0.62, skyTop: '#8a7fa8', skyLow: '#f2c39a', star: 0.15 },
+        { at: 0.36, sun: 0.85, dim: 0.04, lamp: 0.10, skyA: 0.25, skyTop: '#a8c6dc', skyLow: '#f6dcbc', star: 0.00 },
+        { at: 0.46, sun: 1.00, dim: 0.00, lamp: 0.00, skyA: 0.00, skyTop: '#bcdbe4', skyLow: '#f8ecc8', star: 0.00 },
+        { at: 0.62, sun: 1.00, dim: 0.00, lamp: 0.00, skyA: 0.00, skyTop: '#bcdbe4', skyLow: '#f8ecc8', star: 0.00 },
+        { at: 0.74, sun: 0.70, dim: 0.05, lamp: 0.12, skyA: 0.22, skyTop: '#9aa6c8', skyLow: '#f3b783', star: 0.00 },
+        { at: 0.80, sun: 0.25, dim: 0.16, lamp: 0.50, skyA: 0.55, skyTop: '#6e6f9e', skyLow: '#f0a86a', star: 0.10 },
+        { at: 0.88, sun: 0.00, dim: 0.30, lamp: 0.92, skyA: 1.00, skyTop: '#1b2440', skyLow: '#333c58', star: 0.70 },
+      ],
+      /* SKY ALPHAS ARE HELD DOWN AT DAWN AND DUSK ON PURPOSE. Rendered at
+         0.80/0.75 first and the window went FLAT — a uniform amber panel
+         with the garden's hills wiped out, which reads as a blind pulled
+         down rather than as evening. At 0.62/0.55 the hills survive as
+         darker shapes behind the colour, which is what dusk looks like.
+         Only true night goes to 1.0, where there really is nothing to see. */
+      /* the stars, hashed so they are in the same place every night */
+      stars: 14, starR: [0.7, 1.5],
+    },
+  },
+
   /* ---- ui ------------------------------------------------------------ */
   ui: {
     /* ====================================================================

@@ -150,6 +150,21 @@ def boot(pg, url, fresh=True):
     # game, which looked like a rendering bug in whatever was being tested.
     pg.evaluate("() => { const b = document.getElementById('boot');"
                 "        if (b) b.remove(); }")
+
+    # ---- AND THE TIME OF DAY, FOR THE SAME REASON THE VEIL IS LIFTED -------
+    # 8.30.0 gave the room a time of day, and `PIN` above freezes `Date.now` to
+    # 1767225600000 — which is midnight. So from that release every gate in this
+    # folder would have started rendering the room AT NIGHT, silently: dimmer
+    # walls, no sunbeam, a dark window. Not one of them is about the light, and
+    # every baseline in `review/` was captured against a room that ignored the
+    # clock.
+    #
+    # That is a property of pinning the clock rather than of anything under
+    # test, exactly like the boot veil, so it is pinned here rather than argued
+    # about in nineteen gates. `tools/lightgate.py` sets `forceT` itself, which
+    # is the whole point of the override existing.
+    pg.evaluate("() => { const B = window.__pp && window.__pp.BALANCE;"
+                "        if (B && B.room && B.room.light) B.room.light.forceT = 0.54; }")
     pg.evaluate("() => window.__pp.loop.stepFixed(1/60, 8)")
 
     # ---- THE SAFE-AREA INSET, APPLIED THE WAY A ROTATION APPLIES IT --------

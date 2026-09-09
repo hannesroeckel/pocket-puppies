@@ -109,6 +109,25 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.30.0: THE ROOM KNOWS WHAT TIME IT IS. ONE NEW MODULE —
+   `src/scenes/daylight.js` — so this generation MUST move and it MUST appear in
+   PRECACHE below: `scenes/room.js` imports it unconditionally, and a phone that
+   took this generation without it would fail to resolve the import offline and
+   show a blank screen (the failure 8.5.0's note describes). NO SCHEMA BUMP.
+   `state/time.js` has computed `timeOfDay()` since stage 1 with a docstring
+   saying the phase was "for lighting later"; later never came, and the room
+   looked the same at breakfast as at bedtime.
+   IT IS BAKED, NOT WASHED OVER, and that is the whole design: at night the
+   sunbeam on the floorboards is not dimmer, it is GONE, which no translucent
+   overlay can do. So the light reaches the room art itself, through the same
+   `decorSig()` rebuild the rug and the portrait already use, quantised to
+   `light.buckets` (96 — one step per fifteen minutes) so the day moving on
+   cannot rebuild the room every frame.
+   THE DOG IS NOT RELIT (§32 rule 2), proven by rendering the same frozen dog at
+   noon and midnight and requiring his coat to be byte-identical. Midday draws
+   NOTHING, so the afternoon room is pixel-for-pixel the 8.29.0 one.
+   `py tools/check-precache.py` now expects 73 entries.
+
    8.29.0: A PANEL THAT OUTGROWS THE SCREEN SCROLLS INSTEAD OF HIDING A BUTTON.
    ONE NEW MODULE — `src/ui/scroll.js` — so this generation MUST move and it MUST
    appear in PRECACHE below: `ui/shop.js` and `ui/kennel.js` both import it
@@ -393,7 +412,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.29.0';
+const VERSION = '8.30.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
@@ -453,6 +472,7 @@ const PRECACHE = [
   './src/engine/rng.js',
   './src/engine/sfx.js',
   './src/engine/spring.js',
+  './src/scenes/daylight.js',
   './src/scenes/outdoors.js',
   './src/scenes/props.js',
   './src/scenes/room.js',
