@@ -30,7 +30,7 @@ import { createDisc } from '../dog/disc.js';
 import { capitalise } from '../state/game.js';
 /* WHAT TIME IT IS, IN THE ROOM. The model only — this file does the
    painting, because it already owns the window. See daylight.js. */
-import { lightAt, bucketOf, drawRoomLight } from './daylight.js';
+import { lightAt, bucketOf, drawRoomLight, dayT } from './daylight.js';
 import { createHud } from '../ui/hud.js';
 import { createNav } from '../ui/nav.js';
 import { createToasts } from '../ui/toast.js';
@@ -53,7 +53,7 @@ import { drawPark, drawRing } from './outdoors.js';
    the per-frame assertion that says so. See ui/reach.js. */
 import reach from '../ui/reach.js';
 import { exportSave, importSave, writeNow, clear as clearSave } from '../state/save.js';
-import { decayLive, describeGap, reunionIntensity, timeOfDay } from '../state/time.js';
+import { decayLive, describeGap, reunionIntensity } from '../state/time.js';
 
 const VW = BALANCE.view.W, VH = BALANCE.view.H, FLOOR = BALANCE.view.floorY;
 const PA = BALANCE.particles;
@@ -659,17 +659,6 @@ export function createRoomScene() {
          Appending is safe; inserting is not. */
       't' + bucketOf(dayT()),
     ].join('|');
-  }
-
-  /**
-   * WHERE THE DAY HAS GOT TO, 0..1 from local midnight — or the pinned value a
-   * gate has asked for. One reader, so nothing else has to know that an
-   * override exists.
-   */
-  function dayT() {
-    const f = BALANCE.room.light.forceT;
-    if (f !== null && f !== undefined && Number.isFinite(+f)) return clamp(+f, 0, 1);
-    return timeOfDay().t;
   }
 
   /**
