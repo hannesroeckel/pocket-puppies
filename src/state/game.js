@@ -221,7 +221,7 @@ export function newState(now = Date.now(), opts = {}) {
        Overriding the ringer switch means claiming iOS's *playback* audio
        session, and *playback* is non-mixing BY DEFINITION — so the game was
        stopping whatever music or podcast the phone was playing, for as long as
-       it was open. A children's toy that silences the room it is in is worse
+       it was open. A toy that silences the room it is in is worse
        behaved than one that is quiet when the phone is set to quiet.
        So the polite behaviour is the default and the override is one tap away
        in Settings, which is the opposite way round from 8.18's decision and

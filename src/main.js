@@ -958,8 +958,8 @@ async function boot() {
      * IT IS NOT `stroll.take(i)`, AND THAT IS THE WHOLE POINT. 8.16.1: a gate
      * that drives a layer's own handler proves the handler works and proves
      * nothing at all about whether the touch ever reaches it. The room dispatches
-     * the nav, the HUD and the sill before most layers; this path is the one the
-     * child's thumb takes.
+     * the nav, the HUD and the sill before most layers; this path is the one
+     * her thumb takes.
      *
      * @param i     which offered find (0-based)
      * @param dt    step size

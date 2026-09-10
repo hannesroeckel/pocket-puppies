@@ -4805,7 +4805,7 @@ times with a reason attached:
 
 | where | the rule, verbatim |
 |---|---|
-| `ui/kennel.js` | *"NOTHING IN THIS GAME SCROLLS, and that is a design property rather than an omission — no surface in the tree has a scroll offset, because a child hunting for a row below the fold is a child who does not find it."* |
+| `ui/kennel.js` | *"NOTHING IN THIS GAME SCROLLS, and that is a design property rather than an omission — no surface in the tree has a scroll offset, because a player hunting for a row below the fold is a player who does not find it."* |
 | `state/balance.js` | *"THE SHOP DOES NOT SCROLL. That is a constraint on the catalogue, not a thing to solve with a scroll view: a shop you cannot see the bottom of is the retention scaffolding research §7 warns about, and a list that fits is a list she can hold in her head."* |
 
 **Neither is repealed.** What is repealed is a third thing that was never a decision, because
@@ -4832,12 +4832,12 @@ and call it a layout".
    gesture claimed. **The twelve-row shelf and the five-dog kennel are pixel-for-pixel what they
    were**, which is asserted positionally by `tools/scrollgate.py` and was additionally checked
    by rendering the five-dog kennel before and after and comparing the two PNGs byte for byte.
-   The child who would have hunted below the fold is never given a fold to hunt below.
+   The player who would have hunted below the fold is never given a fold to hunt below.
 2. **It says there is more.** The objection was never *"scrolling is bad"*, it was *"she will not
    know"*. A list that scrolls draws a fade into the panel colour at the edge it continues past,
    plus a thumb saying how much is left — so "there is more below" is a thing on the screen
    rather than a thing she has to guess. The fade alone says the list continues; the thumb is
-   what says whether that is one row or nine, which is what stops a child giving up halfway.
+   what says whether that is one row or nine, which is what stops a player giving up halfway.
 3. **It is not a licence to grow the catalogue.** The shop's rule is about restraint and lives in
    SCOPE.md. Twelve rows is still the catalogue and the next thing added still has to replace
    something. This only means a thirteenth would be legible instead of hidden under Done.

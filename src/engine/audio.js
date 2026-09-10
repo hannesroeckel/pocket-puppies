@@ -44,7 +44,7 @@
    session CATEGORY — the one the ringer switch mutes — and not the sound of a
    place. The road sounds are called BEDS for exactly that reason: confusing the
    two would put the silent-switch work at risk, and that work is what makes the
-   game audible at all for a child who keeps her phone on silent.
+   game audible at all for someone who keeps her phone on silent.
 
    The published surface from ARCHITECTURE §11.2 grows by one, additively:
    `{ unlock(), ready, play(name, opts), bed(name, opts), setEnabled(on),

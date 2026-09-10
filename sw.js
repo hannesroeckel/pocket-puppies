@@ -276,7 +276,7 @@
    (`adoptDog` -> `newDog`), NOT read from the ladder on every frame. So this
    changes who arrives from now on and deliberately does not reach back into a
    Shiba somebody has already brought home — silently changing the pronouns of a
-   dog a child has already named and bonded with is worse than the
+   dog she has already named and bonded with is worse than the
    inconsistency, and at a 1600-point gate reached minutes ago there is almost
    certainly nobody to be inconsistent with.
 

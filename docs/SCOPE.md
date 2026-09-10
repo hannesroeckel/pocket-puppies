@@ -254,7 +254,7 @@ Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but m
     than restated. `kennel.max` is 5.
     - **2400 and 3400 keep the ladder's existing rhythm, on the human's decision.** The
       spacing has been about ×1.6 since stage 6 and the alternative on the table was to
-      pull all four dogs inside a fortnight (400/800/1300/1900) so a child meets everybody
+      pull all four dogs inside a fortnight (400/800/1300/1900) so she meets everybody
       sooner. He chose the existing rhythm knowing the cost: at the ~150–205 care points
       an attentive day earns, the Corgi is around day 12–16 and the Golden day 17–23.
       Recorded because the temptation to "fix" a number that looks far away is exactly how
@@ -275,8 +275,8 @@ Championship. Entry gate stays (a hungry or parched dog shouldn't compete) but m
         > breed**: art in `dog/breeds.js`, a side sheet, and a ladder row. Nothing about
         > the panel is in the way any more.
         >
-        > **The rule's reason is kept, not waived.** "A child hunting for a row below the
-        > fold is a child who does not find it" was the objection, and the answer is that
+        > **The rule's reason is kept, not waived.** "A player hunting for a row below the
+        > fold is a player who does not find it" was the objection, and the answer is that
         > she is never left to guess: a list that scrolls fades at the edge it continues
         > past and shows how much is left. And it is inert while the content fits, so the
         > five-dog kennel and the twelve-row shop are unchanged to the pixel.

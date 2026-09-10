@@ -745,7 +745,7 @@ export const BALANCE = {
 
        A REAL THUMB, NOT A FRAME. 0.16 either side is ~10 frames at 60fps, which
        is generous by the standards of a timing game and correct by the standards
-       of an eight-year-old on a phone on a bus.
+       of someone on a phone on a bus.
 
        THERE IS NO `at` ANY MORE, and its absence is the point. It used to say
        where in the flight the disc was catchable, as a share — 0.86 — and the
@@ -1949,7 +1949,7 @@ export const BALANCE = {
          rather than an extrapolation. The spacing has been about x1.6 since stage
          6 (90, 150, 220, 400, 650, 1100, 1600) and the alternative on the table
          was to pull all four dogs inside a fortnight — 400/800/1300/1900 — so
-         that a child meets everybody sooner. The human chose the existing
+         that she meets everybody sooner. The human chose the existing
          rhythm knowing what it costs: at the ~150-205 care points an attentive
          day earns, the Corgi is around day 12-16 and the Golden around day
          17-23. Recorded because the temptation to "fix" a number that looks far
@@ -3139,7 +3139,7 @@ export const BALANCE = {
        well under the distance anybody moves when they mean to scroll.
 
        `fadeA` and the bar ARE THE FEATURE, not decoration. The objection to
-       scrolling was "a child hunting for a row below the fold is a child who
+       scrolling was "a player hunting for a row below the fold is a player who
        does not find it", and the answer is that she is never left to guess:
        the fade says the list continues and the bar says how much of it is
        left. Turning these off does not make it tidier, it reinstates the

@@ -352,8 +352,8 @@ export function createKennel(opts = {}) {
    * unreachable behind another.
    *
    * NOTHING IN THIS GAME SCROLLS, and that is a design property rather than an
-   * omission — no surface in the tree has a scroll offset, because a child
-   * hunting for a row below the fold is a child who does not find it. So the
+   * omission — no surface in the tree has a scroll offset, because a player
+   * hunting for a row below the fold is a player who does not find it. So the
    * cards give way instead, and they give way ONLY when they have to: the
    * clamp's ceiling is the same 92 the panel has always used, so at one, two,
    * three or four cards every pixel of this surface is where it was. The

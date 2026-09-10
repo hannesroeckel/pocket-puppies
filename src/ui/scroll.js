@@ -6,8 +6,8 @@
 
      ui/kennel.js  "NOTHING IN THIS GAME SCROLLS, and that is a design property
                     rather than an omission — no surface in the tree has a
-                    scroll offset, because a child hunting for a row below the
-                    fold is a child who does not find it."
+                    scroll offset, because a player hunting for a row below the
+                    fold is a player who does not find it."
      balance.js    "THE SHOP DOES NOT SCROLL. That is a constraint on the
                     catalogue, not a thing to solve with a scroll view: a shop
                     you cannot see the bottom of is the retention scaffolding
@@ -29,7 +29,7 @@
    1. IT ONLY SCROLLS WHEN IT MUST. `max` is `contentH - viewH` and is zero
       whenever the content fits, and a zero `max` makes every path in here
       inert: no offset, no affordance drawn, no gesture claimed. So every
-      surface that fits today is pixel-for-pixel what it was, and the child who
+      surface that fits today is pixel-for-pixel what it was, and the player who
       would have hunted below the fold is never given a fold to hunt below.
       This is the whole answer to the kennel's objection and it is why `can`
       is a derived fact rather than a flag anybody sets.
@@ -259,7 +259,7 @@ export function createScroll(opts = {}) {
 
       /* THE THUMB, which is the part that says HOW MUCH more. A fade says the
          list continues; it does not say whether that is one row or nine, and
-         "nearly there" is the thing that stops a child giving up halfway. It
+         "nearly there" is the thing that stops a player giving up halfway. It
          brightens under a finger so the drag has something that answers it. */
       const trackH = viewH - SC.barPad * 2;
       if (trackH > SC.barMinH) {

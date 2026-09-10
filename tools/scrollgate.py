@@ -3,7 +3,7 @@ tools/scrollgate.py — A PANEL THAT OUTGROWS THE SCREEN (8.29.0).
 
 `src/ui/scroll.js`, used by the shop and the kennel. Two surfaces had written
 down that nothing in this game scrolls, and both had written down a reason —
-"a child hunting for a row below the fold is a child who does not find it", and
+"a player hunting for a row below the fold is a player who does not find it", and
 "a list that fits is a list she can hold in her head". Neither is repealed. What
 is replaced is the third thing, which was never a decision: a panel that outgrew
 its screen had no honest way to fail, and answered by letting `closeRect`'s own
@@ -16,7 +16,7 @@ the way it could quietly stop being true:
      objection above, so it is the first thing checked and it is checked
      positionally: at twelve shop rows and five dogs, `can` is false, the offset
      is zero, and every row is at exactly the y the pre-scroll arithmetic put it
-     at. A surface that fits has no fold for a child to hunt below.
+     at. A surface that fits has no fold for a player to hunt below.
 
   B  ...AND IT SCROLLS WHEN IT MUST. With a sixth dog — measured at 20 units of
      overflow at a 40-unit inset, which is what used to hide the Done button —

@@ -627,7 +627,7 @@ export const RECIPES = {
     t: K.t, dur: 1.5, f: 240, f2: 150, q: 0.6, type: 'lowpass',
     gain: 0.058 * K.g, a: 0.55, sus: 0.75, d: 0.55,
   }),
-  /* two flat quacks, which is the one river sound a child names instantly */
+  /* two flat quacks, which is the one river sound anyone names instantly */
   'road-duck': (K) => {
     const g = 0.050 * K.g;
     for (let i = 0; i < 2; i++) {
@@ -651,7 +651,7 @@ export const RECIPES = {
    "AMBIENT" IS A WORD THIS CODEBASE ALREADY USES FOR SOMETHING ELSE. In
    `engine/audio.js` it is iOS's audio-session CATEGORY — the one the ringer
    switch applies to — and confusing the two would be genuinely dangerous,
-   because the session work is what makes the game audible for a child who
+   because the session work is what makes the game audible for someone who
    keeps her phone on silent. So these are BEDS, and the road they belong to is
    in the name.
 
