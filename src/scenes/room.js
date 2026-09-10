@@ -1846,6 +1846,10 @@ export function createRoomScene() {
         game: app.game, pet, idle, rng, reduced: app.reduced,
         spawn: (kind, vx, vy) => spawn(kind, vx, vy),
         sound: (name) => app.audio.play(name),
+        /* A SUSTAINED SOUND, for the road he walks down (8.32.0). Passed as a
+           function rather than the audio object, exactly like `sound` above, so
+           the walk cannot reach anything else in the engine. */
+        bed: (name, o) => app.audio.bed(name, o),
         toast: (msg) => toasts.show(msg),
         busyElsewhere: () => !!(care.modal || train.modal || (toy && toy.busy) || reunion.active),
       });

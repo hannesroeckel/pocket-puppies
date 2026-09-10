@@ -13,7 +13,7 @@
        and reports whether the resume really took; `main.js` keeps calling it on
        every touch until it has. A promise that resolves is not evidence.
      - Nothing autoplays. `play()` before a gesture is a no-op that returns
-       false, and there is no ambience track to start.
+       false, and so is `bed()` — see the note on that word below.
 
    WHAT ELSE IS POLICY HERE, NOT DECORATION.
 
@@ -28,14 +28,30 @@
    device, so nothing in the game may pair feedback with vibration — the reason
    `boop` and `sit-thump` carry a physical thump in the sound itself.
 
-   NO NOTIFICATION SOUNDS, no reminders, no ambience that plays when she is not
-   looking. GIFT-READY §3.
+   NO NOTIFICATION SOUNDS AND NO REMINDERS. GIFT-READY §3.
 
-   The published surface from ARCHITECTURE §11.2 is unchanged and additive:
-   `{ unlock(), ready, play(name, opts), setEnabled(on), voices, pending }`.
+   AND STILL NOTHING THAT PLAYS WHEN SHE IS NOT LOOKING — but that sentence used
+   to read "no ambience", and as of 8.32.0 that would be a lie. `bed()` holds a
+   SUSTAINED sound, which the walk uses for the road he is on. What keeps it
+   inside the original promise is that it is owned by a beat rather than by the
+   app: `dog/stroll.js` starts it when the road fades in, fades it with the same
+   dissolve, and stops it when the road goes — half a minute, on screen, while
+   she is watching. Nothing starts a bed at launch, on a timer, or in the
+   background, and `visibilitychange -> hidden` suspends the context under it
+   like everything else.
+
+   BEWARE THE WORD "AMBIENT" IN THIS FILE. Everywhere below it means iOS's audio
+   session CATEGORY — the one the ringer switch mutes — and not the sound of a
+   place. The road sounds are called BEDS for exactly that reason: confusing the
+   two would put the silent-switch work at risk, and that work is what makes the
+   game audible at all for a child who keeps her phone on silent.
+
+   The published surface from ARCHITECTURE §11.2 grows by one, additively:
+   `{ unlock(), ready, play(name, opts), bed(name, opts), setEnabled(on),
+      voices, pending }`.
    ========================================================================== */
 import BALANCE from '../state/balance.js';
-import { resolve, voiceFor, NEUTRAL } from './sfx.js';
+import { resolve, voiceFor, NEUTRAL, BEDS } from './sfx.js';
 
 const AU = BALANCE.audio;
 
@@ -127,6 +143,12 @@ export function createAudio(settings = { sound: true }, opts = {}) {
   let tried = 0;             // how many gestures we have spent trying to unlock
   let lastState = 'none';
   const missing = new Set();
+  /* EVERY SUSTAINED SOUND CURRENTLY PLAYING (8.32.0). One-shots need no such
+     list — they end on their own — but a bed runs until somebody stops it, so
+     the engine keeps the set that lets it stop them all: sound turned off, the
+     context torn down, or a scene going away mid-walk. Each entry is that
+     bed's own `stopAll`, which is idempotent. */
+  const beds = new Set();
   const last = Object.create(null);   // name -> last play time, for the throttle
   let live = 0;              // recipes fired in the current window
   let liveAt = 0;
@@ -310,6 +332,7 @@ export function createAudio(settings = { sound: true }, opts = {}) {
     } catch (e) {
       /* a context without a graph is worse than no context: play() would build
          nodes with nowhere to go */
+      for (const st of [...beds]) st();
       ctx = null; master = null; limiter = null;
       return false;
     }
@@ -395,6 +418,10 @@ export function createAudio(settings = { sound: true }, opts = {}) {
     if (sessionWanted()) ensureSession(); else stopSession();
     if (!master) return want;
     try {
+      /* AND STOP THE ROADS. A bed behind a zeroed master is inaudible but
+         still running — oscillators, filters and an LFO per road, for a player
+         who has just said she wants silence. Gain zero is a mute; this is off. */
+      if (!want) { for (const st of [...beds]) st(); }
       master.gain.value = want ? AU.master : 0;
       /* AND cut the wire. Gain zero is a number somebody could ramp back over a
          tail; a disconnected node cannot make a sound at all. */
@@ -499,6 +526,86 @@ export function createAudio(settings = { sound: true }, opts = {}) {
         return false;
       }
     },
+
+    /**
+     * A SUSTAINED SOUND, WHICH THIS ENGINE HAS NEVER HAD (8.32.0).
+     *
+     * Everything else here is one-shot: `play()` schedules a recipe with an
+     * envelope that ends, and nothing is ever handed back because nothing needs
+     * stopping. A road has to keep going for half a minute and then stop, so it
+     * needs an owner — this returns one.
+     *
+     * IT IS SILENT AND HARMLESS IN EVERY FAILURE MODE, exactly like `play()`,
+     * and the handle is ALWAYS a real object even when nothing was built. A
+     * caller that has to check whether it got a bed before it can turn one down
+     * is a caller with a null check in its draw path, which is how audio ends up
+     * breaking a frame — the thing the `try` in `play()` exists to prevent.
+     *
+     * THE HANDLE OWNS ITS OWN GAIN NODE, between the bed and `master`, so the
+     * stroll can fade it with the same dissolve the road fades on without
+     * touching anything the rest of the game is playing through.
+     *
+     * @returns {{ set(v):void, stop():void, live:boolean }}
+     */
+    bed(name, o) {
+      const dead = { set() {}, stop() {}, get live() { return false; } };
+      if (!name || !BEDS[name]) {
+        if (name && !missing.has(name)) missing.add(name);
+        return dead;
+      }
+      if (!settings || !settings.sound) return dead;
+      /* the same no-autoplay rule as `play()`: nothing is built before a
+         gesture, and "we were locked" is not a debt the bank owes */
+      if (!ctx || ctx.state !== 'running' || !connected) return dead;
+
+      const opt = o || {};
+      let g = null;
+      let stops = null;
+      try {
+        g = ctx.createGain();
+        g.gain.value = opt.gain === undefined ? 0 : opt.gain;
+        g.connect(master);
+        stops = BEDS[name]({ ctx, out: g, t: ctx.currentTime + AU.lead }) || [];
+      } catch (e) {
+        counts.failed++;
+        try { if (g) g.disconnect(); } catch (e2) { /* never mind */ }
+        return dead;
+      }
+      beds.add(stopAll);
+      let alive = true;
+
+      function stopAll() {
+        if (!alive) return;
+        alive = false;
+        beds.delete(stopAll);
+        for (const s of stops) {
+          /* a source stopped twice throws, and a source whose context has gone
+             away throws differently — neither is worth a frame */
+          try { s.stop(); } catch (e) { /* already done */ }
+          try { s.disconnect(); } catch (e) { /* already done */ }
+        }
+        try { g.disconnect(); } catch (e) { /* already done */ }
+      }
+
+      return {
+        set(v) {
+          if (!alive || !g) return;
+          const want = Math.max(0, Math.min(1, +v || 0));
+          /* RAMPED, NOT ASSIGNED. This is called every frame from a spring, and
+             a bare `.value =` per frame on a running graph is a zipper. */
+          try {
+            g.gain.setTargetAtTime(want, ctx.currentTime, AU.bedGlide);
+          } catch (e) { /* the context went away underneath us */ }
+        },
+        stop: stopAll,
+        get live() { return alive; },
+      };
+    },
+
+    /** every road still playing — teardown and the gate both need this */
+    get bedsLive() { return beds.size; },
+    /** stop every bed, whatever owns it. The scene going away, or sound off. */
+    stopBeds() { for (const s of [...beds]) s(); },
 
     /** names asked for that the bank cannot answer — should stay empty now */
     get pending() { return [...missing]; },

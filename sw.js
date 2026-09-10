@@ -109,6 +109,27 @@
    otherwise serve the narrow bowl for ever. Forward only, as always: 8.5.0
    went out, so this is 8.6.0 and never anything at or below it.
 
+   8.32.0: THE ROAD YOU CAN HEAR. NO NEW FILES (`py tools/check-precache.py`:
+   still 73), and the generation MUST still move — `engine/audio.js`,
+   `engine/sfx.js`, `dog/stroll.js`, `dog/walk.js`, `scenes/room.js` and
+   `state/balance.js` all changed, and a phone serving a cached `sfx.js` against
+   a fresh `audio.js` would call `BEDS[...]` as undefined.
+   "i also want to add some ambient sounds to the walk, adapted to the route
+   that is taken". Two layers: a BED per road that says where he is, and sparse
+   one-shots that say something is alive there — a bed on a loop is weather, and
+   weather stops being heard after about fifteen seconds, which is half the beat.
+   `bed()` IS THE FIRST SUSTAINED SOUND THIS ENGINE HAS EVER HELD. Everything
+   else is one-shot with an envelope that ends and nothing to hand back. It obeys
+   every rule `play()` does — silent before the gesture, silent with sound off,
+   dead for a name the bank cannot answer — and the handle it returns is ALWAYS a
+   real object, so no caller needs a null check in a draw path.
+   SOUND OFF STOPS THE ROADS rather than muting them: a bed behind a zeroed
+   master is inaudible and still running, for a player who has just asked for
+   silence.
+   BEWARE THE WORD "AMBIENT" IN engine/audio.js — there it is iOS's audio
+   SESSION CATEGORY, the one the ringer switch applies to, and confusing the two
+   would put the silent-switch work at risk. The road sounds are BEDS.
+
    8.31.0: FOUR ROUTES ARE FOUR ROADS. NO NEW FILES, so the PRECACHE list below
    is unchanged (`py tools/check-precache.py`: still 73) — but the generation
    MUST still move, or `scenes/outdoors.js` and `dog/stroll.js` are served from
@@ -432,7 +453,7 @@
    cache. 8.7.0 is reserved for a sibling branch landing at the same time; this
    is 8.7.1 to avoid two different builds claiming one cache name. Forward only,
    as always. */
-const VERSION = '8.31.0';
+const VERSION = '8.32.0';
 const PREFIX = 'pp-cache-v';
 const CACHE = PREFIX + VERSION;
 
