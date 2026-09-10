@@ -11,8 +11,12 @@ a way it could quietly stop being true:
 
   A  MIDDAY DRAWS NOTHING. The afternoon room is the one that has always been
      there. Asserted twice over: the light state at noon is exactly neutral
-     (sun 1, everything else 0), and the whole daytime plateau renders
-     byte-identically, so "flat" is a measured property and not a hope.
+     (sun 1, everything else 0), and the whole daytime plateau renders the wall
+     no differently than holding the light still does, so "flat" is a measured
+     property and not a hope. It is held against the box's OWN drift rather
+     than against zero because a capture separated by a redraw is separated by
+     a frame of the dog's springs — see the long note at the check itself, and
+     D below, which had to learn the same lesson first.
      (The stronger version of this was run once by hand and is recorded in
      ARCHITECTURE §40: the noon room on 8.30.0 against the 8.29.0 room, from a
      git worktree of the previous release — 0 pixels of 514,800 differ.)
@@ -175,15 +179,45 @@ def main():
         # The wall above the dog: room art, no dog, no props, no chrome.
         WALL = [24, 350, 150, 60]
         WIN = [210, 104, 146, 214]
+        # HOW MUCH THIS BOX MOVES ON ITS OWN, with the light held still, over
+        # the same one and two redraws the plateau capture is separated by.
+        #
+        # SAME ARGUMENT AS `drift` BELOW, and it is here for the same reason: a
+        # capture separated by a `stepFixed` is separated by a frame of the
+        # dog's springs, and "the wall above the dog" is not as far above him as
+        # the rect comment claims once his ears are at the top of their travel.
+        # Asserting `== 0` passed on the machine this was written on, where the
+        # whole plateau came back bit-identical, and failed on CI at FOUR pixels
+        # of 36,000 — with `ab` (one redraw apart) at 0 and `ac` (two apart) at
+        # 4, which is drift's signature and not light's: it grows with REDRAWS,
+        # not with the hour. The same rasterizer reports 55 pixels of spring
+        # drift on the torso where this machine reports 4, so the effect is ~14x
+        # more visible there and crosses a whole pixel where here it does not.
+        #
+        # The claim is unweakened. `lightAt` interpolates the plateau between
+        # two keys that are IDENTICAL (`balance.js` at 0.46 and 0.62), so a real
+        # light change across it would not be four pixels — noon to midnight
+        # moves 36,000 in this very box, four orders of magnitude clear of the
+        # dog's heartbeat.
+        wallDrift = pg.evaluate("""(r) => {
+          const a = (__lg.at(0.54), __lg.bytes(r));
+          __pp.loop.stepFixed(1e-6, 1);
+          const b = __lg.bytes(r);
+          __pp.loop.stepFixed(1e-6, 1);
+          const c = __lg.bytes(r);
+          return { one: __lg.diff(a, b), two: __lg.diff(a, c) };
+        }""", WALL)
         flat = pg.evaluate("""(r) => {
           const a = (__lg.at(0.50), __lg.bytes(r));
           const b = (__lg.at(0.54), __lg.bytes(r));
           const c = (__lg.at(0.60), __lg.bytes(r));
           return { ab: __lg.diff(a, b), ac: __lg.diff(a, c) };
         }""", WALL)
-        check(flat["ab"] == 0 and flat["ac"] == 0,
+        check(flat["ab"] <= wallDrift["one"] and flat["ac"] <= wallDrift["two"],
               "A: THE WHOLE DAYTIME PLATEAU IS ONE PICTURE — 12:00, 13:00 and "
-              "14:24 are byte-identical", flat)
+              "14:24 differ by no more than the box does with the light held "
+              "still", "%s across the plateau, against %s from the dog alone "
+              "over the same redraws" % (flat, wallDrift))
 
         # ---- B / C: night ---------------------------------------------------
         lit = pg.evaluate("""(o) => {
