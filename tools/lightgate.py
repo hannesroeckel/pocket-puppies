@@ -270,23 +270,42 @@ def main():
         check(ctrl > 0,
               "G CONTROL: the byte test can tell two parts of him apart",
               "%s pixels" % ctrl)
-        # HOW MUCH HE MOVES ON HIS OWN, over the same number of redraws — because
-        # he is not actually frozen. `stepFixed(1e-6, 1)` is the smallest step
-        # that still runs the update where the room notices its signature
-        # changed, and a living dog's springs are not bit-stable across even
-        # that: measured at 4 pixels of a 17,922-pixel box over two steps.
+        # HOW MUCH HE MOVES ON HIS OWN, over the same ONE redraw the comparison
+        # below spans — because he is not actually frozen. `stepFixed(1e-6, 1)`
+        # is the smallest step that still runs the update where the room notices
+        # its signature changed, and a living dog is not bit-stable across even
+        # that. Note the size of the step: one MICROSECOND of simulated time,
+        # far too little to be his springs travelling anywhere. What it costs is
+        # a REDRAW, and the redraw is what is not bit-stable.
         #
-        # So the round trip below is held against THAT rather than against zero.
+        # So the comparison below is held against THAT rather than against zero.
         # Asserting `== 0` passed for one step and failed for two, which is a
         # check reporting the dog's own heartbeat and calling it a lighting bug.
+        #
+        # AND IT IS THE WORST OF SIX, WHICH IS THE 8.32.1 FIX. Sampling it once
+        # and comparing that single number against another single number is a
+        # coin toss whenever the two are close, and on the CI rasterizer they
+        # are: the same runner reported "19 against 55" on one commit and "51
+        # against 20" on the next, having been handed a baseline drawn a couple
+        # of redraws earlier or later. Nothing about the LIGHT changed between
+        # those two runs. A heartbeat is a distribution and a sample of one does
+        # not bound it, so take the largest of six and bound it properly.
+        #
+        # This machine reports 0–1 pixels here and the runner reports tens, so
+        # the check stays effectively bit-exact where it was written and stops
+        # being a lottery where it is run.
         drift = pg.evaluate("""(t) => {
           __lg.at(0.54);
-          const a = __lg.bytes(t);
-          __pp.loop.stepFixed(1e-6, 1);
-          __pp.loop.stepFixed(1e-6, 1);
-          const b = __lg.bytes(t);
-          return __lg.diff(a, b);
-        }""", torso)
+          const seen = [];
+          let a = __lg.bytes(t);
+          for (let i = 0; i < 6; i++) {
+            __pp.loop.stepFixed(1e-6, 1);
+            const b = __lg.bytes(t);
+            seen.push(__lg.diff(a, b));
+            a = b;
+          }
+          return { max: Math.max(...seen), seen };
+        }""", torso)["max"]
         # ONE PAIR OF CAPTURES, TWO BOXES, AND THAT IS THE WHOLE CLAIM: the same
         # move from noon to midnight must change the ROOM and leave the DOG
         # alone. Reading both out of the same two frames is what makes this
@@ -311,11 +330,18 @@ def main():
               "the same move from noon to midnight DOES repaint the room — "
               "so the next check cannot pass by nothing having happened",
               "%s wall pixels changed" % relit["wall"])
-        check(relit["dog"] <= drift,
+        # AND THE BASELINE IS ITSELF HELD DOWN. `<= drift` is only worth
+        # asserting while `drift` is small; a dog that had become wildly
+        # unstable would hand D a baseline big enough to swallow a real
+        # relighting and the check would pass by going blind, which is §27's
+        # decoration exactly. So his heartbeat must ALSO stay under a twentieth
+        # of the fault injection — ~900 of 17,928, against the 55 the noisiest
+        # rasterizer seen so far reports.
+        check(relit["dog"] <= drift and drift * 20 < ctrl,
               "D: ...AND HIS COAT IS UNCHANGED ACROSS IT — the dog is not relit "
               "(§32 rule 2)",
-              "%s pixels differ, against %s from his own springs over the same "
-              "redraws and %s for the fault injection"
+              "%s pixels differ, against %s from his own redraws (worst of six) "
+              "and %s for the fault injection"
               % (relit["dog"], drift, ctrl))
 
         if shots:
