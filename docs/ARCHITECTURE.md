@@ -5140,3 +5140,104 @@ That is the same class of bug as a cached module against a fresh one.
   can reach.
 - **The map still draws its own four places separately.** The paper and the road agree by hand
   and by review, not by construction — the two would drift if either were repainted.
+
+---
+
+## 42. The road you can hear (8.32.0) — as built
+
+> *"i also want to add some ambient sounds to the walk, adapted to the route that is taken"*
+> — 2026-09-09
+
+Asked for after the four roads landed, and it belongs to them: the picture said where he was
+and nothing else did.
+
+### 42.1 Two layers, because one is furniture
+
+A **bed** per road says where he is. Sparse **one-shot events** say something is alive there.
+The second is not decoration — *a bed on a loop stops being heard after about fifteen seconds,
+and the beat is thirty.* Weather alone would be background by halfway.
+
+What makes a road recognisable is not the bed's volume but its **band**:
+
+| road | bed | what happens on it |
+|---|---|---|
+| park | light breeze at 420Hz, grass rustle above 900 | two-note garden birds |
+| woods | dark and wide — 260Hz body, a strong leaf layer at 1150 | a deeper call, answered by a near one |
+| high street | almost entirely below 200Hz, which is what distance does to traffic | a car: a swell, never an engine |
+| river | bright and narrow — a band at 1500, low body at 340 so it is not hiss | two flat quacks |
+
+All synthesised, like everything else in `engine/sfx.js` — no asset, no fetch, nothing to fail
+to download in a tunnel.
+
+**It is still quiet, because the brief is quiet.** Research §1.9: *"Nintendogs was quiet. Little
+music, lots of room"*, and this file's own header says the loudest thing in the game is the dog.
+Every one of these sits well under him. A bird that competes with him turns a walk into a
+cartoon.
+
+### 42.2 `bed()` — the first sustained sound this engine has ever held
+
+Everything else is one-shot: `play()` schedules a recipe with an envelope that ends, and hands
+nothing back because nothing needs stopping. A road runs for half a minute and then has to stop,
+so it needs an owner.
+
+It obeys every rule `play()` does — silent before the unlock gesture, silent with sound off,
+dead for a name the bank cannot answer, and never allowed to throw into a frame. Two details
+that are decisions rather than defaults:
+
+- **The handle is always a real object**, even when nothing was built. A caller that must check
+  whether it got a bed before it can turn one down is a caller with a null check in its draw
+  path, which is how audio ends up breaking a frame.
+- **`set()` ramps, it does not assign.** It is called every frame from a spring, and a bare
+  `gain.value =` per frame on a running graph is a zipper.
+
+**Sound off stops the roads rather than muting them.** A bed behind a zeroed master is
+inaudible and still running — oscillators, filters and an LFO per road — for a player who has
+just asked for silence. `setEnabled(false)` now stops every live bed before it touches the gain.
+
+### 42.3 The word "ambient" was the trap
+
+In `engine/audio.js` **ambient** already means iOS's audio *session category* — the one the
+ringer switch mutes, and the thing an enormous amount of care has gone into because the
+recipient keeps her phone on silent. Naming a feature "ambient sounds" in that file would have
+put that work one careless edit from being undone. They are **beds** throughout, and the header
+now says so out loud.
+
+The same header used to promise *"no ambience that plays when she is not looking"*. That would
+have become a lie, so it was rewritten rather than left: what keeps the promise true is that a
+bed is owned by a **beat**, not by the app. The stroll starts it as the road fades in, rides it
+on the same dissolve, and stops it when the road goes. Nothing starts a bed at launch, on a
+timer, or in the background.
+
+### 42.4 What proves it
+
+`tools/roadsoundgate.py`, **28 checks**. The ones worth naming:
+
+- **four roads, four different beds**, and the bank can answer every bed and every one-shot —
+  `audio.pending` stays empty, which is the ledger every stage has used to say what the bank
+  still owes;
+- **nothing plays before a gesture**, taken first on a page whose context has never been
+  unlocked, because it is the one check that stops existing the moment anything is touched;
+- **it is let go**, through all three ways out the stroll already has — a bed surviving any of
+  them is a river playing under a living room;
+- **sound off stops it**, not mutes it;
+- and it **can fail**: a bed name the bank cannot answer comes back dead *and* is recorded as
+  owed.
+
+One gate bug on the way, and it is the instructive part: the release check first waited 120
+frames and failed while the code was correct. The bed is released on the same test the tile is
+— "the road has finished fading" — and that spring is at 0.007 after two seconds and 0 after
+five. **The gate was measuring its own impatience.** It waits 300 now, and asserts the road's
+*bitmap* is released on the same frame, which nothing had ever checked.
+
+### 42.5 Left imperfect
+
+- **Nobody has heard it on the target device.** The gates prove these sounds exist, are held
+  safely and stop on time; they cannot prove any of them sounds good. Every volume and texture
+  here is one judgement, unreviewed, and a phone speaker is not a laptop.
+- **The events are blind to the picture.** A duck quacks whether or not there is water on
+  screen at that moment, and a car passes with no car. They are placed in time, not in space.
+- **Nothing pans.** Everything is mono into one master, so a bird is not to his left.
+- **Only the stroll has a place-sound.** The park and the show ring — the two contest backdrops
+  — are still silent, and they are outdoors too.
+- **The bed does not know the hour.** The road dims at night and sounds identical, which is the
+  same gap 8.30.0 left in the picture and 8.31.0 closed.

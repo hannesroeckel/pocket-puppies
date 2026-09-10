@@ -596,6 +596,145 @@ export const RECIPES = {
       thud(K.ctx, K.out, K.t + 0.16 + i * 0.13, { g: (0.11 - i * 0.02) * K.g, f: 84, dur: 0.11, body: 0.5 });
     }
   },
+
+  /* ---- WHAT HAPPENS ON A ROAD (8.32.0) -----------------------------
+     The beds say where he is; these say that something is alive there. A bed
+     on its own is weather, and weather on a loop becomes furniture within
+     about fifteen seconds — which is half the stroll.
+
+     ALL FOUR ARE DISTANT, and that is the design rather than a mix decision:
+     the dog is the loudest thing in the game (this file's header), and a bird
+     that competes with him turns a walk into a cartoon. Each one is quiet,
+     short, and has no low end to speak of, which is what "far away" is. */
+
+  /* a two-note chirp, up then a smaller one down — the shape of almost every
+     small garden bird, and unmistakable at any volume */
+  'road-bird': (K) => {
+    const g = 0.052 * K.g;
+    tone(K.ctx, K.out, { t: K.t, f: 3050, f2: 3950, dur: 0.075, gain: g, type: 'sine', a: 0.006, d: 0.05 });
+    tone(K.ctx, K.out, { t: K.t + 0.115, f: 3600, f2: 3200, dur: 0.06, gain: g * 0.8, type: 'sine', a: 0.006, d: 0.04 });
+  },
+  /* deeper, slower and with a tail on it: the same bird heard through trees */
+  'road-bird-far': (K) => {
+    const g = 0.040 * K.g;
+    tone(K.ctx, K.out, { t: K.t, f: 1750, f2: 2250, dur: 0.16, gain: g, type: 'sine', a: 0.02, d: 0.13 });
+    tone(K.ctx, K.out, { t: K.t + 0.26, f: 1650, f2: 1450, dur: 0.20, gain: g * 0.62, type: 'sine', a: 0.03, d: 0.16 });
+  },
+  /* A CAR GOING BY, WHICH IS A SWELL AND NOT AN ENGINE. Low noise that rises
+     and falls over a second and a half; anything with a note in it would be a
+     vehicle in the room rather than one up the street. */
+  'road-car': (K) => noise(K.ctx, K.out, {
+    t: K.t, dur: 1.5, f: 240, f2: 150, q: 0.6, type: 'lowpass',
+    gain: 0.058 * K.g, a: 0.55, sus: 0.75, d: 0.55,
+  }),
+  /* two flat quacks, which is the one river sound a child names instantly */
+  'road-duck': (K) => {
+    const g = 0.050 * K.g;
+    for (let i = 0; i < 2; i++) {
+      tone(K.ctx, K.out, {
+        t: K.t + i * 0.19, f: 620 - i * 40, f2: 470 - i * 30,
+        dur: 0.11, gain: g * (1 - i * 0.22), type: 'sawtooth', a: 0.008, d: 0.08,
+      });
+    }
+  },
+};
+
+/* ==========================================================================
+   THE ROAD BEDS (8.32.0) — the first SUSTAINED sound in the game.
+
+   Asked for directly: *"i also want to add some ambient sounds to the walk,
+   adapted to the route that is taken"*. Every other recipe in this file is a
+   one-shot with an envelope that ends; a road has to keep going for half a
+   minute and then stop, which is a different shape, so `engine/audio.js` grew
+   `bed()` for the lifecycle and these are what it builds.
+
+   "AMBIENT" IS A WORD THIS CODEBASE ALREADY USES FOR SOMETHING ELSE. In
+   `engine/audio.js` it is iOS's audio-session CATEGORY — the one the ringer
+   switch applies to — and confusing the two would be genuinely dangerous,
+   because the session work is what makes the game audible for a child who
+   keeps her phone on silent. So these are BEDS, and the road they belong to is
+   in the name.
+
+   STILL QUIET, AND STILL NOT MUSIC (research §1.9: "Nintendogs was *quiet*.
+   Little music, lots of room"). A bed that announces itself would be a
+   soundtrack, which this file's own header forbids. Each one is a filtered
+   noise floor two steps below the dog, plus a slow LFO so it breathes rather
+   than hisses. What makes a road recognisable is not the bed's volume but its
+   BAND: the woods are dark and wide, the river is bright and narrow, the high
+   street is almost entirely below 200Hz.
+
+   THE CONTRACT: a bed builds into `K.out` (its own gain, owned by audio.js) and
+   returns every node that needs stopping. It must schedule nothing that outlives
+   what it returns, or the road keeps rustling in the living room.
+   ========================================================================== */
+
+/** a looping noise source through a filter chain — the spine of every bed */
+function loopNoise(ctx, out, o) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf(ctx);
+  src.loop = true;
+  if (o.rate) src.playbackRate.value = o.rate;
+  let node = src;
+  const f = ctx.createBiquadFilter();
+  f.type = o.type || 'lowpass';
+  f.frequency.value = o.f;
+  f.Q.value = o.q === undefined ? 0.7 : o.q;
+  node.connect(f); node = f;
+  if (o.hp) {
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = o.hp;
+    node.connect(hp); node = hp;
+  }
+  const g = ctx.createGain();
+  g.gain.value = o.g;
+  node.connect(g);
+  g.connect(out);
+  /* a random offset, so two walks down the same road do not start on the same
+     sample — the same reason the one-shot `noise` takes one */
+  src.start(o.t, Math.random() * 1.7);
+
+  const stops = [src];
+  /* THE SLOW BREATH. Without it a filtered noise floor is a hiss, which is the
+     sound of a broken speaker rather than of weather. */
+  if (o.lfoHz) {
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = o.lfoHz;
+    const la = ctx.createGain();
+    la.gain.value = o.lfoDepth === undefined ? o.g * 0.5 : o.lfoDepth;
+    lfo.connect(la); la.connect(g.gain);
+    lfo.start(o.t);
+    stops.push(lfo);
+  }
+  return stops;
+}
+
+export const BEDS = {
+  /* open grass: a light breeze, and a hint of the grass itself on top */
+  'road-park': (K) => [
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 420, g: 0.055, lfoHz: 0.09, lfoDepth: 0.026 }),
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 1750, hp: 900, q: 0.6, g: 0.016, lfoHz: 0.17, lfoDepth: 0.010 }),
+  ],
+  /* DARK AND WIDE. Deeper than the park and with more of the mid in it: a wood
+     is a room with a ceiling, and the leaf layer is the part you actually
+     hear. */
+  'road-woods': (K) => [
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 260, g: 0.062, lfoHz: 0.07, lfoDepth: 0.030 }),
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 1150, hp: 520, q: 0.8, g: 0.028, lfoHz: 0.23, lfoDepth: 0.019 }),
+  ],
+  /* ALMOST ENTIRELY BELOW 200Hz, which is what distance does to traffic. The
+     faint band above it is people rather than engines, and it is deliberately
+     too vague to resolve into anything. */
+  'road-high': (K) => [
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 165, g: 0.075, lfoHz: 0.05, lfoDepth: 0.034 }),
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 1300, hp: 800, q: 0.5, g: 0.013, lfoHz: 0.13, lfoDepth: 0.008 }),
+  ],
+  /* BRIGHT AND NARROW. Moving water is a band, not a rumble; the low body under
+     it is what stops it sounding like tape hiss. */
+  'road-river': (K) => [
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 1500, hp: 700, type: 'bandpass', q: 0.9, g: 0.052, lfoHz: 0.31, lfoDepth: 0.020 }),
+    ...loopNoise(K.ctx, K.out, { t: K.t, f: 340, g: 0.030, lfoHz: 0.11, lfoDepth: 0.012 }),
+  ],
 };
 
 /* ==========================================================================
@@ -656,6 +795,9 @@ export function resolve(name) {
   return null;
 }
 
+/** every ROAD BED this bank can answer — `audiogate` walks this list too */
+export function bedNames() { return Object.keys(BEDS); }
+
 /** every name this bank can answer — the verification gate walks this list */
 export function names() {
   const out = Object.keys(RECIPES);
@@ -665,4 +807,4 @@ export function names() {
   return out;
 }
 
-export default { RECIPES, resolve, names, voiceFor, NEUTRAL };
+export default { RECIPES, BEDS, resolve, names, bedNames, voiceFor, NEUTRAL };

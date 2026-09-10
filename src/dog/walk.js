@@ -298,6 +298,7 @@ export function createWalk(rig, opts = {}) {
   const stroll = createStroll(rig, {
     game, rng, reduced,
     sound, spawn,
+    bed: opts.bed,
     side: () => activeSide(),
     onEnd: (reason) => {
       away = true;

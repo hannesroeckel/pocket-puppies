@@ -116,6 +116,11 @@ export function createStroll(rig, opts = {}) {
   const rng = opts.rng;
   const reduced = !!opts.reduced;
   const sound = opts.sound || (() => {});
+  /* HOLDING A SOUND, rather than firing one. `engine/audio.js bed()` always
+     returns a handle — even with sound off, before the unlock gesture, or for a
+     name the bank cannot answer — so nothing in here needs a null check in a
+     draw path. See the note on `bed()`. */
+  const bed = opts.bed || (() => ({ set() {}, stop() {}, live: false }));
   const spawn = opts.spawn || (() => {});
   const onEnd = opts.onEnd || (() => {});
   /* HOW TALL THE PROFILE DOG ACTUALLY IS, this breed. The sprite publishes its
@@ -147,6 +152,13 @@ export function createStroll(rig, opts = {}) {
      the profile dog for one departure: asking again every frame invites a
      swap halfway down the road, and this one would swap the WORLD. */
   let place = 'park';
+
+  /* ---- the road's own sound (8.32.0) ----------------------------------
+     `road` is the sustained bed; `nextEvent` is when the next one-shot is due,
+     in stroll seconds. Both are torn down by `end`/`stop` and by nothing else,
+     which is what keeps a road from rustling in the living room. */
+  let road = null;
+  let nextEvent = 0;
 
   /* the bake, and the view it was baked for */
   let tile = null;
@@ -197,6 +209,7 @@ export function createStroll(rig, opts = {}) {
     place = (wp.active && wp.active.route) || 'park';
     on = true;
     ended = '';
+    startRoadSound();
     t = 0;
     dist = 0;
     dur = d;
@@ -204,6 +217,59 @@ export function createStroll(rig, opts = {}) {
     sp.strollW.set(0);
     sp.strollW.to(1);
     return true;
+  }
+
+  /* ================================================================== */
+  /*  the road's sound                                                  */
+  /* ================================================================== */
+  /** the sound recipe for the road she chose, or the park's if it is unknown */
+  function roadSound() {
+    const R = S.sound.road;
+    return R[place] || R.park;
+  }
+
+  /**
+   * START THE ROAD'S SOUND. At zero gain: `update` raises it on the dissolve,
+   * so the sound arrives exactly as the picture does rather than a frame early.
+   *
+   * Any previous bed is stopped first. That is not defensive tidiness — `begin`
+   * runs once per departure and a walk cut short by another walk would
+   * otherwise leave the first road playing under the second.
+   */
+  function startRoadSound() {
+    if (road) { road.stop(); road = null; }
+    road = bed(roadSound().bed, { gain: 0 });
+    /* the first event is never immediate: the road is still dissolving in, and
+       a duck heard over the living room is a duck in the living room */
+    nextEvent = S.sound.settleFor + gap();
+  }
+
+  /** seconds until the next one-shot, off the walk's own rng where there is one */
+  function gap() {
+    const e = roadSound().every;
+    const r = rng ? rng.next() : Math.random();
+    return e[0] + (e[1] - e[0]) * r;
+  }
+
+  /**
+   * SOMETHING ALIVE ON THE ROAD, now and then.
+   *
+   * The bed alone is weather, and weather on a loop stops being heard after
+   * about fifteen seconds — which is half this beat. These are what keep the
+   * road from becoming furniture.
+   *
+   * They are gated on `solid()` rather than on `on`: a bird calling through the
+   * dissolve, while the living room is still half the picture, is the same
+   * mistake as the duck above.
+   */
+  function tickRoadSound(dt) {
+    if (solid(sp.strollW.x) < 0.9) return;
+    nextEvent -= dt;
+    if (nextEvent > 0) return;
+    const of = roadSound().of;
+    const r = rng ? rng.next() : Math.random();
+    sound(of[Math.min(of.length - 1, Math.floor(r * of.length))]);
+    nextEvent = gap();
   }
 
   /** lay the offered finds out along the road */
@@ -272,6 +338,11 @@ export function createStroll(rig, opts = {}) {
     sp.strollW.set(0);
     tile = null;
     tileKey = '';
+    /* THE SCENE IS GOING AWAY. No fade to ride, so the road's sound is cut
+       rather than faded — an unstopped bed here is a river playing under a
+       living room, which is the one failure this whole lifecycle exists to
+       prevent. */
+    if (road) { road.stop(); road = null; }
   }
 
   /* ================================================================== */
@@ -279,16 +350,25 @@ export function createStroll(rig, opts = {}) {
   /* ================================================================== */
   function update(dt) {
     sp.strollW.step(dt);
+    /* THE SOUND RIDES THE SAME DISSOLVE THE PICTURE DOES, and it is set here
+       rather than in the `on` branch below so it keeps fading while the road
+       fades OUT — otherwise leaving would cut the road's sound dead a second
+       before the road itself had gone. */
+    if (road) road.set(solid(sp.strollW.x) * S.sound.bedGain);
     /* GIVE THE BITMAP BACK once it is off screen. A full-screen canvas on a 3x
        phone is ~14MB and iOS caps the total, so this one does not outlive the
        beat that opened it — the same rule scenes/room.js follows for the park
        and the ring bakes (§32.2). */
     if (!on && sp.strollW.x < 0.004 && tile) { tile = null; tileKey = ''; }
+    /* ...AND THE SOUND GOES WITH THE PICTURE. Same test, same frame: the road
+       is gone from the screen, so it stops being audible too. */
+    if (!on && sp.strollW.x < 0.004 && road) { road.stop(); road = null; }
     if (!on) return;
 
     t += dt;
     hintT += dt;
     dist += S.speed * motion * dt;
+    tickRoadSound(dt);
 
     for (const it of items) {
       it.life += dt;
@@ -680,6 +760,11 @@ export function createStroll(rig, opts = {}) {
         w: +sp.strollW.x.toFixed(3), dist: Math.round(dist),
         tile: tile ? [tile.width, tile.height, horizon] : null,
       place,
+      /* the road's sound, for the gate: which bed, whether it is still held,
+         and how long until the next thing happens on the road */
+      bed: roadSound().bed,
+      bedLive: !!(road && road.live),
+      nextEvent: +nextEvent.toFixed(2),
         items: items.map((it) => ({
           id: it.id, at: +it.at.toFixed(2), x: Math.round(it.x), y: Math.round(it.y),
           depth: +it.depth.toFixed(2), taken: it.taken,

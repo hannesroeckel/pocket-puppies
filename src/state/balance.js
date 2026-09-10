@@ -1070,6 +1070,36 @@ export const BALANCE = {
          is "something is there", not a second copy of the find. */
       ghostW: 0.55, ghostAlpha: 0.34,
       hintFor: 4.2,
+
+      /* ---- WHAT THE ROAD SOUNDS LIKE (8.32.0) ----------------------
+         "i also want to add some ambient sounds to the walk, adapted to the
+         route that is taken". Two layers, and the second is what stops the
+         first becoming furniture: a BED per road (engine/sfx.js `BEDS`) that
+         says where he is, and sparse EVENTS that say something is alive there.
+
+         A bed on a loop is weather, and weather stops being heard after about
+         fifteen seconds — which is half this beat. So every road gets a
+         handful of one-shots at random intervals, and none of them is loud:
+         the dog is the loudest thing in the game (engine/sfx.js's header) and
+         a bird that competes with him turns a walk into a cartoon.
+
+         `bedGain` is the ceiling the fade multiplies, so the road's sound
+         arrives and leaves on the SAME dissolve the road's picture does. The
+         gaps are seconds, rolled per event off the walk's own seeded rng so a
+         resumed walk does not re-roll into a different soundscape. */
+      sound: {
+        bedGain: 0.85,
+        /* per road: which bed, which one-shots, and how far apart they are */
+        road: {
+          park: { bed: 'road-park', every: [3.4, 7.0], of: ['road-bird', 'road-bird'] },
+          woods: { bed: 'road-woods', every: [2.8, 6.2], of: ['road-bird-far', 'road-bird'] },
+          high: { bed: 'road-high', every: [4.2, 9.0], of: ['road-car'] },
+          river: { bed: 'road-river', every: [4.0, 8.5], of: ['road-duck'] },
+        },
+        /* nothing in the first second: the road is still dissolving in, and a
+           duck over the living room is a duck in the living room */
+        settleFor: 1.2,
+      },
     },
 
     away: {
@@ -3432,6 +3462,12 @@ export const BALANCE = {
     /* the silence itself, generated in code — no asset, no fetch, no precache
        entry. A quarter second at 8kHz mono 8-bit is ~2KB of base64. */
     silentSession: { seconds: 0.25, rate: 8000 },
+    /* HOW FAST A ROAD BED FOLLOWS ITS FADE (8.32.0), as the time constant of a
+       `setTargetAtTime`. The stroll calls `set()` every frame from a spring, and
+       assigning `gain.value` per frame on a running graph is a zipper — this is
+       the smoothing that makes it a fade instead. Short enough that leaving the
+       road still feels immediate. */
+    bedGlide: 0.09,
     lead: 0.012,           // schedule this far ahead of `currentTime`; a sound
                            // scheduled at exactly `now` can start mid-buffer
                            // and click on the attack
