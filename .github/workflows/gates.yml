@@ -44,6 +44,12 @@ on:
     # slot on shared runners and a queued job is a job that times out.
     - cron: '17 3 * * *'
   workflow_dispatch:
+    inputs:
+      only:
+        description: >-
+          Gate names, comma separated, e.g. "lightgate". Blank runs everything.
+        required: false
+        default: ''
 
 # A second push to the same branch makes the first run's answer worthless.
 concurrency:
@@ -90,9 +96,20 @@ jobs:
           PY
 
       # push / PR: the fast suite. nightly + manual: everything.
+      #
+      # ...unless a manual run named gates in `only`, which runs JUST those. A
+      # gate that fails only on this runner cannot be debugged from a laptop it
+      # passes on, and waiting ~45 minutes of full suite to re-read one gate's
+      # output is how a two-line question takes an afternoon. `--only` was
+      # already in `gates.py`; this exposes it to the Run workflow button.
       - name: run the gates
+        env:
+          ONLY: ${{ inputs.only }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ -n "$ONLY" ]; then
+            python tools/gates.py --only "$ONLY"
+          elif [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then
             python tools/gates.py
           else
             python tools/gates.py --fast

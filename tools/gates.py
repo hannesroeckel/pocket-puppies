@@ -106,6 +106,12 @@ PASSFAIL = re.compile(r"(\d+)\s+passed,\s+(\d+)\s+failed")
 ALLPASS = re.compile(r"^(ALL PASS|FAILED)\b", re.M)
 PRECACHE = re.compile(r"^OK:\s+(\d+)\s+entries", re.M)
 
+# `127.0.0.1 - - [10/Sep/2026 08:15:17] "GET /src/ui/toast.js HTTP/1.1" 200 -`
+# — one line per module per page load, from the `http.server` every driven gate
+# stands up. See the failure report at the bottom of `main` for why it is worth
+# a regex.
+ACCESS = re.compile(r'^\S+ - - \[\d.*\] "(GET|HEAD|POST) ')
+
 
 def counts(text):
     """
@@ -147,15 +153,20 @@ def run(name, script, args, echo):
         p = subprocess.run([sys.executable, str(path)] + args,
                            cwd=str(ROOT), capture_output=True, text=True,
                            errors="replace")
-        out = (p.stdout or "") + (p.stderr or "")
+        # KEPT APART AS WELL AS TOGETHER. `out` is the pair concatenated and is
+        # what `counts()` scans, because a gate is free to publish its tally on
+        # either stream. But the failure report needs them separated — see the
+        # bottom of `main` — so both halves are carried too.
+        o, e_ = (p.stdout or ""), (p.stderr or "")
+        out = o + e_
         ok, why = p.returncode == 0, ("exit %d" % p.returncode)
     except Exception as e:                      # noqa: BLE001 — a dead gate is a failure
-        out, ok, why = "", False, "runner could not start it: %r" % e
+        out, o, e_, ok, why = "", "", "", False, "runner could not start it: %r" % e
     secs = time.time() - t0
     if echo:
         print(out)
     return {"name": name, "ok": ok, "counts": counts(out), "secs": secs,
-            "why": why, "out": out}
+            "why": why, "out": out, "stdout": o, "stderr": e_}
 
 
 def main():
@@ -262,8 +273,25 @@ def main():
         print("FAILED: %s (%s)" % (r["name"], r["why"]))
         print("=" * 66)
         # The tail, not the head: every one of these prints its failures last.
-        tail = [ln for ln in r["out"].splitlines() if ln.strip()][-40:]
-        print("\n".join(tail) if tail else "(no output at all)")
+        #
+        # STDOUT ONLY, and that is the whole point of the split above. Every
+        # driven gate serves the tree from an `http.server` whose access log
+        # goes to STDERR — one line per module per page load, hundreds of them.
+        # Concatenating the streams and tailing the result therefore reported
+        # forty lines of `"GET /src/ui/toast.js HTTP/1.1" 200` and pushed the
+        # gate's own FAIL lines off the top, which is exactly what happened to
+        # `lightgate` on 8.30.0: four CI runs said "13/14 checks" and not one of
+        # them could be made to say WHICH check, because the answer had been
+        # printed and then buried by the web server underneath it.
+        tail = [ln for ln in r["stdout"].splitlines() if ln.strip()][-40:]
+        print("\n".join(tail) if tail else "(nothing on stdout)")
+        # ...and stderr AFTER it, minus the access log, because a gate that died
+        # rather than failed puts its traceback here and that must still arrive.
+        err = [ln for ln in r["stderr"].splitlines()
+               if ln.strip() and not ACCESS.match(ln.strip())][-20:]
+        if err:
+            print("\n  --- stderr, access log removed " + "-" * 30)
+            print("\n".join(err))
 
     return 1 if bad else 0
 
